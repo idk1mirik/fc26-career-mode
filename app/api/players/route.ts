@@ -19,39 +19,6 @@ interface Player {
   dribbling: number;
   defending: number;
   physical: number;
-  acceleration: number;
-sprintSpeed: number;
-
-finishing: number;
-shotPower: number;
-longShots: number;
-volleys: number;
-penalties: number;
-positioning: number;
-
-shortPassing: number;
-longPassing: number;
-curve: number;
-freeKickAccuracy: number;
-crossing: number;
-vision: number;
-
-ballControl: number;
-agility: number;
-balance: number;
-reactions: number;
-composure: number;
-
-interceptions: number;
-defensiveAwareness: number;
-standingTackle: number;
-slidingTackle: number;
-
-headingAccuracy: number;
-aggression: number;
-jumping: number;
-stamina: number;
-strength: number;
   gk_diving: number;
   gk_handling: number;
   gk_kicking: number;
@@ -136,41 +103,6 @@ function loadPlayers(): Promise<Player[]> {
           dribbling: Number(row.dri ?? row.dribbling ?? 0),
           defending: Number(row.def ?? row.defending ?? 0),
           physical: Number(row.phy ?? row.physical ?? 0),
-
-          acceleration: Number(row.acceleration ?? 0),
-          sprintSpeed: Number(row.sprintSpeed ?? 0),
-
-          finishing: Number(row.finishing ?? 0),
-          shotPower: Number(row.shotPower ?? 0),
-          longShots: Number(row.longShots ?? 0),
-          volleys: Number(row.volleys ?? 0),
-          penalties: Number(row.penalties ?? 0),
-          positioning: Number(row.positioning ?? 0),
-
-          shortPassing: Number(row.shortPassing ?? 0),
-          longPassing: Number(row.longPassing ?? 0),
-          curve: Number(row.curve ?? 0),
-          freeKickAccuracy: Number(row.freeKickAccuracy ?? 0),
-          crossing: Number(row.crossing ?? 0),
-          vision: Number(row.vision ?? 0),
-
-          ballControl: Number(row.ballControl ?? 0),
-          agility: Number(row.agility ?? 0),
-          balance: Number(row.balance ?? 0),
-          reactions: Number(row.reactions ?? 0),
-          composure: Number(row.composure ?? 0),
-
-          interceptions: Number(row.interceptions ?? 0),
-          defensiveAwareness: Number(row.defensiveAwareness ?? 0),
-          standingTackle: Number(row.standingTackle ?? 0),
-          slidingTackle: Number(row.slidingTackle ?? 0),
-
-          headingAccuracy: Number(row.headingAccuracy ?? 0),
-          aggression: Number(row.aggression ?? 0),
-          jumping: Number(row.jumping ?? 0),
-          stamina: Number(row.stamina ?? 0),
-          strength: Number(row.strength ?? 0),
-          
           gk_diving: Number(row.gk_diving ?? row.gkDiving ?? 0),
           gk_handling: Number(row.gk_handling ?? row.gkHandling ?? 0),
           gk_kicking: Number(row.gk_kicking ?? row.gkKicking ?? 0),
