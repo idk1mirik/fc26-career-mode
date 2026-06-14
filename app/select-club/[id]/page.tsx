@@ -415,6 +415,123 @@ const PlayerCard = memo(function PlayerCard({
   );
 });
 
+// ─── EXPANDABLE STATS ─────────────────────────────────────────────────────────
+function ExpandableStats({ player, isGK, stats, cfg, br }: {
+  player: any; isGK: boolean; stats: { label: string; value: number }[];
+  cfg: any; br: number;
+}) {
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+
+  const fieldSubs: Record<number, { label: string; value: number }[]> = {
+    0: [ // PAC
+      { label: "ACC", value: player.acceleration ?? 0 },
+      { label: "SPR", value: player.sprintSpeed ?? 0 },
+    ],
+    1: [ // SHO
+      { label: "FIN", value: player.finishing ?? 0 },
+      { label: "SHO", value: player.shotPower ?? 0 },
+      { label: "LON", value: player.longShots ?? 0 },
+      { label: "VOL", value: player.volleys ?? 0 },
+      { label: "PEN", value: player.penalties ?? 0 },
+      { label: "POS", value: player.positioning ?? 0 },
+    ],
+    2: [ // PAS
+      { label: "SPA", value: player.shortPassing ?? 0 },
+      { label: "LPA", value: player.longPassing ?? 0 },
+      { label: "CUR", value: player.curve ?? 0 },
+      { label: "FKA", value: player.freeKickAccuracy ?? 0 },
+      { label: "CRO", value: player.crossing ?? 0 },
+      { label: "VIS", value: player.vision ?? 0 },
+    ],
+    3: [ // DRI
+      { label: "DRI", value: player.dribbling_stat ?? 0 },
+      { label: "BAL", value: player.ballControl ?? 0 },
+      { label: "AGI", value: player.agility ?? 0 },
+      { label: "BAL", value: player.balance ?? 0 },
+      { label: "REA", value: player.reactions ?? 0 },
+      { label: "COM", value: player.composure ?? 0 },
+    ],
+    4: [ // DEF
+      { label: "INT", value: player.interceptions ?? 0 },
+      { label: "DAW", value: player.defensiveAwareness ?? 0 },
+      { label: "STA", value: player.standingTackle ?? 0 },
+      { label: "SLI", value: player.slidingTackle ?? 0 },
+    ],
+    5: [ // PHY
+      { label: "HEA", value: player.headingAccuracy ?? 0 },
+      { label: "AGG", value: player.aggression ?? 0 },
+      { label: "JUM", value: player.jumping ?? 0 },
+      { label: "STM", value: player.stamina ?? 0 },
+      { label: "STR", value: player.strength ?? 0 },
+    ],
+  };
+
+  const _gkAll = [
+    { label: "DIV", value: player.gk_diving ?? 0 },
+    { label: "HAN", value: player.gk_handling ?? 0 },
+    { label: "KIC", value: player.gk_kicking ?? 0 },
+    { label: "POS", value: player.gk_positioning ?? 0 },
+    { label: "REF", value: player.gk_reflexes ?? 0 },
+  ];
+  const gkSubs: Record<number, { label: string; value: number }[]> = {
+    0: _gkAll, 1: _gkAll, 2: _gkAll, 3: _gkAll, 4: _gkAll, 5: _gkAll,
+  };
+
+  const subsMap = isGK ? gkSubs : fieldSubs;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* 6 main stat cubes */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6 }}>
+        {stats.map((s, i) => {
+          const isOpen = openIdx === i;
+          const hasSubs = (subsMap[i]?.length ?? 0) > 0;
+          return (
+            <div
+              key={s.label}
+              onClick={() => hasSubs && setOpenIdx(isOpen ? null : i)}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                padding: "8px 2px",
+                background: isOpen ? `${getRatingColor(s.value)}18` : cfg.statBg,
+                border: `1px solid ${isOpen ? getRatingColor(s.value) + "60" : cfg.statBorder}`,
+                borderRadius: br,
+                cursor: hasSubs ? "pointer" : "default",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ fontSize: 16, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
+              <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: cfg.labelColor, marginTop: 2 }}>
+                {s.label}{hasSubs ? (isOpen ? " ▲" : " ▼") : ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Dropdown substats */}
+      {openIdx !== null && (subsMap[openIdx]?.length ?? 0) > 0 && (
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 5,
+          padding: "8px 6px",
+          background: cfg.statBg,
+          border: `1px solid ${cfg.statBorder}`,
+          borderRadius: br,
+          animation: "subStatsIn 0.18s ease",
+        }}>
+          <style>{`@keyframes subStatsIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }`}</style>
+          {subsMap[openIdx].map((s, i) => (
+            <div key={s.label + i} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 2px" }}>
+              <span style={{ fontSize: 14, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
+              <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.2em", color: cfg.labelColor, marginTop: 2 }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PLAYER MODAL ─────────────────────────────────────────────────────────────
 function PlayerModal({
   player, clubName, clubColor, theme, onClose, isClosing,
@@ -547,72 +664,60 @@ function PlayerModal({
           ✕
         </button>
 
-        {/* ── Layout: flex row on desktop, column on mobile ── */}
-        <div style={{
-          position: "relative", zIndex: 10,
-          display: "flex", flexDirection: "row",
-          maxHeight: "90vh", overflow: "hidden",
-        }}>
-          {/* ── Player photo column (fixed, not scrollable) ── */}
-          <div style={{
-            width: 220, flexShrink: 0,
-            position: "relative",
+        {/* ── Layout: photo absolute left, content scrollable right ── */}
+        <div style={{ position: "relative", zIndex: 10, display: "flex", minHeight: 360, maxHeight: "90vh" }}>
+
+          {/* Photo — absolute, pinned to left, hidden on mobile */}
+          <div className="hidden sm:block" style={{
+            position: "absolute", bottom: 0, left: 0,
+            width: 220, height: "100%",
+            pointerEvents: "none", zIndex: 5,
             display: "flex", alignItems: "flex-end", justifyContent: "center",
-            overflow: "hidden", minHeight: 360,
-          }}
-            className="hidden sm:flex"
-          >
+          }}>
             <div style={{
               position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-              width: 180, height: 180, borderRadius: "50%",
+              width: 160, height: 160, borderRadius: "50%",
               background: `radial-gradient(circle,${clubColor}30,transparent)`,
-              filter: "blur(32px)", pointerEvents: "none",
+              filter: "blur(28px)",
             }} />
             {!fullImgError ? (
-              <img
-                src={getPlayerFullPhoto(player.name)}
-                alt={player.name}
+              <img src={getPlayerFullPhoto(player.name)} alt={player.name}
                 onError={() => setFullImgError(true)}
-                style={{
-                  height: "100%", width: "auto", objectFit: "contain", objectPosition: "center bottom",
+                style={{ height: "100%", width: "auto", objectFit: "contain", objectPosition: "center bottom",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 28px ${clubColor}70) drop-shadow(0 8px 16px rgba(0,0,0,0.5))`,
-                }}
-              />
+                  filter: `drop-shadow(0 0 24px ${clubColor}70)` }} />
             ) : !imgError ? (
-              <img
-                src={getPlayerPhoto(player.name)}
-                alt={player.name}
+              <img src={getPlayerPhoto(player.name)} alt={player.name}
                 onError={() => setImgError(true)}
-                style={{
-                  height: "80%", width: "auto", objectFit: "contain", objectPosition: "center bottom",
+                style={{ height: "75%", width: "auto", objectFit: "contain", objectPosition: "center bottom",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 20px ${clubColor}60)`,
-                }}
-              />
+                  filter: `drop-shadow(0 0 16px ${clubColor}60)` }} />
             ) : (
-              <div style={{ fontSize: 100, opacity: 0.12, paddingBottom: 16 }}>👤</div>
+              <div style={{ fontSize: 90, opacity: 0.1, paddingBottom: 12 }}>👤</div>
             )}
           </div>
 
-          {/* ── Scrollable stats column ── */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px 28px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Scrollable content — left spacer on desktop, full width on mobile */}
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "28px 24px 28px 16px" }}>
 
-            {/* Mobile photo (small, top) */}
-            <div className="flex sm:hidden justify-center" style={{ height: 160, position: "relative" }}>
+            {/* Left spacer — desktop only */}
+            <div className="hidden sm:block" style={{ height: 0, marginLeft: 210 }} />
+
+            {/* Mobile photo — small, inline */}
+            <div className="flex sm:hidden justify-center" style={{ height: 140 }}>
               {!fullImgError ? (
                 <img src={getPlayerFullPhoto(player.name)} alt={player.name} onError={() => setFullImgError(true)}
-                  style={{ height: "100%", width: "auto", objectFit: "contain", filter: `drop-shadow(0 0 20px ${clubColor}60)` }} />
+                  style={{ height: "100%", width: "auto", objectFit: "contain", filter: `drop-shadow(0 0 16px ${clubColor}50)` }} />
               ) : !imgError ? (
                 <img src={getPlayerPhoto(player.name)} alt={player.name} onError={() => setImgError(true)}
                   style={{ height: "100%", width: "auto", objectFit: "contain" }} />
               ) : (
-                <div style={{ fontSize: 80, opacity: 0.15 }}>👤</div>
+                <div style={{ fontSize: 70, opacity: 0.15 }}>👤</div>
               )}
             </div>
 
-            {/* Name + position */}
-            <div>
+            {/* Name + position — desktop uses left margin, mobile full width */}
+            <div className="sm:ml-[210px]">
               <div style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.45em", color: cfg.posLabel, marginBottom: 4 }}>
                 {player.position || "MID"}
                 {player.alternatePositions?.length > 0 && (
@@ -622,13 +727,13 @@ function PlayerModal({
               <h2 style={{ margin: 0, lineHeight: 1.05, ...cfg.name }}>{player.name}</h2>
             </div>
 
-            {/* Meta row */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {/* Meta */}
+            <div className="sm:ml-[210px]" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <FlagImage country={nationality} size={16} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{nationality || "Unknown"}</span>
               </div>
-              {player.age > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{player.age} yrs</span>}
+              {player.age > 0 && <span style={{ fontSize: 12, color: cfg.metaColor }}>{player.age} yrs</span>}
               {player.height > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.height} cm</span>}
               {player.weight > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.weight} kg</span>}
               {player.preferredFoot > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.preferredFoot === 1 ? "Right" : "Left"} foot</span>}
@@ -637,7 +742,7 @@ function PlayerModal({
             </div>
 
             {/* OVR / POT */}
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="sm:ml-[210px]" style={{ display: "flex", gap: 10 }}>
               {[{ label: "OVR", value: ovr, color: ovrColor }, { label: "POT", value: pot, color: potColor }].map(({ label, value, color }) => (
                 <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 18px", background: `${color}12`, border: `1px solid ${color}30`, borderRadius: br }}>
                   <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, color }}>{value}</span>
@@ -646,57 +751,12 @@ function PlayerModal({
               ))}
             </div>
 
-            <div style={{ height: 1, background: cfg.accentLine }} />
+            <div className="sm:ml-[210px]" style={{ height: 1, background: cfg.accentLine }} />
 
-            {/* Main 6 stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6 }}>
-              {stats.map(s => (
-                <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
-                  <span style={{ fontSize: 16, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
-                  <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: cfg.labelColor, marginTop: 2 }}>{s.label}</span>
-                </div>
-              ))}
+            {/* Stats — кликабельные кубики с подстатами */}
+            <div className="sm:ml-[210px]">
+              <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
             </div>
-
-            <div style={{ height: 1, background: cfg.accentLine }} />
-
-            {/* Detailed stats by category */}
-            {!isGK ? (
-              <>
-                {[
-                  { cat: "Pace",      subs: [["ACC", player.acceleration], ["SPR", player.sprintSpeed]] },
-                  { cat: "Shooting",  subs: [["FIN", player.finishing], ["SHO", player.shotPower], ["LON", player.longShots], ["VOL", player.volleys], ["PEN", player.penalties], ["POS", player.positioning]] },
-                  { cat: "Passing",   subs: [["SPA", player.shortPassing], ["LPA", player.longPassing], ["CUR", player.curve], ["FKA", player.freeKickAccuracy], ["CRO", player.crossing], ["VIS", player.vision]] },
-                  { cat: "Dribbling", subs: [["DRI", player.dribbling_stat], ["BAL", player.ballControl], ["AGI", player.agility], ["BAL", player.balance], ["REA", player.reactions], ["COM", player.composure]] },
-                  { cat: "Defending", subs: [["INT", player.interceptions], ["DAW", player.defensiveAwareness], ["STA", player.standingTackle], ["SLI", player.slidingTackle]] },
-                  { cat: "Physical",  subs: [["HEA", player.headingAccuracy], ["AGG", player.aggression], ["JUM", player.jumping], ["STM", player.stamina], ["STR", player.strength]] },
-                ].map(({ cat, subs }) => (
-                  <div key={cat}>
-                    <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginBottom: 6 }}>{cat}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 5 }}>
-                      {subs.map(([label, value], i) => (
-                        <div key={label + i} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
-                          <span style={{ fontSize: 13, fontWeight: 900, lineHeight: 1, color: getRatingColor(Number(value)) }}>{value ?? "—"}</span>
-                          <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.2em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div>
-                <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginBottom: 6 }}>Goalkeeper</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5 }}>
-                  {[["DIV", player.gk_diving], ["HAN", player.gk_handling], ["KIC", player.gk_kicking], ["POS", player.gk_positioning], ["REF", player.gk_reflexes]].map(([label, value]) => (
-                    <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
-                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: getRatingColor(Number(value)) }}>{value ?? "—"}</span>
-                      <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.2em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
