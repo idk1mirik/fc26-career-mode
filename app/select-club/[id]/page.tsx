@@ -668,11 +668,11 @@ function PlayerModal({
         <div style={{ position: "relative", zIndex: 10, display: "flex", minHeight: 360, maxHeight: "90vh" }}>
 
           {/* Photo — absolute, pinned to left, hidden on mobile */}
-          <div className="hidden sm:block" style={{
+          <div className="hidden sm:flex" style={{
             position: "absolute", bottom: 0, left: 0,
             width: 220, height: "100%",
             pointerEvents: "none", zIndex: 5,
-            display: "flex", alignItems: "flex-end", justifyContent: "center",
+            alignItems: "flex-end", justifyContent: "center",
           }}>
             <div style={{
               position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
