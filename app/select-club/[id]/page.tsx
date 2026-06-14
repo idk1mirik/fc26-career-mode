@@ -547,38 +547,34 @@ function PlayerModal({
           ✕
         </button>
 
-        {/* ── Player image — Контейнер теперь центрирует фото ── */}
+        {/* ── Layout: flex row on desktop, column on mobile ── */}
+        <div style={{
+          position: "relative", zIndex: 10,
+          display: "flex", flexDirection: "row",
+          maxHeight: "90vh", overflow: "hidden",
+        }}>
+          {/* ── Player photo column (fixed, not scrollable) ── */}
           <div style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            width: 250, // Немного увеличили ширину области, чтобы было где развернуться
-            height: "100%",
-            pointerEvents: "none",
-            zIndex: 30,
-            display: "flex",           // Включаем flex
-            justifyContent: "center",  // Центрируем фото по горизонтали
-            alignItems: "flex-end",    // Прижимаем к низу
-          }}>
-            {/* Glow orb — оставляем по центру контейнера */}
+            width: 220, flexShrink: 0,
+            position: "relative",
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+            overflow: "hidden", minHeight: 360,
+          }}
+            className="hidden sm:flex"
+          >
             <div style={{
               position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-              width: 200, height: 200, borderRadius: "50%",
+              width: 180, height: 180, borderRadius: "50%",
               background: `radial-gradient(circle,${clubColor}30,transparent)`,
               filter: "blur(32px)", pointerEvents: "none",
             }} />
-
             {!fullImgError ? (
               <img
                 src={getPlayerFullPhoto(player.name)}
                 alt={player.name}
                 onError={() => setFullImgError(true)}
                 style={{
-                  height: "100%",      // Жесткое ограничение по высоте (на 100% высоты контейнера)
-                  width: "auto",
-                  maxWidth: "none",    // Разрешаем фото "вылезать" вширь
-                  objectFit: "contain",
-                  objectPosition: "center bottom", // Теперь центр — это центр картинки
+                  height: "100%", width: "auto", objectFit: "contain", objectPosition: "center bottom",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
                   filter: `drop-shadow(0 0 28px ${clubColor}70) drop-shadow(0 8px 16px rgba(0,0,0,0.5))`,
                 }}
@@ -589,51 +585,62 @@ function PlayerModal({
                 alt={player.name}
                 onError={() => setImgError(true)}
                 style={{
-                  height: "90%",       // Чуть меньше 100%, чтобы обычные фото смотрелись аккуратно
-                  width: "auto",
-                  maxWidth: "none",
-                  objectFit: "contain",
-                  objectPosition: "center bottom",
+                  height: "80%", width: "auto", objectFit: "contain", objectPosition: "center bottom",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 20px ${clubColor}60) drop-shadow(0 6px 12px rgba(0,0,0,0.4))`,
+                  filter: `drop-shadow(0 0 20px ${clubColor}60)`,
                 }}
               />
             ) : (
-              <div style={{ fontSize: 120, opacity: 0.12, position: "absolute", bottom: 8 }}>👤</div>
+              <div style={{ fontSize: 100, opacity: 0.12, paddingBottom: 16 }}>👤</div>
             )}
           </div>
 
-        {/* ── Content — scrollable, padded left to sit beside the player image ── */}
-        <div style={{
-          position: "relative", zIndex: 10,
-          overflowY: "auto", maxHeight: "90vh",
-          display: "flex", minHeight: 360,
-        }}>
-          {/* Left spacer — matches image column width so text starts to the right */}
-          <div style={{ width: 210, flexShrink: 0 }} />
+          {/* ── Scrollable stats column ── */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px 28px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Text + stats */}
-          <div style={{ flex: 1, padding: "32px 28px 32px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Mobile photo (small, top) */}
+            <div className="flex sm:hidden justify-center" style={{ height: 160, position: "relative" }}>
+              {!fullImgError ? (
+                <img src={getPlayerFullPhoto(player.name)} alt={player.name} onError={() => setFullImgError(true)}
+                  style={{ height: "100%", width: "auto", objectFit: "contain", filter: `drop-shadow(0 0 20px ${clubColor}60)` }} />
+              ) : !imgError ? (
+                <img src={getPlayerPhoto(player.name)} alt={player.name} onError={() => setImgError(true)}
+                  style={{ height: "100%", width: "auto", objectFit: "contain" }} />
+              ) : (
+                <div style={{ fontSize: 80, opacity: 0.15 }}>👤</div>
+              )}
+            </div>
+
+            {/* Name + position */}
             <div>
-              <div style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.45em", color: cfg.posLabel, marginBottom: 4 }}>{player.position || "MID"}</div>
+              <div style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.45em", color: cfg.posLabel, marginBottom: 4 }}>
+                {player.position || "MID"}
+                {player.alternatePositions?.length > 0 && (
+                  <span style={{ marginLeft: 8, opacity: 0.5 }}>· {player.alternatePositions.join(" · ")}</span>
+                )}
+              </div>
               <h2 style={{ margin: 0, lineHeight: 1.05, ...cfg.name }}>{player.name}</h2>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <FlagImage country={nationality} size={18} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: cfg.metaColor }}>{nationality || "Unknown"}</span>
-              </div>
+            {/* Meta row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: cfg.labelColor }}>AGE</span>
-                <span style={{ fontSize: 15, fontWeight: 900, color: cfg.metaColor }}>{player.age ?? "—"}</span>
+                <FlagImage country={nationality} size={16} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{nationality || "Unknown"}</span>
               </div>
+              {player.age > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{player.age} yrs</span>}
+              {player.height > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.height} cm</span>}
+              {player.weight > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.weight} kg</span>}
+              {player.preferredFoot > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.preferredFoot === 1 ? "Right" : "Left"} foot</span>}
+              {player.skillMoves > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>★ {player.skillMoves}</span>}
+              {player.weakFootAbility > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>WF {player.weakFootAbility}</span>}
             </div>
 
-            <div style={{ display: "flex", gap: 12 }}>
+            {/* OVR / POT */}
+            <div style={{ display: "flex", gap: 10 }}>
               {[{ label: "OVR", value: ovr, color: ovrColor }, { label: "POT", value: pot, color: potColor }].map(({ label, value, color }) => (
-                <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 20px", background: `${color}12`, border: `1px solid ${color}30`, borderRadius: br }}>
-                  <span style={{ fontSize: 28, fontWeight: 900, lineHeight: 1, color }}>{value}</span>
+                <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 18px", background: `${color}12`, border: `1px solid ${color}30`, borderRadius: br }}>
+                  <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, color }}>{value}</span>
                   <span style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
                 </div>
               ))}
@@ -641,14 +648,55 @@ function PlayerModal({
 
             <div style={{ height: 1, background: cfg.accentLine }} />
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
+            {/* Main 6 stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6 }}>
               {stats.map(s => (
-                <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 4px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
-                  <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
-                  <span style={{ fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.35em", color: cfg.labelColor, marginTop: 3 }}>{s.label}</span>
+                <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
+                  <span style={{ fontSize: 16, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
+                  <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: cfg.labelColor, marginTop: 2 }}>{s.label}</span>
                 </div>
               ))}
             </div>
+
+            <div style={{ height: 1, background: cfg.accentLine }} />
+
+            {/* Detailed stats by category */}
+            {!isGK ? (
+              <>
+                {[
+                  { cat: "Pace",      subs: [["ACC", player.acceleration], ["SPR", player.sprintSpeed]] },
+                  { cat: "Shooting",  subs: [["FIN", player.finishing], ["SHO", player.shotPower], ["LON", player.longShots], ["VOL", player.volleys], ["PEN", player.penalties], ["POS", player.positioning]] },
+                  { cat: "Passing",   subs: [["SPA", player.shortPassing], ["LPA", player.longPassing], ["CUR", player.curve], ["FKA", player.freeKickAccuracy], ["CRO", player.crossing], ["VIS", player.vision]] },
+                  { cat: "Dribbling", subs: [["DRI", player.dribbling_stat], ["BAL", player.ballControl], ["AGI", player.agility], ["BAL", player.balance], ["REA", player.reactions], ["COM", player.composure]] },
+                  { cat: "Defending", subs: [["INT", player.interceptions], ["DAW", player.defensiveAwareness], ["STA", player.standingTackle], ["SLI", player.slidingTackle]] },
+                  { cat: "Physical",  subs: [["HEA", player.headingAccuracy], ["AGG", player.aggression], ["JUM", player.jumping], ["STM", player.stamina], ["STR", player.strength]] },
+                ].map(({ cat, subs }) => (
+                  <div key={cat}>
+                    <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginBottom: 6 }}>{cat}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 5 }}>
+                      {subs.map(([label, value], i) => (
+                        <div key={label + i} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
+                          <span style={{ fontSize: 13, fontWeight: 900, lineHeight: 1, color: getRatingColor(Number(value)) }}>{value ?? "—"}</span>
+                          <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.2em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginBottom: 6 }}>Goalkeeper</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5 }}>
+                  {[["DIV", player.gk_diving], ["HAN", player.gk_handling], ["KIC", player.gk_kicking], ["POS", player.gk_positioning], ["REF", player.gk_reflexes]].map(([label, value]) => (
+                    <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
+                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: getRatingColor(Number(value)) }}>{value ?? "—"}</span>
+                      <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.2em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

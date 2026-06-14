@@ -2,55 +2,92 @@ import fs from "fs";
 import path from "path";
 import csv from "csv-parser";
 
-// Full player shape stored in RAM after first load
 interface Player {
   id: string;
   name: string;
   overall: number;
   potential: number;
   position: string;
+  alternatePositions: string[];
+  positionType: string;
   team: string;
   league: string;
   nationality: string;
   age: number;
+  height: number;
+  weight: number;
+  preferredFoot: number; // 1=Right, 2=Left
+  skillMoves: number;
+  weakFootAbility: number;
+  // Main 6
   pace: number;
   shooting: number;
   passing: number;
   dribbling: number;
   defending: number;
   physical: number;
+  // Pace
+  acceleration: number;
+  sprintSpeed: number;
+  // Shooting
+  finishing: number;
+  shotPower: number;
+  longShots: number;
+  volleys: number;
+  penalties: number;
+  positioning: number;
+  // Passing
+  shortPassing: number;
+  longPassing: number;
+  curve: number;
+  freeKickAccuracy: number;
+  crossing: number;
+  vision: number;
+  // Dribbling
+  dribbling_stat: number;
+  ballControl: number;
+  agility: number;
+  balance: number;
+  reactions: number;
+  composure: number;
+  // Defending
+  interceptions: number;
+  defensiveAwareness: number;
+  standingTackle: number;
+  slidingTackle: number;
+  // Physical
+  headingAccuracy: number;
+  aggression: number;
+  jumping: number;
+  stamina: number;
+  strength: number;
+  // GK
   gk_diving: number;
   gk_handling: number;
   gk_kicking: number;
-  gk_reflexes: number;
   gk_positioning: number;
+  gk_reflexes: number;
+  // Meta
   wage: number;
-  market_value: number; // derived from overall rating
+  market_value: number;
 }
 
-/**
- * Exponential market-value curve anchored to real-world FC valuations.
- *
- * Reference points (rounded):
- *   OVR 60 →   ~0.5 M
- *   OVR 65 →   ~1.2 M
- *   OVR 70 →   ~2.6 M
- *   OVR 75 →   ~6.0 M
- *   OVR 80 →  ~14 M
- *   OVR 85 →  ~32 M
- *   OVR 88 →  ~55 M
- *   OVR 90 →  ~75 M
- *   OVR 93 → ~125 M
- *
- * Formula: 500_000 × 2.3^((ovr - 60) / 5)
- * Doubles roughly every 5 rating points above 60.
- */
 function computeMarketValue(ovr: number): number {
   if (ovr <= 0) return 0;
-  const base = 500_000;
-  const value = base * Math.pow(2.1, (ovr - 60) / 5);
-  // Round to nearest €100K for clean display
+  const value = 500_000 * Math.pow(2.1, (ovr - 60) / 5);
   return Math.round(value / 100_000) * 100_000;
+}
+
+// Потенциал = overall + бонус по возрасту (молодые игроки растут больше)
+function computePotential(ovr: number, age: number): number {
+  if (age <= 0 || ovr <= 0) return ovr;
+  let bonus = 0;
+  if (age <= 18) bonus = Math.floor(Math.random() * 8) + 8;       // +8..15
+  else if (age <= 21) bonus = Math.floor(Math.random() * 6) + 4;  // +4..9
+  else if (age <= 24) bonus = Math.floor(Math.random() * 4) + 1;  // +1..4
+  else if (age <= 27) bonus = Math.floor(Math.random() * 2);      // +0..1
+  // 28+ потенциал = overall
+  return Math.min(99, ovr + bonus);
 }
 
 let cache: Player[] | null = null;
@@ -60,7 +97,6 @@ function loadPlayers(): Promise<Player[]> {
   if (cache) return Promise.resolve(cache);
   if (cacheLoading) return cacheLoading;
 
-  // CSV lives at backend/data/ea_fc26_players.csv
   const filePath = path.join(process.cwd(), "backend/data/ea_fc26_players.csv");
 
   cacheLoading = new Promise((resolve) => {
@@ -69,47 +105,97 @@ function loadPlayers(): Promise<Player[]> {
     fs.createReadStream(filePath)
       .pipe(csv())
       .on("data", (row) => {
-        // Prefer commonName (e.g. "Mbappé"), fall back to firstName + lastName
         const name =
           (row.commonName && row.commonName.trim())
             ? row.commonName.trim()
             : `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim();
 
+        const age = (() => {
+          const bd = row.birthdate ?? "";
+          if (!bd) return 0;
+          const born = new Date(bd);
+          if (isNaN(born.getTime())) return 0;
+          const today = new Date();
+          let a = today.getFullYear() - born.getFullYear();
+          const m = today.getMonth() - born.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < born.getDate())) a--;
+          return a;
+        })();
+
+        const ovr = Number(row.overallRating ?? 0);
+
+        const altPos = row.alternatePositions
+          ? row.alternatePositions.split(",").map((s: string) => s.trim()).filter(Boolean)
+          : [];
+
         results.push({
           id: row.id ?? "",
           name,
-          overall: Number(row.overallRating ?? row.overall ?? 0),
-          potential: Number(row.potential ?? row.potentialRating ?? row.overallRating ?? 0),
-          position: row.position ?? row.preferredPosition ?? "",
-          team: row.team ?? row.club ?? "",
-          league: row.leagueName ?? row.league ?? row.league_name ?? "",
-          nationality: row.nationality ?? row.nation ?? "",
-          age: (() => {
-            const raw = row.age ?? row.Age ?? "";
-            if (raw && Number(raw) > 0) return Number(raw);
-            const bd = row.birthdate ?? row.Birthdate ?? row.birth_date ?? row.dateOfBirth ?? "";
-            if (!bd) return 0;
-            const born = new Date(bd);
-            if (isNaN(born.getTime())) return 0;
-            const today = new Date();
-            let age = today.getFullYear() - born.getFullYear();
-            const m = today.getMonth() - born.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < born.getDate())) age--;
-            return age;
-          })(),
-          pace: Number(row.pac ?? row.pace ?? 0),
-          shooting: Number(row.sho ?? row.shooting ?? 0),
-          passing: Number(row.pas ?? row.passing ?? 0),
-          dribbling: Number(row.dri ?? row.dribbling ?? 0),
-          defending: Number(row.def ?? row.defending ?? 0),
-          physical: Number(row.phy ?? row.physical ?? 0),
-          gk_diving: Number(row.gk_diving ?? row.gkDiving ?? 0),
-          gk_handling: Number(row.gk_handling ?? row.gkHandling ?? 0),
-          gk_kicking: Number(row.gk_kicking ?? row.gkKicking ?? 0),
-          gk_reflexes: Number(row.gk_reflexes ?? row.gkReflexes ?? 0),
-          gk_positioning: Number(row.gk_positioning ?? row.gkPositioning ?? 0),
-          wage: Number(row.wage ?? row.wages ?? 0),
-          market_value: computeMarketValue(Number(row.overallRating ?? row.overall ?? 0)),
+          overall: ovr,
+          potential: computePotential(ovr, age),
+          position: row.position ?? "",
+          alternatePositions: altPos,
+          positionType: row.positionType ?? "",
+          team: row.team ?? "",
+          league: row.leagueName ?? "",
+          nationality: row.nationality ?? "",
+          age,
+          height: Number(row.height ?? 0),
+          weight: Number(row.weight ?? 0),
+          preferredFoot: Number(row.preferredFoot ?? 0),
+          skillMoves: Number(row.skillMoves ?? 0),
+          weakFootAbility: Number(row.weakFootAbility ?? 0),
+          // Main 6
+          pace: Number(row.pac ?? 0),
+          shooting: Number(row.sho ?? 0),
+          passing: Number(row.pas ?? 0),
+          dribbling: Number(row.dri ?? 0),
+          defending: Number(row.def ?? 0),
+          physical: Number(row.phy ?? 0),
+          // Pace
+          acceleration: Number(row.acceleration ?? 0),
+          sprintSpeed: Number(row.sprintSpeed ?? 0),
+          // Shooting
+          finishing: Number(row.finishing ?? 0),
+          shotPower: Number(row.shotPower ?? 0),
+          longShots: Number(row.longShots ?? 0),
+          volleys: Number(row.volleys ?? 0),
+          penalties: Number(row.penalties ?? 0),
+          positioning: Number(row.positioning ?? 0),
+          // Passing
+          shortPassing: Number(row.shortPassing ?? 0),
+          longPassing: Number(row.longPassing ?? 0),
+          curve: Number(row.curve ?? 0),
+          freeKickAccuracy: Number(row.freeKickAccuracy ?? 0),
+          crossing: Number(row.crossing ?? 0),
+          vision: Number(row.vision ?? 0),
+          // Dribbling
+          dribbling_stat: Number(row.dribbling ?? 0),
+          ballControl: Number(row.ballControl ?? 0),
+          agility: Number(row.agility ?? 0),
+          balance: Number(row.balance ?? 0),
+          reactions: Number(row.reactions ?? 0),
+          composure: Number(row.composure ?? 0),
+          // Defending
+          interceptions: Number(row.interceptions ?? 0),
+          defensiveAwareness: Number(row.defensiveAwareness ?? 0),
+          standingTackle: Number(row.standingTackle ?? 0),
+          slidingTackle: Number(row.slidingTackle ?? 0),
+          // Physical
+          headingAccuracy: Number(row.headingAccuracy ?? 0),
+          aggression: Number(row.aggression ?? 0),
+          jumping: Number(row.jumping ?? 0),
+          stamina: Number(row.stamina ?? 0),
+          strength: Number(row.strength ?? 0),
+          // GK
+          gk_diving: Number(row.gkDiving ?? 0),
+          gk_handling: Number(row.gkHandling ?? 0),
+          gk_kicking: Number(row.gkKicking ?? 0),
+          gk_positioning: Number(row.gkPositioning ?? 0),
+          gk_reflexes: Number(row.gkReflexes ?? 0),
+          // Meta
+          wage: Number(row.wage ?? 0),
+          market_value: computeMarketValue(ovr),
         });
       })
       .on("end", () => {
@@ -133,16 +219,12 @@ export async function GET(req: Request) {
   const leagueName = searchParams.get("league")?.toLowerCase().trim();
 
   const players = await loadPlayers();
-
   let filtered = players;
 
   if (clubName) {
     filtered = filtered.filter((p) => p.team.toLowerCase() === clubName);
   } else if (leagueName) {
-    const byLeague = filtered.filter(
-      (p) => p.league.toLowerCase() === leagueName
-    );
-    // If CSV league column is populated use it; otherwise return all players as fallback
+    const byLeague = filtered.filter((p) => p.league.toLowerCase() === leagueName);
     filtered = byLeague.length > 0 ? byLeague : filtered;
   }
 
