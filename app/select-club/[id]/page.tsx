@@ -665,7 +665,7 @@ function PlayerModal({
         </button>
 
         {/* ── Layout: photo absolute left, content scrollable right ── */}
-        <div style={{ position: "relative", zIndex: 10, display: "flex", minHeight: 360, maxHeight: "90vh" }}>
+        <div style={{ position: "relative", zIndex: 10, display: "flex", minHeight: 420, height: "min(90vh, 600px)" }}>
 
           {/* Photo — absolute, pinned to left, hidden on mobile */}
           <div className="hidden sm:flex" style={{
@@ -704,7 +704,7 @@ function PlayerModal({
             <div className="hidden sm:block" style={{ height: 0, marginLeft: 210 }} />
 
             {/* Mobile photo — small, inline */}
-            <div className="flex sm:hidden justify-center" style={{ height: 140 }}>
+            <div className="flex sm:hidden justify-center" style={{ height: 200 }}>
               {!fullImgError ? (
                 <img src={getPlayerFullPhoto(player.name)} alt={player.name} onError={() => setFullImgError(true)}
                   style={{ height: "100%", width: "auto", objectFit: "contain", filter: `drop-shadow(0 0 16px ${clubColor}50)` }} />
