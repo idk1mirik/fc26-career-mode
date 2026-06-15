@@ -922,14 +922,20 @@ export default function SelectClubPage() {
     );
   }
 
-  const startCareer = () => {
-    const careerState = {
-      selectedClub: club, selectedLeague,
-      currentDate: new Date().toISOString(),
-      players: club.players, lastSeenAt: Date.now(),
-    };
-    localStorage.setItem("career_state", JSON.stringify(careerState));
+  const startCareer = async () => {
     setSelectedClub(club);
+    try {
+      const res = await fetch("/api/season", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueId: selectedLeague?.id ?? club.league, clubId: club.name }),
+      });
+      if (res.ok) {
+        const { seasonId } = await res.json();
+        useCareerStore.getState().setSeasonId(seasonId);
+        useCareerStore.getState().setMatchday(1);
+      }
+    } catch (e) { console.error("Season create failed", e); }
     router.push("/dashboard");
   };
 
