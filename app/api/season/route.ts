@@ -15,23 +15,31 @@ function buildFixtures(clubs: string[], seasonId: string) {
   const half = list.length / 2;
   const rounds = list.length - 1;
 
+  // Сезон начинается 1 августа, каждый тур через 7 дней
+  const seasonStart = new Date("2025-08-01");
+  const matchdayDate = (md: number) => {
+    const d = new Date(seasonStart);
+    d.setDate(d.getDate() + (md - 1) * 7);
+    return d.toISOString().split("T")[0];
+  };
+
   for (let round = 0; round < rounds; round++) {
     const matchday = round + 1;
     for (let i = 0; i < half; i++) {
       const home = list[i];
       const away = list[list.length - 1 - i];
       if (home !== dummy && away !== dummy) {
-        rows.push({ season_id: seasonId, matchday, home_club: home, away_club: away });
+        rows.push({ season_id: seasonId, matchday, home_club: home, away_club: away, match_date: matchdayDate(matchday) });
       }
     }
-    // rotate
     list.splice(1, 0, list.pop()!);
   }
 
   // Вторые матчи (home/away swap)
   const first = [...rows];
   first.forEach(f => {
-    rows.push({ season_id: seasonId, matchday: f.matchday + rounds, home_club: f.away_club, away_club: f.home_club });
+    const md = f.matchday + rounds;
+    rows.push({ season_id: seasonId, matchday: md, home_club: f.away_club, away_club: f.home_club, match_date: matchdayDate(md) });
   });
 
   return rows;
