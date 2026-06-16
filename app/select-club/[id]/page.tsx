@@ -667,37 +667,44 @@ function PlayerModal({
         {/* ── Layout: flex row, photo left, stats right ── */}
         <div style={{ position: "relative", zIndex: 10, display: "flex", maxHeight: "85vh", overflow: "hidden" }}>
 
-          {/* Photo column — desktop only, fixed width, не скроллится */}
-          <div className="hidden sm:flex" style={{
-            width: 210, flexShrink: 0,
-            flexDirection: "column", alignItems: "center", justifyContent: "center",
-            position: "relative",
+          {/* Photo — абсолютное, по центру левой части, выходит за края */}
+          <div className="hidden sm:block" style={{
+            position: "absolute", top: 0, bottom: 0, left: 0,
+            width: 240, pointerEvents: "none", zIndex: 20,
+            overflow: "visible",
           }}>
             <div style={{
-              position: "absolute", bottom: "20%", left: "50%", transform: "translateX(-50%)",
-              width: 140, height: 140, borderRadius: "50%",
-              background: `radial-gradient(circle,${clubColor}30,transparent)`,
-              filter: "blur(28px)", pointerEvents: "none",
+              position: "absolute", bottom: "10%", left: "50%", transform: "translateX(-50%)",
+              width: 160, height: 160, borderRadius: "50%",
+              background: `radial-gradient(circle,${clubColor}25,transparent)`,
+              filter: "blur(32px)",
             }} />
             {!fullImgError ? (
               <img src={getPlayerFullPhoto(player.name)} alt={player.name}
                 onError={() => setFullImgError(true)}
-                style={{ width: "100%", height: "auto", maxHeight: "100%", objectFit: "contain",
+                style={{
+                  position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
+                  height: "110%", width: "auto", objectFit: "contain",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 20px ${clubColor}60)` }} />
+                  filter: `drop-shadow(0 0 24px ${clubColor}60)`,
+                }} />
             ) : !imgError ? (
               <img src={getPlayerPhoto(player.name)} alt={player.name}
                 onError={() => setImgError(true)}
-                style={{ width: "80%", height: "auto", objectFit: "contain",
+                style={{
+                  position: "absolute", bottom: "5%", left: "50%", transform: "translateX(-50%)",
+                  height: "80%", width: "auto", objectFit: "contain",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 14px ${clubColor}50)` }} />
+                  filter: `drop-shadow(0 0 16px ${clubColor}50)`,
+                }} />
             ) : (
-              <div style={{ fontSize: 80, opacity: 0.1 }}>👤</div>
+              <div style={{ position: "absolute", bottom: "10%", left: "50%", transform: "translateX(-50%)", fontSize: 80, opacity: 0.1 }}>👤</div>
             )}
           </div>
 
           {/* Stats column — скроллится */}
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "28px 24px" }}>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "28px 24px 28px 250px" }}
+            className="sm:pl-[250px] pl-4">
 
             {/* Mobile photo */}
             <div className="flex sm:hidden justify-center" style={{ height: 180 }}>
