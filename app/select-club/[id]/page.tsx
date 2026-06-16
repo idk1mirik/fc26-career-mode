@@ -684,7 +684,7 @@ function PlayerModal({
                 onError={() => setFullImgError(true)}
                 style={{
                   position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-                  height: "110%", width: "auto", objectFit: "contain",
+                  height: "140%", width: "auto", objectFit: "contain",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
                   filter: `drop-shadow(0 0 24px ${clubColor}60)`,
                 }} />
@@ -692,8 +692,8 @@ function PlayerModal({
               <img src={getPlayerPhoto(player.name)} alt={player.name}
                 onError={() => setImgError(true)}
                 style={{
-                  position: "absolute", bottom: "5%", left: "50%", transform: "translateX(-50%)",
-                  height: "80%", width: "auto", objectFit: "contain",
+                  position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
+                  height: "100%", width: "auto", objectFit: "contain",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
                   filter: `drop-shadow(0 0 16px ${clubColor}50)`,
                 }} />
