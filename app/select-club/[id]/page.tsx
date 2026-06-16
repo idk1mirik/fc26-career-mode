@@ -664,48 +664,40 @@ function PlayerModal({
           ✕
         </button>
 
-        {/* ── Layout ── */}
-        <div style={{ position: "relative", zIndex: 10, display: "flex", height: 380 }}>
+        {/* ── Layout: flex row, photo left, stats right ── */}
+        <div style={{ position: "relative", zIndex: 10, display: "flex", maxHeight: "85vh", overflow: "hidden" }}>
 
-          {/* Photo — абсолют, низ = низ карточки, выходит за верх */}
-          <div className="hidden sm:block" style={{
-            position: "absolute", bottom: 0, left: 0,
-            width: 230, height: "130%",
-            pointerEvents: "none", zIndex: 20,
-            overflow: "visible",
+          {/* Photo column — desktop only, fixed width, не скроллится */}
+          <div className="hidden sm:flex" style={{
+            width: 210, flexShrink: 0,
+            flexDirection: "column", alignItems: "center", justifyContent: "center",
+            position: "relative",
           }}>
             <div style={{
-              position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-              width: 150, height: 150, borderRadius: "50%",
-              background: `radial-gradient(circle,${clubColor}25,transparent)`,
-              filter: "blur(28px)",
+              position: "absolute", bottom: "20%", left: "50%", transform: "translateX(-50%)",
+              width: 140, height: 140, borderRadius: "50%",
+              background: `radial-gradient(circle,${clubColor}30,transparent)`,
+              filter: "blur(28px)", pointerEvents: "none",
             }} />
             {!fullImgError ? (
               <img src={getPlayerFullPhoto(player.name)} alt={player.name}
                 onError={() => setFullImgError(true)}
-                style={{
-                  position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-                  height: "100%", width: "auto", objectFit: "contain",
+                style={{ width: "100%", height: "auto", maxHeight: "100%", objectFit: "contain",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 20px ${clubColor}55)`,
-                }} />
+                  filter: `drop-shadow(0 0 20px ${clubColor}60)` }} />
             ) : !imgError ? (
               <img src={getPlayerPhoto(player.name)} alt={player.name}
                 onError={() => setImgError(true)}
-                style={{
-                  position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-                  height: "75%", width: "auto", objectFit: "contain",
+                style={{ width: "80%", height: "auto", objectFit: "contain",
                   animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 14px ${clubColor}50)`,
-                }} />
+                  filter: `drop-shadow(0 0 14px ${clubColor}50)` }} />
             ) : (
-              <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", fontSize: 80, opacity: 0.1 }}>👤</div>
+              <div style={{ fontSize: 80, opacity: 0.1 }}>👤</div>
             )}
           </div>
 
-          {/* Stats — скроллится, отступ слева под фото */}
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "24px 24px 24px 16px" }}
-            className="sm:pl-[240px]">
+          {/* Stats column — скроллится */}
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "28px 24px" }}>
 
             {/* Mobile photo */}
             <div className="flex sm:hidden justify-center" style={{ height: 180 }}>
@@ -757,6 +749,7 @@ function PlayerModal({
 
             <div style={{ height: 1, background: cfg.accentLine }} />
 
+            {/* Stats */}
             <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
           </div>
         </div>
