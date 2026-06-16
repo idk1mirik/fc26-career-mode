@@ -704,8 +704,7 @@ function PlayerModal({
           </div>
 
           {/* Stats — скроллится, отступ слева под фото */}
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "24px 24px 24px 16px" }}
-            className="sm:pl-[240px]">
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "24px 24px 24px 320px" }}>
 
             {/* Mobile photo */}
             <div className="flex sm:hidden justify-center" style={{ height: 180 }}>
