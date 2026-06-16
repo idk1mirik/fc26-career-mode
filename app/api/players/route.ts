@@ -78,16 +78,24 @@ function computeMarketValue(ovr: number): number {
   return Math.round(value / 100_000) * 100_000;
 }
 
-// Потенциал = overall + бонус по возрасту (молодые игроки растут больше)
+// Потенциал — реалистичная логика как в FIFA
+// Молодые звёзды растут больше, взрослые топы остаются на уровне
 function computePotential(ovr: number, age: number): number {
   if (age <= 0 || ovr <= 0) return ovr;
+
+  // Базовый «потолок» зависит от текущего рейтинга
+  // Топ игроки (88+) уже близки к потолку, середняки могут расти больше
+  const ceiling = ovr >= 88 ? ovr + 3 : ovr >= 82 ? ovr + 8 : ovr >= 75 ? ovr + 12 : ovr + 6;
+
   let bonus = 0;
-  if (age <= 18) bonus = Math.floor(Math.random() * 8) + 8;       // +8..15
-  else if (age <= 21) bonus = Math.floor(Math.random() * 6) + 4;  // +4..9
-  else if (age <= 24) bonus = Math.floor(Math.random() * 4) + 1;  // +1..4
-  else if (age <= 27) bonus = Math.floor(Math.random() * 2);      // +0..1
-  // 28+ потенциал = overall
-  return Math.min(99, ovr + bonus);
+  if (age <= 17)      bonus = Math.floor(Math.random() * 8) + 7;  // +7..14
+  else if (age <= 19) bonus = Math.floor(Math.random() * 7) + 5;  // +5..11
+  else if (age <= 21) bonus = Math.floor(Math.random() * 6) + 3;  // +3..8
+  else if (age <= 23) bonus = Math.floor(Math.random() * 4) + 1;  // +1..4
+  else if (age <= 26) bonus = Math.floor(Math.random() * 2);      // +0..1
+  // 27+ потенциал = overall (пик уже прошёл)
+
+  return Math.min(99, Math.min(ceiling, ovr + bonus));
 }
 
 let cache: Player[] | null = null;
