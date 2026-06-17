@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import { getPlayerPhoto } from "@/lib/images";
 import { getLeagueTheme } from "@/constants/themes";
 import DashboardLayout from "@/app/lib/DashboardLayout";
-import { PlayerModal, getRatingColor, FlagImage, PosBadge } from "@/app/lib/playerComponents";
+import { PlayerModal, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
 
 const POS_GROUP: Record<string, string> = {
   GK: "Goalkeepers",
@@ -15,16 +15,48 @@ const POS_GROUP: Record<string, string> = {
   LW: "Attackers", RW: "Attackers", CF: "Attackers", ST: "Attackers",
 };
 
+const PlayerRow = memo(function PlayerRow({ p, isDark, muted, card, onOpen }: {
+  p: any; isDark: boolean; muted: string; card: string; onOpen: (p: any) => void;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const ovr = p.overall ?? 75;
+  const pot = p.potential ?? ovr;
+  return (
+    <div onClick={() => onOpen(p)}
+      className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${card}`}>
+      <div className="w-9 h-9 shrink-0 flex items-center justify-center">
+        {!imgErr
+          ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-9 h-9 object-contain" onError={() => setImgErr(true)} />
+          : <span className="text-2xl opacity-30">👤</span>}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-black text-sm truncate">{p.name}</div>
+        <div className={`text-[10px] ${muted}`}>
+          {p.position}{p.alternatePositions?.length > 0 ? ` · ${p.alternatePositions.slice(0,2).join(" · ")}` : ""}
+        </div>
+      </div>
+      <FlagImage country={p.nationality || p.nation} size={14} />
+      <div className={`text-xs text-center w-8 ${muted}`}>{p.age}</div>
+      <div className="text-xs text-center w-10">
+        <span className="font-bold" style={{ color: getRatingColor(pot) }}>{pot}</span>
+      </div>
+      <div className="text-center w-10">
+        <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
+      </div>
+    </div>
+  );
+});
+
 export default function SquadPage() {
   const router = useRouter();
   const theme  = useThemeStore(s => s.theme);
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
-  const [players, setPlayers]         = useState<any[]>([]);
-  const [search, setSearch]           = useState("");
-  const [sort, setSort]               = useState<"overall"|"name"|"age">("overall");
-  const [hydrated, setHydrated]       = useState(false);
-  const [modalPlayer, setModalPlayer] = useState<any>(null);
+  const [players, setPlayers]           = useState<any[]>([]);
+  const [search, setSearch]             = useState("");
+  const [sort, setSort]                 = useState<"overall"|"name"|"age">("overall");
+  const [hydrated, setHydrated]         = useState(false);
+  const [modalPlayer, setModalPlayer]   = useState<any>(null);
   const [modalClosing, setModalClosing] = useState(false);
 
   useEffect(() => {
@@ -34,11 +66,10 @@ export default function SquadPage() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (!selectedClub) { router.push("/leagues"); return; }
+    if (!hydrated || !selectedClub) return;
     fetch(`/api/players?club=${encodeURIComponent(selectedClub.name)}`)
       .then(r => r.json()).then(setPlayers).catch(() => {});
-  }, [hydrated, selectedClub, router]);
+  }, [hydrated, selectedClub]);
 
   const openModal  = useCallback((p: any) => { setModalClosing(false); setModalPlayer(p); }, []);
   const closeModal = useCallback(() => {
@@ -73,9 +104,9 @@ export default function SquadPage() {
   const card   = isDark
     ? "bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06]"
     : "bg-white/70 border border-pink-100 hover:bg-white/90";
-  const input  = isDark
-    ? "bg-white/[0.05] border border-white/[0.1] text-white placeholder-white/30"
-    : "bg-white border border-pink-100 text-pink-950 placeholder-pink-300";
+  const inputCls = isDark
+    ? "bg-white/[0.05] border border-white/[0.1] text-white placeholder-white/30 rounded-xl"
+    : "bg-white border border-pink-100 text-pink-950 placeholder-pink-300 rounded-xl";
 
   if (!hydrated) return null;
 
@@ -87,12 +118,11 @@ export default function SquadPage() {
           <h1 className="text-2xl font-black">{selectedClub?.name} — {players.length} Players</h1>
         </div>
 
-        {/* Controls */}
         <div className="flex gap-3 mb-6 flex-wrap">
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
-            className={`px-4 py-2 rounded-xl text-sm outline-none ${input}`} />
+            className={`px-4 py-2 text-sm outline-none ${inputCls}`} />
           <select value={sort} onChange={e => setSort(e.target.value as any)}
-            className={`px-4 py-2 rounded-xl text-sm outline-none cursor-pointer ${input}`}>
+            className={`px-4 py-2 text-sm outline-none cursor-pointer ${inputCls}`}>
             <option value="overall">Sort: OVR</option>
             <option value="name">Sort: Name</option>
             <option value="age">Sort: Age</option>
@@ -106,43 +136,9 @@ export default function SquadPage() {
             <div key={group} className="mb-6">
               <div className={`text-[10px] uppercase tracking-widest font-black mb-3 ${muted}`}>{group} ({list.length})</div>
               <div className="space-y-1.5">
-                {list.map(p => {
-                  const ovr = p.overall ?? 75;
-                  const pot = p.potential ?? ovr;
-                  const [imgErr, setImgErr] = useState(false);
-                  return (
-                    <div key={p.id ?? p.name} onClick={() => openModal(p)}
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${card}`}>
-                      {/* Photo */}
-                      <div className="w-9 h-9 shrink-0 flex items-center justify-center">
-                        {!imgErr ? (
-                          <img src={getPlayerPhoto(p.name)} alt={p.name}
-                            className="w-9 h-9 object-contain"
-                            onError={() => setImgErr(true)} />
-                        ) : (
-                          <span className="text-2xl opacity-30">👤</span>
-                        )}
-                      </div>
-                      {/* Name + pos */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-black text-sm truncate">{p.name}</div>
-                        <div className={`text-[10px] ${muted}`}>{p.position}{p.alternatePositions?.length > 0 ? ` · ${p.alternatePositions.slice(0,2).join(" · ")}` : ""}</div>
-                      </div>
-                      {/* Flag */}
-                      <FlagImage country={p.nationality || p.nation} size={14} />
-                      {/* Age */}
-                      <div className={`text-xs text-center w-8 ${muted}`}>{p.age}</div>
-                      {/* POT */}
-                      <div className="text-xs text-center w-10">
-                        <span className="font-bold" style={{ color: getRatingColor(pot) }}>{pot}</span>
-                      </div>
-                      {/* OVR */}
-                      <div className="text-center w-10">
-                        <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {list.map(p => (
+                  <PlayerRow key={p.id ?? p.name} p={p} isDark={isDark} muted={muted} card={card} onOpen={openModal} />
+                ))}
               </div>
             </div>
           );
