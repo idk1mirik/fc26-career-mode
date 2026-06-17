@@ -104,10 +104,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto relative z-10">
+      <div className="flex-1 overflow-y-auto relative z-10 pb-16 lg:pb-0">
         <div className="absolute top-4 right-4 z-50"><ThemeToggle /></div>
         {children}
       </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex border-t"
+        style={{ background: theme === "aurora" ? "rgba(255,255,255,0.95)" : "rgba(4,0,10,0.95)", borderColor: theme === "aurora" ? "#fce7f3" : "rgba(255,255,255,0.06)", backdropFilter: "blur(20px)" }}>
+        {NAV.map(item => {
+          const Icon = item.icon;
+          const active = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} className="flex-1">
+              <div className={`flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${active ? "" : "opacity-40"}`}
+                style={{ color: active ? glowColor : undefined }}>
+                <Icon size={20} />
+                <span className="text-[9px] font-black uppercase tracking-wider"
+                  style={{ color: theme === "aurora" ? (active ? glowColor : "#9d174d") : (active ? glowColor : undefined) }}>
+                  {item.label.split(" ")[0]}
+                </span>
+              </div>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
