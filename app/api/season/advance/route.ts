@@ -1,16 +1,14 @@
 // app/api/season/advance/route.ts
-// POST — симулируем текущий тур и переходим к следующему
-
 import { supabase } from "@/lib/supabase";
 import { simulateMatchByRating } from "@/lib/matchEngine";
 
-// Средний рейтинг клуба — берём из кэша игроков (упрощённо: 75 если нет данных)
 const CLUB_RATINGS: Record<string, number> = {};
 
 async function getClubRating(clubId: string): Promise<number> {
   if (CLUB_RATINGS[clubId]) return CLUB_RATINGS[clubId];
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/players?club=${encodeURIComponent(clubId)}`);
+    const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const res = await fetch(`${base}/api/players?club=${encodeURIComponent(clubId)}`);
     if (!res.ok) return 75;
     const players = await res.json();
     if (!players.length) return 75;
@@ -21,44 +19,32 @@ async function getClubRating(clubId: string): Promise<number> {
 }
 
 export async function POST(req: Request) {
-  const { seasonId, userClubId, homePlayers, awayPlayers } = await req.json();
+  const { seasonId, userClubId, userHomeGoals, userAwayGoals } = await req.json();
 
-  // Загружаем сезон
   const { data: season, error: sErr } = await supabase
     .from("seasons").select("*").eq("id", seasonId).single();
   if (sErr) return Response.json({ error: "Season not found" }, { status: 404 });
 
   const matchday = season.matchday;
 
-  // Загружаем матчи тура
   const { data: fixtures } = await supabase
-    .from("fixtures")
-    .select("*")
+    .from("fixtures").select("*")
     .eq("season_id", seasonId)
     .eq("matchday", matchday)
     .eq("played", false);
 
-  if (!fixtures?.length) return Response.json({ error: "No fixtures for this matchday" }, { status: 400 });
+  if (!fixtures?.length) return Response.json({ error: "No fixtures" }, { status: 400 });
 
-  const updates: any[] = [];
-  const standingDeltas: Record<string, { w: number; d: number; l: number; gf: number; ga: number; pts: number }> = {};
-
-  const delta = (club: string) => {
-    if (!standingDeltas[club]) standingDeltas[club] = { w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 };
-    return standingDeltas[club];
-  };
-
-  const userFixture = fixtures.find(f => f.home_club === userClubId || f.away_club === userClubId);
+  const results: any[] = [];
 
   for (const fix of fixtures) {
+    const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
     let homeGoals: number, awayGoals: number;
 
-    if (fix.id === userFixture?.id && homePlayers && awayPlayers) {
-      // Матч игрока — уже симулирован на клиенте, принимаем результат
-      homeGoals = homePlayers;   // тут передаём уже готовые голы
-      awayGoals = awayPlayers;
+    if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
+      homeGoals = userHomeGoals;
+      awayGoals = userAwayGoals;
     } else {
-      // AI vs AI
       const homeRating = await getClubRating(fix.home_club);
       const awayRating = await getClubRating(fix.away_club);
       const result = simulateMatchByRating(homeRating, awayRating);
@@ -66,83 +52,56 @@ export async function POST(req: Request) {
       awayGoals = result.awayGoals;
     }
 
-    updates.push({
-      id: fix.id,
+    // Сохраняем матч
+    await supabase.from("fixtures").update({
       home_goals: homeGoals,
       away_goals: awayGoals,
       played: true,
       played_at: new Date().toISOString(),
-    });
+    }).eq("id", fix.id);
 
-    // Обновляем дельты таблицы
-    delta(fix.home_club).gf += homeGoals;
-    delta(fix.home_club).ga += awayGoals;
-    delta(fix.away_club).gf += awayGoals;
-    delta(fix.away_club).ga += homeGoals;
+    results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals });
 
-    if (homeGoals > awayGoals) {
-      delta(fix.home_club).w++;  delta(fix.home_club).pts += 3;
-      delta(fix.away_club).l++;
-    } else if (homeGoals < awayGoals) {
-      delta(fix.away_club).w++;  delta(fix.away_club).pts += 3;
-      delta(fix.home_club).l++;
-    } else {
-      delta(fix.home_club).d++;  delta(fix.home_club).pts++;
-      delta(fix.away_club).d++;  delta(fix.away_club).pts++;
+    // Обновляем standings напрямую
+    for (const [clubId, isHome] of [[fix.home_club, true], [fix.away_club, false]] as [string, boolean][]) {
+      const goals   = isHome ? homeGoals : awayGoals;
+      const against = isHome ? awayGoals : homeGoals;
+      const won   = goals > against ? 1 : 0;
+      const drawn = goals === against ? 1 : 0;
+      const lost  = goals < against ? 1 : 0;
+      const pts   = won ? 3 : drawn ? 1 : 0;
+
+      // Читаем текущее
+      const { data: cur } = await supabase.from("standings")
+        .select("*").eq("season_id", seasonId).eq("club_id", clubId).single();
+
+      if (cur) {
+        await supabase.from("standings").update({
+          played: (cur.played || 0) + 1,
+          won:    (cur.won   || 0) + won,
+          drawn:  (cur.drawn || 0) + drawn,
+          lost:   (cur.lost  || 0) + lost,
+          gf:     (cur.gf    || 0) + goals,
+          ga:     (cur.ga    || 0) + against,
+          points: (cur.points|| 0) + pts,
+        }).eq("season_id", seasonId).eq("club_id", clubId);
+      }
     }
   }
 
-  // Сохраняем результаты матчей
-  for (const u of updates) {
-    await supabase.from("fixtures").update({
-      home_goals: u.home_goals, away_goals: u.away_goals,
-      played: true, played_at: u.played_at,
-    }).eq("id", u.id);
-  }
-
-  // Обновляем таблицу
-  for (const [clubId, d] of Object.entries(standingDeltas)) {
-    await supabase.from("standings").update({
-      played: supabase.rpc as any, // handled below
-    }).eq("season_id", seasonId).eq("club_id", clubId);
-
-    // Используем rpc для атомарного инкремента
-    await supabase.rpc("increment_standings", {
-      p_season_id: seasonId,
-      p_club_id:   clubId,
-      p_won:   d.w,
-      p_drawn: d.d,
-      p_lost:  d.l,
-      p_gf:    d.gf,
-      p_ga:    d.ga,
-      p_pts:   d.pts,
-    });
-  }
-
   // Следующий тур
-  const { count } = await supabase
-    .from("fixtures")
+  const { count } = await supabase.from("fixtures")
     .select("*", { count: "exact", head: true })
-    .eq("season_id", seasonId)
-    .eq("played", false);
+    .eq("season_id", seasonId).eq("played", false);
 
-  const nextMatchday = count && count > 0 ? matchday + 1 : matchday;
-  const newStatus = count === 0 ? "finished" : "active";
+  const nextMatchday = (count ?? 0) > 0 ? matchday + 1 : matchday;
+  const newStatus   = (count ?? 0) === 0 ? "finished" : "active";
 
-  await supabase.from("seasons").update({ matchday: nextMatchday, status: newStatus }).eq("id", seasonId);
+  await supabase.from("seasons").update({
+    matchday: nextMatchday, status: newStatus,
+  }).eq("id", seasonId);
 
-  // Возвращаем результаты тура
-  return Response.json({
-    matchday,
-    nextMatchday,
-    finished: newStatus === "finished",
-    results: updates.map(u => {
-      const fix = fixtures.find(f => f.id === u.id)!;
-      return { home: fix.home_club, away: fix.away_club, homeGoals: u.home_goals, awayGoals: u.away_goals };
-    }),
-    userResult: userFixture ? (() => {
-      const u = updates.find(u => u.id === userFixture.id)!;
-      return { home: userFixture.home_club, away: userFixture.away_club, homeGoals: u.home_goals, awayGoals: u.away_goals };
-    })() : null,
-  });
+  const userResult = results.find(r => r.home === userClubId || r.away === userClubId) || null;
+
+  return Response.json({ matchday, nextMatchday, finished: newStatus === "finished", results, userResult });
 }
