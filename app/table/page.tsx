@@ -14,12 +14,20 @@ export default function TablePage() {
   const selectedClub = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const [standings, setStandings] = useState<any[]>([]);
+  const [hydrated, setHydrated]   = useState(false);
 
   useEffect(() => {
+    useCareerStore.persist.rehydrate();
+    useThemeStore.persist.rehydrate();
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     if (!seasonId) { router.push("/dashboard"); return; }
     fetch(`/api/standings?seasonId=${seasonId}`)
       .then(r => r.json()).then(setStandings).catch(() => {});
-  }, [seasonId, router]);
+  }, [hydrated, seasonId, router]);
 
   const isDark   = theme !== "aurora";
   const text     = isDark ? "text-white" : "text-pink-950";
@@ -28,6 +36,8 @@ export default function TablePage() {
   const rowHover = isDark ? "hover:bg-white/[0.03]" : "hover:bg-pink-50/50";
   const divider  = isDark ? "border-white/[0.05]" : "border-pink-50";
   const userClub = selectedClub?.name || "";
+
+  if (!hydrated) return null;
 
   return (
     <DashboardLayout>
@@ -42,7 +52,6 @@ export default function TablePage() {
         </div>
 
         <div className={`rounded-2xl overflow-hidden ${card}`}>
-          {/* Header */}
           <div className={`grid text-[9px] uppercase tracking-widest ${muted} px-4 py-3 border-b ${divider}`}
             style={{ gridTemplateColumns: "32px 1fr 40px 40px 40px 40px 50px 48px" }}>
             <span>#</span><span>Club</span>
@@ -63,12 +72,10 @@ export default function TablePage() {
               <div key={row.club_id}
                 className={`grid items-center px-4 py-2.5 transition-colors ${rowHover} ${i > 0 ? `border-t ${divider}` : ""} ${isUser ? (isDark ? "bg-emerald-950/20 border-l-2 border-emerald-500" : "bg-violet-50 border-l-2 border-violet-400") : ""}`}
                 style={{ gridTemplateColumns: "32px 1fr 40px 40px 40px 40px 50px 48px" }}>
-                {/* # */}
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-5 rounded-full" style={{ backgroundColor: zoneColor, opacity: zoneColor === "transparent" ? 0 : 1 }} />
                   <span className={`text-xs font-black ${muted}`}>{i + 1}</span>
                 </div>
-                {/* Club */}
                 <div className="flex items-center gap-2 min-w-0">
                   <img src={getClubLogo(row.club_id)} alt="" className="w-5 h-5 object-contain shrink-0"
                     onError={e => (e.currentTarget.style.display = "none")} />
@@ -87,7 +94,6 @@ export default function TablePage() {
           })}
         </div>
 
-        {/* Legend */}
         <div className={`flex gap-4 mt-4 text-[10px] ${muted}`}>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Champions League</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Relegation</span>

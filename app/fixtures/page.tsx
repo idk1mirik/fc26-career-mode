@@ -12,26 +12,37 @@ export default function FixturesPage() {
   const seasonId   = useCareerStore(s => s.seasonId);
   const matchday   = useCareerStore(s => s.matchday);
   const selectedClub = useCareerStore(s => s.selectedClub);
-  const [fixtures, setFixtures] = useState<any[]>([]);
+  const [fixtures, setFixtures]   = useState<any[]>([]);
   const [activeDay, setActiveDay] = useState<number | null>(null);
+  const [hydrated, setHydrated]   = useState(false);
 
   useEffect(() => {
+    useCareerStore.persist.rehydrate();
+    useThemeStore.persist.rehydrate();
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     if (!seasonId) { router.push("/dashboard"); return; }
     fetch(`/api/fixtures?seasonId=${seasonId}`)
       .then(r => r.json()).then(data => {
         setFixtures(data);
         setActiveDay(matchday);
       }).catch(() => {});
-  }, [seasonId, matchday, router]);
+  }, [hydrated, seasonId, matchday, router]);
 
-  const matchdays = useMemo(() => [...new Set(fixtures.map(f => f.matchday))].sort((a,b) => a-b), [fixtures]);
-  const shown = useMemo(() => activeDay ? fixtures.filter(f => f.matchday === activeDay) : [], [fixtures, activeDay]);
+  const matchdays = useMemo(() => [...new Set(fixtures.map((f: any) => f.matchday))].sort((a: any, b: any) => a - b), [fixtures]);
+  const shown     = useMemo(() => activeDay ? fixtures.filter((f: any) => f.matchday === activeDay) : [], [fixtures, activeDay]);
 
-  const isDark = theme !== "aurora";
-  const text   = isDark ? "text-white" : "text-pink-950";
-  const muted  = isDark ? "text-white/40" : "text-pink-900/40";
-  const card   = isDark ? "bg-white/[0.03] border border-white/[0.07]" : "bg-white/70 border border-pink-100";
+  const isDark   = theme !== "aurora";
+  const text     = isDark ? "text-white" : "text-pink-950";
+  const muted    = isDark ? "text-white/40" : "text-pink-900/40";
+  const card     = isDark ? "bg-white/[0.03] border border-white/[0.07]" : "bg-white/70 border border-pink-100";
+  const divider  = isDark ? "border-white/[0.05]" : "border-pink-50";
   const userClub = selectedClub?.name || "";
+
+  if (!hydrated) return null;
 
   return (
     <DashboardLayout>
@@ -42,12 +53,12 @@ export default function FixturesPage() {
         </div>
 
         {/* Matchday tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
-          {matchdays.map(md => (
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
+          {(matchdays as number[]).map(md => (
             <button key={md} onClick={() => setActiveDay(md)}
               className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${
                 activeDay === md
-                  ? isDark ? "bg-white/20 text-white" : "bg-pink-500 text-white"
+                  ? isDark ? "bg-white/20 text-white" : "bg-violet-500 text-white"
                   : isDark ? "bg-white/[0.04] text-white/40 hover:bg-white/[0.08]" : "bg-pink-50 text-pink-400 hover:bg-pink-100"
               }`}>
               MD {md} {md === matchday ? "▶" : ""}
@@ -60,29 +71,29 @@ export default function FixturesPage() {
           {shown.length === 0 && (
             <div className={`text-center py-10 ${muted} text-sm`}>No fixtures</div>
           )}
-          {shown.map((f, i) => {
+          {(shown as any[]).map((f, i) => {
             const isUser = f.home_club === userClub || f.away_club === userClub;
             const played = f.played;
-            const homeWin = played && f.home_goals > f.away_goals;
-            const awayWin = played && f.away_goals > f.home_goals;
+            const dateStr = f.match_date
+              ? new Date(f.match_date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+              : `Matchday ${f.matchday}`;
             return (
-              <div key={f.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? (isDark ? "border-t border-white/[0.05]" : "border-t border-pink-50") : ""} ${isUser ? (isDark ? "bg-white/[0.04]" : "bg-violet-50/50") : ""}`}>
+              <div key={f.id}
+                className={`flex items-center gap-3 px-4 py-3.5 transition-colors ${i > 0 ? `border-t ${divider}` : ""} ${isUser ? (isDark ? "bg-white/[0.04]" : "bg-violet-50/50") : ""}`}>
                 {/* Date */}
-                <div className={`text-[10px] w-16 shrink-0 ${muted}`}>
-                  {f.match_date ? new Date(f.match_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : `MD ${f.matchday}`}
-                </div>
+                <div className={`text-[10px] w-20 shrink-0 leading-tight ${muted}`}>{dateStr}</div>
                 {/* Home */}
                 <div className="flex items-center gap-2 flex-1 justify-end">
                   <span className={`text-sm font-bold truncate max-w-[110px] ${isUser && f.home_club === userClub ? (isDark ? "text-emerald-400" : "text-violet-600") : ""}`}>{f.home_club}</span>
-                  <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                  <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
                 </div>
                 {/* Score */}
-                <div className={`w-16 text-center font-black text-sm shrink-0 ${played ? text : muted}`}>
+                <div className={`w-16 text-center font-black text-sm shrink-0 ${isDark ? "bg-white/[0.05] rounded-lg py-1" : "bg-pink-50 rounded-lg py-1"} ${played ? text : muted}`}>
                   {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
                 </div>
                 {/* Away */}
                 <div className="flex items-center gap-2 flex-1 justify-start">
-                  <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                  <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
                   <span className={`text-sm font-bold truncate max-w-[110px] ${isUser && f.away_club === userClub ? (isDark ? "text-emerald-400" : "text-violet-600") : ""}`}>{f.away_club}</span>
                 </div>
               </div>
