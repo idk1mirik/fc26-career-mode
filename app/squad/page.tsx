@@ -126,10 +126,11 @@ const PlayerRow = memo(function PlayerRow({ p, isDark, muted, card, cardHover, o
 });
 
 // Позиция на поле (кружок)
-function PitchSlot({ slot, player, x, y, glowColor, onDrop, onOpen, isDragging, setDragging }: {
+function PitchSlot({ slot, player, x, y, glowColor, onDrop, onOpen, onRemove, isDragging, setDragging }: {
   slot: string; player: any | null; x: number; y: number; glowColor: string;
   onDrop: (slot: string, player: any) => void;
   onOpen: (p: any) => void;
+  onRemove: (slot: string) => void;
   isDragging: any; setDragging: (p: any) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
@@ -148,17 +149,21 @@ function PitchSlot({ slot, player, x, y, glowColor, onDrop, onOpen, isDragging, 
         onDragEnd={() => setDragging(null)}
         className="flex flex-col items-center gap-1 cursor-pointer group"
       >
-        <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden border-2 transition-all"
+        <div className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2 transition-all"
           style={{ borderColor: player ? glowColor : "rgba(255,255,255,0.2)", background: player ? `${glowColor}20` : "rgba(0,0,0,0.4)" }}>
           {player && !imgErr
-            ? <img src={getPlayerPhoto(player.name)} alt={player.name} className="w-12 h-12 object-contain" onError={() => setImgErr(true)} />
+            ? <img src={getPlayerPhoto(player.name)} alt={player.name} className="w-14 h-14 object-contain" onError={() => setImgErr(true)} />
             : <span className="text-lg opacity-40">?</span>}
         </div>
         <div className="text-center" style={{ minWidth: 60 }}>
           {player ? (
             <>
               <div className="text-white text-[10px] font-black truncate max-w-[70px] drop-shadow">{player.name.split(" ").slice(-1)[0]}</div>
-              <div className="text-[9px] font-black" style={{ color: getRatingColor(ovr ?? 0) }}>{ovr}</div>
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-[9px] font-black" style={{ color: getRatingColor(ovr ?? 0) }}>{ovr}</span>
+                <button onClick={e => { e.stopPropagation(); onRemove(slot); }}
+                  className="text-[9px] text-white/30 hover:text-red-400 transition-colors leading-none">✕</button>
+              </div>
             </>
           ) : (
             <div className="text-white/30 text-[9px]">{slot}</div>
@@ -281,8 +286,8 @@ export default function SquadPage() {
           <div>
             <p className={`text-xs mb-4 ${ui.muted}`}>Drag players to swap positions. Click to view details.</p>
             {/* Pitch */}
-            <div className="relative w-full max-w-md mx-auto rounded-2xl overflow-hidden"
-              style={{ aspectRatio: "0.65", background: ui.pitchBg, border: `1px solid ${ui.pitchLine}` }}>
+            <div className="relative w-full max-w-xl mx-auto rounded-2xl overflow-hidden"
+              style={{ aspectRatio: "0.68", background: ui.pitchBg, border: `1px solid ${ui.pitchLine}` }}>
               {/* Pitch lines */}
               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 150" preserveAspectRatio="none">
                 <rect x="10" y="5" width="80" height="140" fill="none" stroke={ui.pitchLine} strokeWidth="0.5" />
@@ -295,6 +300,7 @@ export default function SquadPage() {
                 <PitchSlot key={slot} slot={slot} player={lineup[slot] ?? null}
                   x={x} y={y} glowColor={glowColor}
                   onDrop={handleDrop} onOpen={openModal}
+                  onRemove={slot => setLineup(prev => { const n = {...prev}; delete n[slot]; return n; })}
                   isDragging={dragging} setDragging={setDragging} />
               ))}
             </div>
@@ -309,8 +315,20 @@ export default function SquadPage() {
                   .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0))
                   .slice(0, 9)
                   .map(p => (
-                    <PlayerRow key={p.id ?? p.name} p={p} isDark={theme !== "aurora"} muted={ui.muted}
-                      card={ui.card} cardHover={ui.cardHover} onOpen={openModal} />
+                    <div key={p.id ?? p.name} className="relative group/bench">
+                      <PlayerRow p={p} isDark={theme !== "aurora"} muted={ui.muted}
+                        card={ui.card} cardHover={ui.cardHover} onOpen={openModal} />
+                      {/* Кнопки позиций для выхода на поле */}
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover/bench:flex gap-1 flex-wrap max-w-[200px] justify-end">
+                        {FORMATION_433.map(({ slot }) => (
+                          <button key={slot} onClick={e => { e.stopPropagation(); handleDrop(slot, p); }}
+                            className="px-1.5 py-0.5 text-[9px] font-black rounded transition-all"
+                            style={{ background: `${glowColor}25`, color: glowColor, border: `1px solid ${glowColor}40` }}>
+                            {slot}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
               </div>
             </div>
