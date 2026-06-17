@@ -49,7 +49,7 @@ const PlayerRow = memo(function PlayerRow({ p, isDark, muted, card, onOpen }: {
 
 export default function SquadPage() {
   const router = useRouter();
-  const theme  = useThemeStore(s => s.theme);
+  const themeRaw = useThemeStore(s => s.theme);
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const [players, setPlayers]           = useState<any[]>([]);
@@ -64,6 +64,8 @@ export default function SquadPage() {
     useThemeStore.persist.rehydrate();
     setHydrated(true);
   }, []);
+
+  const theme = (themeRaw ?? "classic");
 
   useEffect(() => {
     if (!hydrated || !selectedClub) return;

@@ -44,8 +44,7 @@ const THEME_UI = {
 
 export default function FixturesPage() {
   const router = useRouter();
-  const theme  = useThemeStore(s => s.theme) as keyof typeof THEME_UI;
-  const ui     = THEME_UI[theme] ?? THEME_UI.classic;
+  const themeRaw = useThemeStore(s => s.theme);
   const seasonId   = useCareerStore(s => s.seasonId);
   const matchday   = useCareerStore(s => s.matchday);
   const selectedClub = useCareerStore(s => s.selectedClub);
@@ -58,6 +57,9 @@ export default function FixturesPage() {
     useThemeStore.persist.rehydrate();
     setHydrated(true);
   }, []);
+
+  const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
+  const ui    = THEME_UI[theme] ?? THEME_UI.classic;
 
   useEffect(() => {
     if (!hydrated || !seasonId) return;
