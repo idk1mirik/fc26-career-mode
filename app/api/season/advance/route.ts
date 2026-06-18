@@ -1,6 +1,6 @@
 // app/api/season/advance/route.ts
 import { supabase } from "@/lib/supabase";
-import { simulateMatchByRating } from "@/lib/matchEngine";
+import { simulateMatchByRating, getClubTactic } from "@/lib/matchEngine";
 
 const CLUB_RATINGS: Record<string, number> = {};
 
@@ -19,7 +19,7 @@ async function getClubRating(clubId: string): Promise<number> {
 }
 
 export async function POST(req: Request) {
-  const { seasonId, userClubId, userHomeGoals, userAwayGoals } = await req.json();
+  const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic } = await req.json();
 
   const { data: season, error: sErr } = await supabase
     .from("seasons").select("*").eq("id", seasonId).single();
@@ -45,33 +45,35 @@ export async function POST(req: Request) {
       homeGoals = userHomeGoals;
       awayGoals = userAwayGoals;
     } else {
-      const homeRating = await getClubRating(fix.home_club);
-      const awayRating = await getClubRating(fix.away_club);
-      const result = simulateMatchByRating(homeRating, awayRating);
+      const homeRating  = await getClubRating(fix.home_club);
+      const awayRating  = await getClubRating(fix.away_club);
+      // Учитываем тактику клубов
+      const homeTactic  = isUserMatch && fix.home_club === userClubId
+        ? (userTactic || "Balanced")
+        : getClubTactic(fix.home_club);
+      const awayTactic  = isUserMatch && fix.away_club === userClubId
+        ? (userTactic || "Balanced")
+        : getClubTactic(fix.away_club);
+      const result = simulateMatchByRating(homeRating, awayRating, homeTactic, awayTactic);
       homeGoals = result.homeGoals;
       awayGoals = result.awayGoals;
     }
 
-    // Сохраняем матч
     await supabase.from("fixtures").update({
-      home_goals: homeGoals,
-      away_goals: awayGoals,
-      played: true,
-      played_at: new Date().toISOString(),
+      home_goals: homeGoals, away_goals: awayGoals,
+      played: true, played_at: new Date().toISOString(),
     }).eq("id", fix.id);
 
     results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals });
 
-    // Обновляем standings напрямую
     for (const [clubId, isHome] of [[fix.home_club, true], [fix.away_club, false]] as [string, boolean][]) {
       const goals   = isHome ? homeGoals : awayGoals;
       const against = isHome ? awayGoals : homeGoals;
-      const won   = goals > against ? 1 : 0;
+      const won = goals > against ? 1 : 0;
       const drawn = goals === against ? 1 : 0;
-      const lost  = goals < against ? 1 : 0;
-      const pts   = won ? 3 : drawn ? 1 : 0;
+      const lost = goals < against ? 1 : 0;
+      const pts = won ? 3 : drawn ? 1 : 0;
 
-      // Читаем текущее
       const { data: cur } = await supabase.from("standings")
         .select("*").eq("season_id", seasonId).eq("club_id", clubId).single();
 
@@ -89,7 +91,6 @@ export async function POST(req: Request) {
     }
   }
 
-  // Следующий тур
   const { count } = await supabase.from("fixtures")
     .select("*", { count: "exact", head: true })
     .eq("season_id", seasonId).eq("played", false);
@@ -102,6 +103,5 @@ export async function POST(req: Request) {
   }).eq("id", seasonId);
 
   const userResult = results.find(r => r.home === userClubId || r.away === userClubId) || null;
-
   return Response.json({ matchday, nextMatchday, finished: newStatus === "finished", results, userResult });
 }

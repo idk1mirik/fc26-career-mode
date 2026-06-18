@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy } from "lucide-react";
+import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target } from "lucide-react";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useThemeStore } from "@/app/store/themeStore";
@@ -10,6 +10,7 @@ import { useCareerStore } from "@/app/store/careerStore";
 const NAV = [
   { label: "Overview",     icon: LayoutDashboard, href: "/dashboard" },
   { label: "Squad",        icon: Users,           href: "/squad" },
+  { label: "Tactics",      icon: Target,          href: "/tactics" },
   { label: "Transfers",    icon: ArrowRightLeft,  href: "/transfers" },
   { label: "Fixtures",     icon: CalendarDays,    href: "/fixtures" },
   { label: "League Table", icon: Trophy,          href: "/table" },

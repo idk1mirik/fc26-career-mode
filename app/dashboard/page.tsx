@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import DashboardLayout from "@/app/lib/DashboardLayout";
 import {
   LayoutDashboard, Users, Trophy, CalendarDays,
   ArrowRightLeft, Coins, ChevronRight, Zap, Star, Shield,
@@ -172,6 +173,7 @@ export default function DashboardPage() {
   const seasonId       = useCareerStore(s => s.seasonId);
   const matchday       = useCareerStore(s => s.matchday);
   const setMatchday    = useCareerStore(s => s.setMatchday);
+  const tactic         = useCareerStore(s => s.tactic) || "Balanced";
   const setSeasonId    = useCareerStore(s => s.setSeasonId);
 
   const [hydrated, setHydrated]     = useState(false);
@@ -215,7 +217,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/season/advance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId, userClubId: userClub }),
+        body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic }),
       });
       if (res.ok) {
         const data = await res.json();
