@@ -52,6 +52,8 @@ export default function TacticsPage() {
   const themeRaw = useThemeStore(s => s.theme);
   const tactic      = useCareerStore(s => s.tactic) || "Balanced";
   const setTactic   = useCareerStore(s => s.setTactic);
+  const customTactic    = useCareerStore(s => s.customTactic);
+  const setCustomTactic = useCareerStore(s => s.setCustomTactic);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const [hydrated, setHydrated] = useState(false);
   const [players, setPlayers]   = useState<any[]>([]);
@@ -72,7 +74,12 @@ export default function TacticsPage() {
   }, [hydrated, selectedClub]);
 
   const recs = useMemo(() => recommendTactics(players), [players]);
-  const current = TACTICS[tactic] ?? TACTICS["Balanced"];
+  const isCustom = tactic === "Custom";
+  const current = isCustom ? { ...TACTICS["Custom"], ...customTactic } : (TACTICS[tactic] ?? TACTICS["Balanced"]);
+
+  const updateCustomParam = (key: string, value: number) => {
+    setCustomTactic({ ...customTactic, [key]: value });
+  };
 
   if (!hydrated) return null;
 
@@ -132,10 +139,17 @@ export default function TacticsPage() {
                         <span className={`text-xs font-bold ${ui.nameColor}`}>{label}</span>
                         <span className="text-xs font-black" style={{ color: ui.barFill }}>{val}/10</span>
                       </div>
-                      <div className={`h-2 rounded-full overflow-hidden ${ui.bar}`}>
-                        <div className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${val * 10}%`, background: ui.barFill }} />
-                      </div>
+                      {isCustom ? (
+                        <input type="range" min={1} max={10} value={val}
+                          onChange={e => updateCustomParam(key, Number(e.target.value))}
+                          className="w-full h-2 rounded-full cursor-pointer"
+                          style={{ accentColor: ui.barFill, background: "transparent" }} />
+                      ) : (
+                        <div className={`h-2 rounded-full overflow-hidden ${ui.bar}`}>
+                          <div className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${val * 10}%`, background: ui.barFill }} />
+                        </div>
+                      )}
                     </div>
                   );
                 })}

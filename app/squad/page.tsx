@@ -7,6 +7,7 @@ import { getPlayerPhoto } from "@/lib/images";
 import { getLeagueTheme } from "@/constants/themes";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { PlayerModal, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
+import { getAdjustedOverall } from "@/lib/positionPenalty";
 
 // ─── FORMATIONS ───────────────────────────────────────────────────────────────
 // Генератор координат для линий
@@ -113,7 +114,9 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
   isDragging: any; setDragging: (p: any) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
-  const ovr = player?.overall ?? null;
+  const realPos = POS_PRIORITY[slot]?.[0] ?? slot;
+  const ovr = player ? getAdjustedOverall(player, realPos) : null;
+  const isPenalized = player && ovr !== null && ovr < (player.overall ?? 0) - 2;
 
   return (
     <div style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%,-50%)", zIndex: 10 }}
@@ -147,7 +150,9 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
               <div className="text-[12px] font-black truncate max-w-[74px] drop-shadow-lg" style={{ color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
                 {player.name.split(" ").slice(-1)[0]}
               </div>
-              <div className="text-[14px] font-black drop-shadow" style={{ color: getRatingColor(ovr ?? 0), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>{ovr}</div>
+              <div className="text-[14px] font-black drop-shadow flex items-center gap-0.5" style={{ color: getRatingColor(ovr ?? 0), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+                {ovr}{isPenalized && <span style={{ fontSize: 9, color: "#ef4444" }}>↓</span>}
+              </div>
             </>
           ) : (
             <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>{slot}</div>

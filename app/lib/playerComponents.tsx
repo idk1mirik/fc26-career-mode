@@ -655,74 +655,73 @@ export function PlayerModal({
           ✕
         </button>
 
-        {/* ── Layout ── */}
-        <div style={{ position: "relative", zIndex: 10, display: "flex", minHeight: 340 }}>
-
-          {/* Photo — абсолют, низ прибит, высота фиксирована = всегда одинаково */}
-          <div className="hidden sm:block" style={{
-            position: "absolute", bottom: 0, left: 0,
-            width: 230, height: 460,
-            pointerEvents: "none", zIndex: 20,
-            overflow: "visible",
-          }}>
-            <div style={{
-              position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-              width: 150, height: 150, borderRadius: "50%",
-              background: `radial-gradient(circle,${clubColor}25,transparent)`,
-              filter: "blur(28px)",
-            }} />
+        {/* ── MOBILE: vertical scroll ── */}
+        <div className="flex sm:hidden flex-col" style={{ overflowY: "auto", maxHeight: "85vh" }}>
+          {/* Mobile photo */}
+          <div style={{ height: 220, position: "relative", flexShrink: 0, overflow: "visible", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle,${clubColor}30,transparent)`, filter: "blur(28px)", pointerEvents: "none" }} />
             {!fullImgError ? (
-              <img src={getPlayerFullPhoto(player.name)} alt={player.name}
-                onError={() => setFullImgError(true)}
-                style={{
-                  position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-                  height: "100%", width: "auto", maxWidth: "none", objectFit: "contain",
-                  animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 20px ${clubColor}55)`,
-                }} />
+              <img src={getPlayerFullPhoto(player.name)} alt={player.name} onError={() => setFullImgError(true)}
+                style={{ height: "100%", width: "auto", objectFit: "contain", objectPosition: "bottom", filter: `drop-shadow(0 0 24px ${clubColor}60)`, animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)" }} />
             ) : !imgError ? (
-              <img src={getPlayerPhoto(player.name)} alt={player.name}
-                onError={() => setImgError(true)}
-                style={{
-                  position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-                  height: "100%", width: "auto", maxWidth: "none", objectFit: "contain",
-                  animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)",
-                  filter: `drop-shadow(0 0 14px ${clubColor}50)`,
-                }} />
+              <img src={getPlayerPhoto(player.name)} alt={player.name} onError={() => setImgError(true)}
+                style={{ height: "75%", width: "auto", objectFit: "contain", objectPosition: "bottom", filter: `drop-shadow(0 0 16px ${clubColor}50)` }} />
+            ) : (
+              <div style={{ fontSize: 80, opacity: 0.15, paddingBottom: 8 }}>👤</div>
+            )}
+          </div>
+          {/* Mobile stats */}
+          <div style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.posLabel, marginBottom: 3 }}>
+                {player.position || "MID"}{player.alternatePositions?.length > 0 && <span style={{ marginLeft: 8, opacity: 0.5 }}>· {player.alternatePositions.join(" · ")}</span>}
+              </div>
+              <h2 style={{ margin: 0, lineHeight: 1.1, ...cfg.name, fontSize: "clamp(1.6rem,8vw,2.4rem)" }}>{player.name}</h2>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <FlagImage country={nationality} size={15} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{nationality || "Unknown"}</span>
+              {player.age > 0 && <span style={{ fontSize: 12, color: cfg.metaColor }}>{player.age} yrs</span>}
+              {player.height > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>{player.height} cm</span>}
+              {player.weight > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>{player.weight} kg</span>}
+              {player.preferredFoot > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>{player.preferredFoot === 1 ? "Right" : "Left"} foot</span>}
+              {player.skillMoves > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>★ {player.skillMoves}</span>}
+              {player.weakFootAbility > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>WF {player.weakFootAbility}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{ label: "OVR", value: ovr, color: ovrColor }, { label: "POT", value: pot, color: potColor }].map(({ label, value, color }) => (
+                <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 16px", background: `${color}12`, border: `1px solid ${color}30`, borderRadius: br }}>
+                  <span style={{ fontSize: 24, fontWeight: 900, lineHeight: 1, color }}>{value}</span>
+                  <span style={{ fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ height: 1, background: cfg.accentLine }} />
+            <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
+          </div>
+        </div>
+
+        {/* ── DESKTOP: photo left, stats right ── */}
+        <div className="hidden sm:flex" style={{ position: "relative", zIndex: 10, height: 380 }}>
+          <div style={{ position: "absolute", bottom: 0, left: 0, width: 230, height: 460, pointerEvents: "none", zIndex: 20, overflow: "visible" }}>
+            <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 150, height: 150, borderRadius: "50%", background: `radial-gradient(circle,${clubColor}25,transparent)`, filter: "blur(28px)" }} />
+            {!fullImgError ? (
+              <img src={getPlayerFullPhoto(player.name)} alt={player.name} onError={() => setFullImgError(true)}
+                style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", height: "100%", width: "auto", maxWidth: "none", objectFit: "contain", animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)", filter: `drop-shadow(0 0 20px ${clubColor}55)` }} />
+            ) : !imgError ? (
+              <img src={getPlayerPhoto(player.name)} alt={player.name} onError={() => setImgError(true)}
+                style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", height: "100%", width: "auto", objectFit: "contain", animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)", filter: `drop-shadow(0 0 14px ${clubColor}50)` }} />
             ) : (
               <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", fontSize: 80, opacity: 0.1 }}>👤</div>
             )}
           </div>
-
-          {/* Stats — скроллится, отступ слева под фото */}
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }} className="p-4 sm:pl-[270px] sm:pr-6 sm:pt-6">
-
-            {/* Mobile photo */}
-            <div className="flex sm:hidden justify-center items-end" style={{ height: 240, position: "relative", overflow: "visible" }}>
-              <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle,${clubColor}30,transparent)`, filter: "blur(24px)", pointerEvents: "none" }} />
-              {!fullImgError ? (
-                <img src={getPlayerFullPhoto(player.name)} alt={player.name} onError={() => setFullImgError(true)}
-                  style={{ height: "100%", width: "auto", objectFit: "contain", objectPosition: "bottom", filter: `drop-shadow(0 0 20px ${clubColor}60)`, animation: "playerSlideIn .45s cubic-bezier(.16,1,.3,1)" }} />
-              ) : !imgError ? (
-                <img src={getPlayerPhoto(player.name)} alt={player.name} onError={() => setImgError(true)}
-                  style={{ height: "80%", width: "auto", objectFit: "contain", objectPosition: "bottom", filter: `drop-shadow(0 0 14px ${clubColor}50)` }} />
-              ) : (
-                <div style={{ fontSize: 80, opacity: 0.15 }}>👤</div>
-              )}
-            </div>
-
-            {/* Name + position */}
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "24px 24px 24px 250px" }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.45em", color: cfg.posLabel, marginBottom: 4 }}>
-                {player.position || "MID"}
-                {player.alternatePositions?.length > 0 && (
-                  <span style={{ marginLeft: 8, opacity: 0.5 }}>· {player.alternatePositions.join(" · ")}</span>
-                )}
+                {player.position || "MID"}{player.alternatePositions?.length > 0 && <span style={{ marginLeft: 8, opacity: 0.5 }}>· {player.alternatePositions.join(" · ")}</span>}
               </div>
               <h2 style={{ margin: 0, lineHeight: 1.05, ...cfg.name }}>{player.name}</h2>
             </div>
-
-            {/* Meta */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <FlagImage country={nationality} size={16} />
@@ -735,8 +734,6 @@ export function PlayerModal({
               {player.skillMoves > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>★ {player.skillMoves}</span>}
               {player.weakFootAbility > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>WF {player.weakFootAbility}</span>}
             </div>
-
-            {/* OVR / POT */}
             <div style={{ display: "flex", gap: 10 }}>
               {[{ label: "OVR", value: ovr, color: ovrColor }, { label: "POT", value: pot, color: potColor }].map(({ label, value, color }) => (
                 <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 18px", background: `${color}12`, border: `1px solid ${color}30`, borderRadius: br }}>
@@ -745,9 +742,7 @@ export function PlayerModal({
                 </div>
               ))}
             </div>
-
             <div style={{ height: 1, background: cfg.accentLine }} />
-
             <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
           </div>
         </div>

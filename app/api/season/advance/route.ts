@@ -1,21 +1,30 @@
 // app/api/season/advance/route.ts
 import { supabase } from "@/lib/supabase";
 import { simulateMatchByRating, getClubTactic } from "@/lib/matchEngine";
+import { generateMatchEvents } from "@/lib/matchReport";
 
 const CLUB_RATINGS: Record<string, number> = {};
+const CLUB_PLAYERS_CACHE: Record<string, any[]> = {};
 
-async function getClubRating(clubId: string): Promise<number> {
-  if (CLUB_RATINGS[clubId]) return CLUB_RATINGS[clubId];
+async function getClubPlayers(clubId: string): Promise<any[]> {
+  if (CLUB_PLAYERS_CACHE[clubId]) return CLUB_PLAYERS_CACHE[clubId];
   try {
     const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
     const res = await fetch(`${base}/api/players?club=${encodeURIComponent(clubId)}`);
-    if (!res.ok) return 75;
+    if (!res.ok) return [];
     const players = await res.json();
-    if (!players.length) return 75;
-    const avg = players.slice(0, 18).reduce((s: number, p: any) => s + (p.overall ?? 75), 0) / Math.min(players.length, 18);
-    CLUB_RATINGS[clubId] = Math.round(avg);
-    return CLUB_RATINGS[clubId];
-  } catch { return 75; }
+    CLUB_PLAYERS_CACHE[clubId] = players;
+    return players;
+  } catch { return []; }
+}
+
+async function getClubRating(clubId: string): Promise<number> {
+  if (CLUB_RATINGS[clubId]) return CLUB_RATINGS[clubId];
+  const players = await getClubPlayers(clubId);
+  if (!players.length) return 75;
+  const avg = players.slice(0, 18).reduce((s: number, p: any) => s + (p.overall ?? 75), 0) / Math.min(players.length, 18);
+  CLUB_RATINGS[clubId] = Math.round(avg);
+  return CLUB_RATINGS[clubId];
 }
 
 export async function POST(req: Request) {
@@ -45,26 +54,27 @@ export async function POST(req: Request) {
       homeGoals = userHomeGoals;
       awayGoals = userAwayGoals;
     } else {
-      const homeRating  = await getClubRating(fix.home_club);
-      const awayRating  = await getClubRating(fix.away_club);
-      // Учитываем тактику клубов
-      const homeTactic  = isUserMatch && fix.home_club === userClubId
-        ? (userTactic || "Balanced")
-        : getClubTactic(fix.home_club);
-      const awayTactic  = isUserMatch && fix.away_club === userClubId
-        ? (userTactic || "Balanced")
-        : getClubTactic(fix.away_club);
+      const homeRating = await getClubRating(fix.home_club);
+      const awayRating = await getClubRating(fix.away_club);
+      const homeTactic = isUserMatch && fix.home_club === userClubId ? (userTactic || "Balanced") : getClubTactic(fix.home_club);
+      const awayTactic = isUserMatch && fix.away_club === userClubId ? (userTactic || "Balanced") : getClubTactic(fix.away_club);
       const result = simulateMatchByRating(homeRating, awayRating, homeTactic, awayTactic);
       homeGoals = result.homeGoals;
       awayGoals = result.awayGoals;
     }
 
+    // Генерируем Match Report
+    const homePlayers = await getClubPlayers(fix.home_club);
+    const awayPlayers = await getClubPlayers(fix.away_club);
+    const events = generateMatchEvents(homeGoals, awayGoals, homePlayers, awayPlayers);
+
     await supabase.from("fixtures").update({
       home_goals: homeGoals, away_goals: awayGoals,
       played: true, played_at: new Date().toISOString(),
+      events,
     }).eq("id", fix.id);
 
-    results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals });
+    results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, events, fixtureId: fix.id });
 
     for (const [clubId, isHome] of [[fix.home_club, true], [fix.away_club, false]] as [string, boolean][]) {
       const goals   = isHome ? homeGoals : awayGoals;

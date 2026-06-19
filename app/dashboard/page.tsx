@@ -142,11 +142,13 @@ function StandingsTable({ standings, userClub, ui, theme, glowColor }: {
 }
 
 // ─── MATCH RESULT ROW ─────────────────────────────────────────────────────────
-function MatchRow({ fix, userClub, ui, theme }: { fix: any; userClub: string; ui: any; theme: string }) {
+function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userClub: string; ui: any; theme: string; onOpenReport?: (fix: any) => void }) {
   const isUser = fix.home_club === userClub || fix.away_club === userClub;
   const played = fix.played;
+  const clickable = played && onOpenReport;
   return (
-    <div className={`flex items-center gap-2 py-2.5 px-3 rounded-xl transition-colors ${ui.tableRow} ${isUser ? ui.highlight : ""}`}>
+    <div onClick={() => clickable && onOpenReport(fix)}
+      className={`flex items-center gap-2 py-2.5 px-3 rounded-xl transition-colors ${ui.tableRow} ${isUser ? ui.highlight : ""} ${clickable ? "cursor-pointer" : ""}`}>
       <div className="flex items-center gap-1.5 flex-1 justify-end">
         <span className={`text-sm font-bold truncate max-w-[100px] ${ui.text}`}>{fix.home_club}</span>
         <img src={getClubLogo(fix.home_club)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
@@ -157,6 +159,53 @@ function MatchRow({ fix, userClub, ui, theme }: { fix: any; userClub: string; ui
       <div className="flex items-center gap-1.5 flex-1 justify-start">
         <img src={getClubLogo(fix.away_club)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
         <span className={`text-sm font-bold truncate max-w-[100px] ${ui.text}`}>{fix.away_club}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── MATCH REPORT MODAL ───────────────────────────────────────────────────────
+const EVENT_ICON: Record<string, string> = {
+  goal: "⚽", yellow: "🟨", red: "🟥", substitution: "🔁", injury: "🩹",
+};
+
+function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; theme: string; onClose: () => void }) {
+  const events = fix.events ?? [];
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card}`} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Match Report</div>
+          <button onClick={onClose} className={`text-lg ${ui.muted}`}>✕</button>
+        </div>
+        <div className="flex items-center justify-center gap-4 mb-6">
+          <div className="flex flex-col items-center gap-1">
+            <img src={getClubLogo(fix.home_club)} alt="" className="w-10 h-10 object-contain" />
+            <span className={`text-xs font-bold ${ui.text}`}>{fix.home_club}</span>
+          </div>
+          <div className={`text-3xl font-black ${ui.text}`}>{fix.home_goals} – {fix.away_goals}</div>
+          <div className="flex flex-col items-center gap-1">
+            <img src={getClubLogo(fix.away_club)} alt="" className="w-10 h-10 object-contain" />
+            <span className={`text-xs font-bold ${ui.text}`}>{fix.away_club}</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {events.length === 0 && <div className={`text-center text-sm ${ui.muted} py-4`}>No events recorded</div>}
+          {events.map((e: any, i: number) => (
+            <div key={i} className={`flex items-center gap-3 py-2 px-3 rounded-xl ${ui.tableRow}`}>
+              <span className={`text-xs font-black w-8 ${ui.muted}`}>{e.minute}'</span>
+              <span className="text-base">{EVENT_ICON[e.type] ?? "•"}</span>
+              <div className="flex-1">
+                <div className={`text-sm font-bold ${ui.text}`}>
+                  {e.type === "substitution" ? `${e.player2} ↔ ${e.player}` : e.player}
+                </div>
+                <div className={`text-[10px] ${ui.muted} capitalize`}>
+                  {e.team === "home" ? fix.home_club : fix.away_club} · {e.type}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -174,6 +223,7 @@ export default function DashboardPage() {
   const matchday       = useCareerStore(s => s.matchday);
   const setMatchday    = useCareerStore(s => s.setMatchday);
   const tactic         = useCareerStore(s => s.tactic) || "Balanced";
+  const customTactic   = useCareerStore(s => s.customTactic);
   const setSeasonId    = useCareerStore(s => s.setSeasonId);
 
   const [hydrated, setHydrated]     = useState(false);
@@ -182,6 +232,7 @@ export default function DashboardPage() {
   const [simulating, setSimulating] = useState(false);
   const [lastResults, setLastResults] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
 
   useEffect(() => { setHydrated(true); }, []);
@@ -217,7 +268,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/season/advance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic }),
+        body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic, userCustomTactic: tactic === "Custom" ? customTactic : undefined }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -359,7 +410,7 @@ export default function DashboardPage() {
                 <div className={`${ui.subLabel} mb-3`}>Matchday {matchday - 1} Results</div>
                 <div className="space-y-1">
                   {lastResults.map((r, i) => (
-                    <MatchRow key={i} fix={{ ...r, home_club: r.home, away_club: r.away, played: true, home_goals: r.homeGoals, away_goals: r.awayGoals }} userClub={userClub} ui={ui} theme={theme} />
+                    <MatchRow key={i} fix={{ ...r, home_club: r.home, away_club: r.away, played: true, home_goals: r.homeGoals, away_goals: r.awayGoals, events: r.events }} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
                   ))}
                 </div>
               </div>
@@ -371,7 +422,7 @@ export default function DashboardPage() {
                 <div className={`${ui.subLabel} mb-3`}>Matchday {matchday} — Upcoming</div>
                 <div className="space-y-1">
                   {currentFixtures.map((f, i) => (
-                    <MatchRow key={i} fix={f} userClub={userClub} ui={ui} theme={theme} />
+                    <MatchRow key={i} fix={f} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
                   ))}
                 </div>
               </div>
@@ -395,6 +446,10 @@ export default function DashboardPage() {
 
         </div>
       </div>
+
+      {reportFix && (
+        <MatchReportModal fix={reportFix} ui={ui} theme={theme} onClose={() => setReportFix(null)} />
+      )}
     </main>
   );
 }

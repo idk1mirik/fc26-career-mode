@@ -12,6 +12,8 @@ export interface Tactic {
   attackingWidth: number;  // 1-10
 }
 
+export const CUSTOM_TACTIC_KEY = "Custom";
+
 export const TACTICS: Record<string, Tactic> = {
   "Balanced": {
     name: "Balanced", description: "Standard approach. Good in most situations.",
@@ -52,6 +54,10 @@ export const TACTICS: Record<string, Tactic> = {
   "Direct Football": {
     name: "Direct Football", description: "Long balls, physicality, simple and effective.",
     defensiveLine: 5, pressing: 6, width: 5, tempo: 7, passingRisk: 7, buildUpSpeed: 9, attackingWidth: 5,
+  },
+  "Custom": {
+    name: "Custom", description: "Your own tactical setup. Adjust every parameter.",
+    defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5,
   },
 };
 
