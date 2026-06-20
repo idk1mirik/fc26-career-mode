@@ -85,7 +85,7 @@ export default function TacticsPage() {
 
   return (
     <DashboardLayout>
-      <div className={`min-h-screen p-4 md:p-8 ${ui.text}`} style={ui.font}>
+      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
           <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Tactics</div>
           <h1 className="text-2xl font-black">Team Tactics</h1>

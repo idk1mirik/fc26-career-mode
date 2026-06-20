@@ -21,7 +21,7 @@ export default function TransfersPage() {
 
   return (
     <DashboardLayout>
-      <div className={`min-h-screen p-6 md:p-8 ${text}`}>
+      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${text}`}>
         <div className="mb-6">
           <div className={`text-[10px] uppercase tracking-widest mb-1 ${muted}`}>Transfers</div>
           <h1 className="text-2xl font-black">{windowLabel}</h1>

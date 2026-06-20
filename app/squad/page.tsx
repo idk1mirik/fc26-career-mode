@@ -126,15 +126,12 @@ function pickBest(players: any[], positions: string[], used: Set<string>): any |
 }
 
 // ─── PITCH SLOT ───────────────────────────────────────────────────────────────
-const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpen, onRemove, onDrop, isDragging, setDragging, isCustom, customPos, onPickPosition, onDeleteCustomSlot, onMoveCustomSlot }: {
+const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot }: {
   slot: string; player: any | null; x: number; y: number; glowColor: string;
-  onOpen: (p: any) => void; onRemove: (slot: string) => void;
-  onDrop: (slot: string, p: any) => void;
-  isDragging: any; setDragging: (p: any) => void;
+  onSlotClick: (slot: string, player: any | null) => void;
   isCustom?: boolean; customPos?: string;
   onPickPosition?: (slot: string) => void;
   onDeleteCustomSlot?: (slot: string) => void;
-  onMoveCustomSlot?: (slot: string, x: number, y: number) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const realPos = isCustom ? (customPos || "CM") : (POS_PRIORITY[slot]?.[0] ?? slot);
@@ -142,46 +139,27 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
   const isPenalized = player && ovr !== null && ovr < (player.overall ?? 0) - 2;
   const displayLabel = isCustom ? (customPos || "?") : slot;
 
-  const handlePitchSlotDrag = (e: React.DragEvent) => {
-    if (isCustom && onMoveCustomSlot) {
-      e.dataTransfer.setData("customSlotMove", slot);
-    }
-  };
-
   return (
     <div style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%,-50%)", zIndex: 10 }}
-      onClick={e => e.stopPropagation()}
-      onDragOver={e => e.preventDefault()}
-      onDrop={e => {
-        e.stopPropagation();
-        if (isDragging) onDrop(slot, isDragging);
-      }}>
-      <div className="flex flex-col items-center gap-0.5 cursor-pointer group/slot"
-        draggable
-        onDragStart={e => {
-          if (player) setDragging(player);
-          handlePitchSlotDrag(e);
-        }}
-        onDragEnd={() => setDragging(null)}>
+      onClick={e => e.stopPropagation()}>
+      <div className="flex flex-col items-center gap-0.5 cursor-pointer group/slot">
 
         {/* Circle */}
         <div className="relative">
-          <div className="w-16 h-16 rounded-full overflow-hidden border-2 transition-all shadow-lg"
+          <div className="w-16 h-16 rounded-full overflow-hidden border-2 transition-all shadow-lg active:scale-95"
             style={{ borderColor: player ? glowColor : "rgba(255,255,255,0.25)", background: player ? `${glowColor}30` : "rgba(0,0,0,0.5)" }}
-            onClick={() => player && onOpen(player)}>
+            onClick={() => {
+              if (player) { onSlotClick(slot, player); }
+              else if (isCustom && onPickPosition && !customPos) { onPickPosition(slot); }
+            }}>
             {player && !imgErr
               ? <img src={getPlayerPhoto(player.name)} alt={player.name} className="w-16 h-16 object-contain" onError={() => setImgErr(true)} />
               : <div className="w-full h-full flex items-center justify-center text-white/30 text-lg">{player ? "👤" : "+"}</div>}
           </div>
-          {/* Remove player btn */}
-          {player && (
-            <button onClick={e => { e.stopPropagation(); onRemove(slot); }}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black hidden group-hover/slot:flex items-center justify-center shadow">✕</button>
-          )}
-          {/* Delete custom slot btn */}
-          {isCustom && onDeleteCustomSlot && (
+          {/* Delete custom slot btn — always visible on custom empty slots */}
+          {isCustom && onDeleteCustomSlot && !player && (
             <button onClick={e => { e.stopPropagation(); onDeleteCustomSlot(slot); }}
-              className="absolute -bottom-1 -left-1 w-4 h-4 rounded-full bg-gray-700 text-white text-[8px] font-black hidden group-hover/slot:flex items-center justify-center shadow">🗑</button>
+              className="absolute -bottom-1 -left-1 w-5 h-5 rounded-full bg-gray-700 text-white text-[9px] font-black flex items-center justify-center shadow">🗑</button>
           )}
         </div>
 
@@ -192,7 +170,7 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
               <div className="text-[12px] font-black truncate max-w-[74px] drop-shadow-lg" style={{ color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
                 {player.name.split(" ").slice(-1)[0]}
               </div>
-              <div className="text-[14px] font-black drop-shadow flex items-center gap-0.5" style={{ color: getRatingColor(ovr ?? 0), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+              <div className="text-[14px] font-black drop-shadow flex items-center gap-0.5 justify-center" style={{ color: getRatingColor(ovr ?? 0), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                 {ovr}{isPenalized && <span style={{ fontSize: 9, color: "#ef4444" }}>↓</span>}
               </div>
             </>
@@ -280,6 +258,72 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
 });
 
 // ─── NAME / CONFIRM MODALS ─────────────────────────────────────────────────────
+// ─── SLOT ACTION MENU ──────────────────────────────────────────────────────────
+function SlotActionMenu({ player, slot, onView, onSwap, onRemove, onClose, theme }: {
+  player: any; slot: string;
+  onView: () => void; onSwap: () => void; onRemove: () => void; onClose: () => void;
+  theme: string;
+}) {
+  const isDark = theme !== "aurora";
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()}
+        className="w-full max-w-xs rounded-2xl overflow-hidden"
+        style={{ background: isDark ? "#0d1117" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #fce7f3" }}>
+        <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #fce7f3" }}>
+          <img src={getPlayerPhoto(player.name)} alt="" className="w-10 h-10 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
+          <div>
+            <div className={`text-sm font-black ${isDark ? "text-white" : "text-pink-950"}`}>{player.name}</div>
+            <div className={`text-[10px] ${isDark ? "text-white/40" : "text-pink-900/40"}`}>{slot}</div>
+          </div>
+        </div>
+        <button onClick={onView} className="w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors"
+          style={{ color: isDark ? "#fff" : "#500724" }}
+          onMouseEnter={e => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.04)" : "#fdf2f8"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+          <span>👁</span><span className="text-sm font-bold">View Player</span>
+        </button>
+        <button onClick={onSwap} className="w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors"
+          style={{ color: isDark ? "#fff" : "#500724" }}
+          onMouseEnter={e => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.04)" : "#fdf2f8"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+          <span>🔄</span><span className="text-sm font-bold">Swap Position</span>
+        </button>
+        <button onClick={onRemove} className="w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors"
+          style={{ color: "#ef4444" }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.08)"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+          <span>✕</span><span className="text-sm font-bold">Remove from XI</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SWAP TARGET PICKER ────────────────────────────────────────────────────────
+function SwapPickerOverlay({ slots, lineup, currentSlot, onPick, onCancel, glowColor }: {
+  slots: { slot: string; x: number; y: number }[]; lineup: Record<string, any>;
+  currentSlot: string; onPick: (targetSlot: string) => void; onCancel: () => void; glowColor: string;
+}) {
+  return (
+    <div className="absolute inset-0 z-30" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onCancel}>
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 text-white text-xs font-black px-3 py-1.5 rounded-full" style={{ background: `${glowColor}30` }}>
+        Tap a position to swap
+      </div>
+      {slots.filter(s => s.slot !== currentSlot).map(({ slot, x, y }) => (
+        <button key={slot} onClick={e => { e.stopPropagation(); onPick(slot); }}
+          style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%,-50%)" }}
+          className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-xs border-2 transition-transform active:scale-90"
+          >
+          <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: `${glowColor}40`, border: `2px solid ${glowColor}` }}>
+            {lineup[slot] ? lineup[slot].name.split(" ").slice(-1)[0].slice(0, 6) : slot}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function NamePromptModal({ defaultValue, onConfirm, onCancel, theme }: {
   defaultValue: string; onConfirm: (name: string) => void; onCancel: () => void; theme: string;
 }) {
@@ -355,6 +399,8 @@ export default function SquadPage() {
   const [justSaved, setJustSaved]       = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [actionSlot, setActionSlot]     = useState<string | null>(null); // показывает SlotActionMenu
+  const [swapSlot, setSwapSlot]         = useState<string | null>(null); // показывает SwapPickerOverlay
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -522,7 +568,7 @@ export default function SquadPage() {
 
   return (
     <DashboardLayout>
-      <div className={`min-h-screen p-4 md:p-8 ${ui.text}`} style={ui.font}>
+      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-5">
           <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Squad</div>
           <h1 className="text-2xl font-black">{selectedClub?.name} — {players.length} Players</h1>
@@ -616,9 +662,7 @@ export default function SquadPage() {
                 {slots.map(({ slot, x, y }) => (
                   <PitchSlot key={slot} slot={slot} player={lineup[slot] ?? null}
                     x={x} y={y} glowColor={glowColor}
-                    onDrop={handleDrop} onOpen={openModal}
-                    onRemove={s => setLineup(prev => { const n = {...prev}; delete n[s]; return n; })}
-                    isDragging={dragging} setDragging={setDragging}
+                    onSlotClick={(s, p) => setActionSlot(s)}
                     isCustom={isCustomFormation}
                     customPos={customPositions[slot]}
                     onPickPosition={s => setEditingSlot(s)}
@@ -627,6 +671,25 @@ export default function SquadPage() {
                       setLineup(prev => { const n = {...prev}; delete n[s]; return n; });
                     }} />
                 ))}
+
+                {/* Swap target picker */}
+                {swapSlot && (
+                  <SwapPickerOverlay
+                    slots={slots} lineup={lineup} currentSlot={swapSlot} glowColor={glowColor}
+                    onPick={targetSlot => {
+                      setLineup(prev => {
+                        const next = { ...prev };
+                        const a = next[swapSlot] ?? null;
+                        const b = next[targetSlot] ?? null;
+                        if (b) next[swapSlot] = b; else delete next[swapSlot];
+                        if (a) next[targetSlot] = a; else delete next[targetSlot];
+                        return next;
+                      });
+                      setSwapSlot(null);
+                    }}
+                    onCancel={() => setSwapSlot(null)}
+                  />
+                )}
 
                 {/* Position picker overlay for custom slot */}
                 {editingSlot && isCustomFormation && (() => {
@@ -724,6 +787,19 @@ export default function SquadPage() {
         <ConfirmDeleteModal name={deleteTarget} theme={theme}
           onConfirm={() => { deleteCustomFormationStore(deleteTarget); setDeleteTarget(null); }}
           onCancel={() => setDeleteTarget(null)} />
+      )}
+
+      {actionSlot && lineup[actionSlot] && (
+        <SlotActionMenu
+          player={lineup[actionSlot]} slot={actionSlot} theme={theme}
+          onView={() => { openModal(lineup[actionSlot]); setActionSlot(null); }}
+          onSwap={() => { setSwapSlot(actionSlot); setActionSlot(null); }}
+          onRemove={() => {
+            setLineup(prev => { const n = { ...prev }; delete n[actionSlot]; return n; });
+            setActionSlot(null);
+          }}
+          onClose={() => setActionSlot(null)}
+        />
       )}
     </DashboardLayout>
   );

@@ -85,7 +85,7 @@ export default function FixturesPage() {
 
   return (
     <DashboardLayout>
-      <div className={`min-h-screen p-6 md:p-8 ${ui.text}`} style={ui.font}>
+      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
           <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Fixtures</div>
           <h1 className="text-2xl font-black">Season 2025/26</h1>
@@ -114,18 +114,20 @@ export default function FixturesPage() {
               : `MD ${f.matchday}`;
             return (
               <div key={f.id}
-                className={`flex items-center gap-3 px-4 py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
-                <div className={`text-[10px] w-20 shrink-0 leading-tight ${ui.muted}`}>{dateStr}</div>
-                <div className="flex items-center gap-2 flex-1 justify-end">
-                  <span className={`text-sm font-bold truncate max-w-[110px] ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
-                  <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
-                </div>
-                <div className={`w-16 text-center font-black text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
-                  {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
-                </div>
-                <div className="flex items-center gap-2 flex-1 justify-start">
-                  <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
-                  <span className={`text-sm font-bold truncate max-w-[110px] ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
+                className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
+                <div className={`text-[10px] leading-tight ${ui.muted} sm:w-20 sm:shrink-0`}>{dateStr}</div>
+                <div className="flex items-center justify-between gap-2 sm:flex-1">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-end min-w-0">
+                    <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
+                    <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                  </div>
+                  <div className={`w-14 sm:w-16 text-center font-black text-xs sm:text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
+                    {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-start min-w-0">
+                    <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                    <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
+                  </div>
                 </div>
               </div>
             );

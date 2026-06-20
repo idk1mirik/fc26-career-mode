@@ -70,7 +70,7 @@ export default function TablePage() {
 
   return (
     <DashboardLayout>
-      <div className={`min-h-screen p-6 md:p-8 ${ui.text}`} style={ui.font}>
+      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="flex items-center gap-3 mb-6">
           <img src={getLeagueLogo(selectedLeague?.name || "")} alt="" className="w-8 h-8 object-contain"
             onError={e => (e.currentTarget.style.display = "none")} />
