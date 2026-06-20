@@ -57,16 +57,30 @@ export function generateMatchEvents(
     if (player) events.push({ minute: randomMinute(), type: "red", team, player: player.name });
   }
 
-  // Замены — игрок ИЗ старта уходит, игрок С БЕНЧА выходит
+  // Замены — игрок ИЗ старта уходит, игрок С БЕНЧА выходит.
+  // Один игрок не может выйти/зайти больше одного раза за матч (обратные замены запрещены).
   const subCount = Math.floor(Math.random() * 3) + 2;
+  const homeUsedOut = new Set<string>(), homeUsedIn = new Set<string>();
+  const awayUsedOut = new Set<string>(), awayUsedIn = new Set<string>();
+
   for (let i = 0; i < subCount; i++) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
     const startPool = team === "home" ? homeStarters : awayStarters;
     const benchPool = team === "home" ? homeBench : awayBench;
-    // Не заменяем вратаря
-    const out = pick(startPool.filter(p => p.position !== "GK"));
-    const inP = benchPool.length ? pick(benchPool) : pick(startPool.filter(p => p.name !== out?.name));
+    const usedOut = team === "home" ? homeUsedOut : awayUsedOut;
+    const usedIn  = team === "home" ? homeUsedIn  : awayUsedIn;
+
+    // Доступные на выход: ещё не вышли, не вратарь
+    const availOut = startPool.filter(p => p.position !== "GK" && !usedOut.has(p.name));
+    // Доступные на вход: ещё не заходили (с бенча или из старта, но не те кто уже выходил)
+    const availIn  = (benchPool.length ? benchPool : startPool).filter(p => !usedIn.has(p.name) && !usedOut.has(p.name));
+
+    const out = pick(availOut);
+    const inP = pick(availIn.filter(p => p.name !== out?.name));
+
     if (out && inP) {
+      usedOut.add(out.name);
+      usedIn.add(inP.name);
       const minute = Math.floor(Math.random() * 35) + 55;
       events.push({ minute, type: "substitution", team, player: out.name, player2: inP.name });
     }

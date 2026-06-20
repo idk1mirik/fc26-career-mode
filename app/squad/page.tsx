@@ -209,8 +209,9 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
 });
 
 // ─── PLAYER ROW ───────────────────────────────────────────────────────────────
-const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup }: {
+const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots }: {
   p: any; ui: typeof THEME_UI["classic"]; onOpen: (p: any) => void; isXI?: boolean; onAddToLineup?: (p: any) => void;
+  emptySlots?: { slot: string; label: string }[];
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [showSlots, setShowSlots] = useState(false);
@@ -261,12 +262,15 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup }
       {/* Slot picker */}
       {showSlots && onAddToLineup && (
         <div className="px-4 pb-3 flex flex-wrap gap-1.5">
-          <span className={`text-[9px] uppercase tracking-widest self-center mr-1 ${ui.muted}`}>Position:</span>
-          {Object.keys(POS_PRIORITY).map(slot => (
+          <span className={`text-[9px] uppercase tracking-widest self-center mr-1 ${ui.muted}`}>Empty slot:</span>
+          {(!emptySlots || emptySlots.length === 0) && (
+            <span className={`text-[10px] ${ui.muted}`}>No empty slots in current formation</span>
+          )}
+          {emptySlots?.map(({ slot, label }) => (
             <button key={slot} onClick={() => { onAddToLineup({ player: p, slot }); setShowSlots(false); }}
               className="px-2 py-1 rounded-lg text-[9px] font-black transition-all"
               style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
-              {slot}
+              {label}
             </button>
           ))}
         </div>
@@ -283,8 +287,11 @@ export default function SquadPage() {
   const savedLineup    = useCareerStore(s => s.lineup);
   const savedFormation = useCareerStore(s => s.formation);
   const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
+  const customFormations = useCareerStore(s => s.customFormations);
   const setLineupStore = useCareerStore(s => s.setLineup);
   const setLineupForFormationStore = useCareerStore(s => s.setLineupForFormation);
+  const saveCustomFormationStore = useCareerStore(s => s.saveCustomFormation);
+  const deleteCustomFormationStore = useCareerStore(s => s.deleteCustomFormation);
   const setFormationStore = useCareerStore(s => s.setFormation);
 
   const [players, setPlayers]           = useState<any[]>([]);
@@ -354,11 +361,36 @@ export default function SquadPage() {
 
   // Сохранение происходит только вручную через кнопку Save Lineup
   const handleSaveLineup = useCallback(() => {
+    if (formation === "Custom") {
+      const name = window.prompt("Name this formation:", "My Formation");
+      if (!name) return;
+      saveCustomFormationStore(name, customSlots, customPositions, lineup);
+      setFormationStore(name);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 1800);
+      return;
+    }
     setLineupForFormationStore(formation, lineup);
     setFormationStore(formation);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1800);
-  }, [formation, lineup]);
+  }, [formation, lineup, customSlots, customPositions]);
+
+  const handleLoadCustomFormation = useCallback((name: string) => {
+    const cf = customFormations[name];
+    if (!cf) return;
+    setFormation(name);
+    setCustomSlots(cf.slots);
+    setCustomPositions(cf.positions);
+    // Восстанавливаем lineup сопоставляя по id/name
+    const byId: Record<string, any> = {};
+    players.forEach(p => { byId[p.id ?? p.name] = p; });
+    const restored: Record<string, any> = {};
+    for (const [slot, p] of Object.entries(cf.lineup || {})) {
+      if (p && byId[(p as any).id ?? (p as any).name]) restored[slot] = byId[(p as any).id ?? (p as any).name];
+    }
+    setLineup(restored);
+  }, [customFormations, players]);
 
   const handleFormationChange = (f: string) => {
     setFormation(f);
@@ -406,6 +438,20 @@ export default function SquadPage() {
     [lineup]
   );
 
+  const isCustomFormation = formation === "Custom" || !!customFormations[formation];
+  const slots = isCustomFormation ? customSlots : (FORMATIONS[formation] ?? FORMATIONS["4-3-3"]);
+
+  // Пустые слоты текущей формации — с подписями для Custom (используем выбранную позицию) и обычных схем
+  const emptySlots = useMemo(() => {
+    return slots
+      .filter(({ slot }) => !lineup[slot])
+      .map(({ slot }) => ({
+        slot,
+        label: isCustomFormation ? (customPositions[slot] || "?") : slot,
+      }))
+      .filter(({ label }) => !isCustomFormation || label !== "?"); // в Custom нельзя добавлять пока позиция не выбрана
+  }, [slots, lineup, formation, customPositions]);
+
   const filteredPlayers = useMemo(() => players
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "age" ? a.age - b.age : (b.overall ?? 0) - (a.overall ?? 0)),
@@ -421,8 +467,6 @@ export default function SquadPage() {
     });
     return g;
   }, [filteredPlayers]);
-
-  const slots = formation === "Custom" ? customSlots : (FORMATIONS[formation] ?? FORMATIONS["4-3-3"]);
 
   if (!hydrated) return null;
 
@@ -459,8 +503,16 @@ export default function SquadPage() {
                 ))}
                 <button onClick={() => setFormation("Custom")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${formation === "Custom" ? ui.tabActive : ui.tabIdle}`}>
-                  ✏️ Custom
+                  ✏️ New Custom
                 </button>
+                {Object.keys(customFormations).map(name => (
+                  <button key={name} onClick={() => handleLoadCustomFormation(name)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${formation === name ? ui.tabActive : ui.tabIdle}`}>
+                    📐 {name}
+                    <span onClick={e => { e.stopPropagation(); if (window.confirm(`Delete "${name}"?`)) deleteCustomFormationStore(name); }}
+                      className="opacity-50 hover:opacity-100">✕</span>
+                  </button>
+                ))}
                 <button onClick={handleSaveLineup}
                   className="px-3 py-1.5 rounded-xl text-xs font-black transition-all ml-auto"
                   style={{ background: justSaved ? "rgba(34,197,94,0.25)" : `${glowColor}25`, color: justSaved ? "#22c55e" : glowColor, border: `1px solid ${justSaved ? "#22c55e" : glowColor}50` }}>
@@ -468,7 +520,7 @@ export default function SquadPage() {
                 </button>
               </div>
 
-              {formation === "Custom" && (
+              {isCustomFormation && (
                 <div className={`mb-3 p-3 rounded-xl text-xs ${ui.muted}`} style={{ background: theme === "aurora" ? "rgba(168,85,247,0.06)" : "rgba(255,255,255,0.03)" }}>
                   Click empty pitch space to add a slot ({customSlots.length}/11). Click a slot's position label to change it.
                   <div className="mt-2">
@@ -517,7 +569,7 @@ export default function SquadPage() {
                     onDrop={handleDrop} onOpen={openModal}
                     onRemove={s => setLineup(prev => { const n = {...prev}; delete n[s]; return n; })}
                     isDragging={dragging} setDragging={setDragging}
-                    isCustom={formation === "Custom"}
+                    isCustom={isCustomFormation}
                     customPos={customPositions[slot]}
                     onPickPosition={s => setEditingSlot(s)}
                     onDeleteCustomSlot={s => {
@@ -527,7 +579,7 @@ export default function SquadPage() {
                 ))}
 
                 {/* Position picker overlay for custom slot */}
-                {editingSlot && formation === "Custom" && (() => {
+                {editingSlot && isCustomFormation && (() => {
                   const slotData = customSlots.find(cs => cs.slot === editingSlot);
                   if (!slotData) return null;
                   const options = getZonePositions(slotData.x, slotData.y);
@@ -560,7 +612,7 @@ export default function SquadPage() {
                   .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0))
                   .map(p => (
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
-                      onOpen={openModal} onAddToLineup={handleAddToLineup} />
+                      onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots} />
                   ))}
               </div>
             </div>
@@ -592,7 +644,7 @@ export default function SquadPage() {
                       <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                         onOpen={openModal}
                         isXI={startingIds.has(p.id ?? p.name)}
-                        onAddToLineup={handleAddToLineup} />
+                        onAddToLineup={handleAddToLineup} emptySlots={emptySlots} />
                     ))}
                   </div>
                 </div>

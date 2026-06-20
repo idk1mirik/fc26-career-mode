@@ -225,6 +225,10 @@ export default function DashboardPage() {
   const tactic         = useCareerStore(s => s.tactic) || "Balanced";
   const customTactic   = useCareerStore(s => s.customTactic);
   const lineup         = useCareerStore(s => s.lineup);
+  const formation       = useCareerStore(s => s.formation) || "4-3-3";
+  const setFormation     = useCareerStore(s => s.setFormation);
+  const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
+  const customFormationsStore = useCareerStore(s => s.customFormations);
   const setSeasonId    = useCareerStore(s => s.setSeasonId);
 
   const [hydrated, setHydrated]     = useState(false);
@@ -392,16 +396,43 @@ export default function DashboardPage() {
                 <Link href="/leagues"><button className={`px-6 py-3 ${ui.btnPrimary}`}>Start Career</button></Link>
               </div>
             ) : (
-              <div className={`p-6 ${ui.card} flex items-center justify-between gap-4`}>
-                <div>
-                  <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
-                  <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
+              <div className={`p-6 ${ui.card}`}>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
+                    <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
+                  </div>
+                  <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played)}
+                    className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
+                    <Zap size={16} />
+                    {simulating ? "Simulating…" : "Simulate Matchday"}
+                  </button>
                 </div>
-                <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played)}
-                  className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
-                  <Zap size={16} />
-                  {simulating ? "Simulating…" : "Simulate Matchday"}
-                </button>
+                {/* Choose lineup for this matchday */}
+                <div className="flex items-center gap-2 flex-wrap pt-3 border-t" style={{ borderColor: theme === "classic" ? "rgba(255,255,255,0.05)" : theme === "aurora" ? "#fce7f3" : "rgba(139,92,246,0.15)" }}>
+                  <span className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Lineup:</span>
+                  {Object.keys(lineupsByFormation || {}).map(f => (
+                    <button key={f} onClick={() => {
+                        setFormation(f);
+                        useCareerStore.getState().setLineup(lineupsByFormation[f]);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-black transition-all"
+                      style={{ background: formation === f ? `${leagueTheme.rawColor}30` : "rgba(255,255,255,0.05)", color: formation === f ? leagueTheme.rawColor : undefined }}>
+                      {f}
+                    </button>
+                  ))}
+                  {Object.keys(customFormationsStore || {}).map(f => (
+                    <button key={f} onClick={() => {
+                        setFormation(f);
+                        useCareerStore.getState().setLineup(customFormationsStore[f].lineup);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-black transition-all"
+                      style={{ background: formation === f ? `${leagueTheme.rawColor}30` : "rgba(255,255,255,0.05)", color: formation === f ? leagueTheme.rawColor : undefined }}>
+                      📐 {f}
+                    </button>
+                  ))}
+                  <Link href="/squad" className="text-[10px] underline opacity-50 hover:opacity-100">Manage in Squad →</Link>
+                </div>
               </div>
             )}
 
