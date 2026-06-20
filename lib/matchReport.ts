@@ -72,11 +72,14 @@ export function generateMatchEvents(
 
     // Доступные на выход: ещё не вышли, не вратарь
     const availOut = startPool.filter(p => p.position !== "GK" && !usedOut.has(p.name));
-    // Доступные на вход: ещё не заходили (с бенча или из старта, но не те кто уже выходил)
-    const availIn  = (benchPool.length ? benchPool : startPool).filter(p => !usedIn.has(p.name) && !usedOut.has(p.name));
-
     const out = pick(availOut);
-    const inP = pick(availIn.filter(p => p.name !== out?.name));
+    if (!out) continue;
+
+    // Доступные на вход: НЕ вратарь (нельзя выпускать ВК на замену полевому), ещё не заходили
+    const inPool = (benchPool.length ? benchPool : startPool).filter(p => p.position !== "GK");
+    const availIn = inPool.filter(p => !usedIn.has(p.name) && !usedOut.has(p.name) && p.name !== out.name);
+
+    const inP = pick(availIn);
 
     if (out && inP) {
       usedOut.add(out.name);

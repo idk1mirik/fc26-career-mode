@@ -304,7 +304,8 @@ export default function DashboardPage() {
   if (!hydrated || !selectedClub) return null;
 
   return (
-    <main className={`min-h-screen flex relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
+    <DashboardLayout>
+    <main className={`min-h-screen relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Share+Tech+Mono&display=swap');
         .fade-in { animation: fadeIn 0.4s ease both; }
@@ -319,60 +320,8 @@ export default function DashboardPage() {
           style={{ backgroundColor: `${glowColor}08` }} />
       </div>
 
-      {/* Sidebar */}
-      <aside className={`hidden lg:flex w-[260px] min-h-screen flex-col p-6 shrink-0 relative z-20 ${ui.sidebar}`}>
-        <div className="absolute top-0 left-0 right-0 h-[2px]"
-          style={{ background: `linear-gradient(90deg,transparent,${glowColor}80,transparent)` }} />
-
-        {/* Club */}
-        {selectedClub && (
-          <div className={`mb-6 p-4 flex items-center gap-3 ${theme === "classic" ? "bg-white/[0.03] border border-white/[0.07] rounded-2xl" : theme === "aurora" ? "bg-white/60 border border-pink-100 rounded-2xl" : "bg-purple-950/20 border border-fuchsia-900/30"}`}>
-            <img src={getClubLogo(selectedClub.name) || "/logo.png"} alt="" className="w-10 h-10 object-contain" />
-            <div>
-              <div className={`text-sm font-black truncate max-w-[150px] ${ui.text}`}>{selectedClub.name}</div>
-              <div className={`text-[10px] ${ui.muted}`}>{selectedLeague?.name || selectedClub.league}</div>
-            </div>
-          </div>
-        )}
-
-        {/* Season info */}
-        <div className={`mb-6 p-4 ${ui.cardAlt}`}>
-          <div className={`${ui.subLabel} mb-1`}>Season</div>
-          <div className={`text-xl font-black ${ui.text}`}>2025/26</div>
-          <div className={`${ui.subLabel} mt-2 mb-1`}>Matchday</div>
-          <div className={`text-3xl font-black`} style={{ color: glowColor }}>{matchday}</div>
-          <div className={`${ui.subLabel} mt-2 mb-1`}>Position</div>
-          <div className={`text-3xl font-black`} style={{ color: glowColor }}>{userPos}</div>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 space-y-1">
-          {NAV.map(item => {
-            const Icon = item.icon;
-            const active = activeNav === item.href;
-            return (
-              <Link key={item.href} href={item.href} onClick={() => setActiveNav(item.href)}>
-                <div className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer relative ${active ? ui.navItemActive : ui.navItem}`}>
-                  {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-r-full" style={{ background: glowColor }} />}
-                  <div className={`w-8 h-8 flex items-center justify-center shrink-0 ${ui.navIcon}`}>
-                    <Icon size={15} className={active ? "text-current" : (ui.muted as string)} />
-                  </div>
-                  <span className={active ? ui.navLabelActive : ui.navLabel}>{item.label}</span>
-                  {active && <ChevronRight size={13} className={`ml-auto ${ui.muted}`} />}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <button onClick={() => { useCareerStore.getState().resetCareer(); router.push("/"); }}
-          className={`mt-6 w-full py-3 text-sm font-black uppercase tracking-widest ${ui.btnDanger}`}>
-          Quit Career
-        </button>
-      </aside>
-
       {/* Main */}
-      <div className={`flex-1 overflow-y-auto p-6 md:p-8 relative z-10 ${ui.text}`}>
+      <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
         {/* Top bar */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -483,5 +432,6 @@ export default function DashboardPage() {
         <MatchReportModal fix={reportFix} ui={ui} theme={theme} onClose={() => setReportFix(null)} />
       )}
     </main>
+    </DashboardLayout>
   );
 }

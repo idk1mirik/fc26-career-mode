@@ -75,6 +75,30 @@ const FLAG_CODE_MAP: Record<string, string> = {
   "LAT": "lv", "LTU": "lt", "EST": "ee", "CYP": "cy", "MLT": "mt",
   "LUX": "lu", "KVX": "xk", "TRI": "tt", "ESA": "sv", "GUA": "gt",
   "NCA": "ni", "SUR": "sr", "GUY": "gy", "PNG": "pg", "FIJ": "fj",
+  "AFG": "af", "BHR": "bh", "BAN": "bd", "BHU": "bt", "BRU": "bn",
+  "CAM2": "kh", "TLS": "tl", "HKG": "hk", "KUW": "kw", "KGZ": "kg",
+  "LAO": "la", "MAC": "mo", "MDV": "mv", "MNG": "mn", "MYA": "mm",
+  "NEP": "np", "PRK": "kp", "OMA": "om", "PAK": "pk", "PLE": "ps",
+  "SRI": "lk", "SYR": "sy", "TJK": "tj", "TKM": "tm", "YEM": "ye",
+  "BAH": "bs", "BRB": "bb", "BLZ": "bz", "BER": "bm", "CAY": "ky",
+  "CUW": "cw", "GRN": "gd", "PUR": "pr", "SKN": "kn", "LCA": "lc",
+  "VIN": "vc", "ARU": "aw", "ATG": "ag", "DMA": "dm", "ASA": "as",
+  "COK": "ck", "SAM": "ws", "SOL": "sb", "TGA": "to", "VAN": "vu",
+  "NCL": "nc", "GUM": "gu", "DJI": "dj", "ERI": "er", "SOM": "so",
+  "SSD": "ss", "CTA": "cf", "CGO": "cg", "STP": "st", "SEY": "sc",
+  "LES": "ls", "GIB": "gi",
+  "AFGHANISTAN": "af", "BAHRAIN": "bh", "BANGLADESH": "bd", "BHUTAN": "bt",
+  "BRUNEI": "bn", "CAMBODIA": "kh", "HONG KONG": "hk", "KUWAIT": "kw",
+  "KYRGYZSTAN": "kg", "LAOS": "la", "MACAU": "mo", "MALDIVES": "mv",
+  "MONGOLIA": "mn", "MYANMAR": "mm", "NEPAL": "np", "NORTH KOREA": "kp",
+  "OMAN": "om", "PAKISTAN": "pk", "PALESTINE": "ps", "SRI LANKA": "lk",
+  "SYRIA": "sy", "TAJIKISTAN": "tj", "TURKMENISTAN": "tm", "YEMEN": "ye",
+  "BAHAMAS": "bs", "BARBADOS": "bb", "BELIZE": "bz", "BERMUDA": "bm",
+  "CAYMAN ISLANDS": "ky", "CURACAO": "cw", "GRENADA": "gd", "PUERTO RICO": "pr",
+  "ARUBA": "aw", "DOMINICA": "dm", "SAMOA": "ws", "SOLOMON ISLANDS": "sb",
+  "TONGA": "to", "VANUATU": "vu", "NEW CALEDONIA": "nc", "GUAM": "gu",
+  "DJIBOUTI": "dj", "ERITREA": "er", "SOMALIA": "so", "SOUTH SUDAN": "ss",
+  "CONGO": "cg", "SEYCHELLES": "sc", "LESOTHO": "ls", "GIBRALTAR": "gi",
 };
 
 export function getFlagEmoji(country: string): string {
@@ -175,7 +199,7 @@ export const PosBadge = memo(function PosBadge({ pos, theme }: { pos: string; th
 });
 
 // ─── PLAYER CARD ──────────────────────────────────────────────────────────────
-const PlayerCard = memo(function PlayerCard({
+export const PlayerCard = memo(function PlayerCard({
   player, clubName, clubColor, theme, onOpen,
 }: {
   player: any; clubName: string; clubColor: string; theme: string; index: number; onOpen: () => void;

@@ -14,7 +14,6 @@ async function getClubPlayers(clubId: string): Promise<any[]> {
   return players;
 }
 
-// Топ-11 игроков клуба по рейтингу (это "стартовый состав" для AI команд и подмены пула)
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a,b)=>b.overall-a.overall)[0];
   const rest = players.filter(p => p.position !== "GK").sort((a,b)=>b.overall-a.overall).slice(0, 10);
@@ -28,6 +27,73 @@ async function getClubRating(clubId: string): Promise<number> {
   const avg = players.slice(0, 18).reduce((s: number, p: any) => s + (p.overall ?? 75), 0) / Math.min(players.length, 18);
   CLUB_RATINGS[clubId] = Math.round(avg);
   return CLUB_RATINGS[clubId];
+}
+
+// Получаем список недоступных игроков клуба (травма/дисквалификация)
+async function getUnavailable(seasonId: string, clubId: string): Promise<Set<string>> {
+  const { data } = await supabase.from("player_status")
+    .select("player_name").eq("season_id", seasonId).eq("club_id", clubId).gt("matches_out", 0);
+  return new Set((data ?? []).map((r: any) => r.player_name));
+}
+
+// Уменьшаем счётчик пропущенных матчей у всех недоступных игроков клуба
+async function tickDownStatus(seasonId: string, clubId: string) {
+  const { data } = await supabase.from("player_status")
+    .select("*").eq("season_id", seasonId).eq("club_id", clubId).gt("matches_out", 0);
+  for (const row of data ?? []) {
+    const newOut = row.matches_out - 1;
+    if (newOut <= 0) {
+      await supabase.from("player_status").delete().eq("id", row.id);
+    } else {
+      await supabase.from("player_status").update({ matches_out: newOut }).eq("id", row.id);
+    }
+  }
+}
+
+// Применяем события матча (карточки/травмы) к статусам игроков
+async function applyEventStatuses(seasonId: string, clubId: string, events: any[], teamSide: "home" | "away") {
+  for (const e of events) {
+    if (e.team !== teamSide) continue;
+    if (e.type === "red") {
+      await upsertStatus(seasonId, clubId, e.player, "suspended", 1);
+    }
+    if (e.type === "injury") {
+      const weeks = Math.floor(Math.random() * 3) + 1; // 1-3 матча
+      await upsertStatus(seasonId, clubId, e.player, "injured", weeks);
+    }
+    if (e.type === "yellow") {
+      // считаем накопленные жёлтые
+      const { data: existing } = await supabase.from("player_status")
+        .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", e.player).maybeSingle();
+      const newYellowCount = (existing?.yellow_cards ?? 0) + 1;
+      if (newYellowCount >= 2) {
+        // 2 жёлтые = пропуск следующего матча, сброс счётчика
+        await upsertStatus(seasonId, clubId, e.player, "suspended", 1, 0);
+      } else if (existing) {
+        await supabase.from("player_status").update({ yellow_cards: newYellowCount }).eq("id", existing.id);
+      } else {
+        await supabase.from("player_status").insert({
+          season_id: seasonId, club_id: clubId, player_name: e.player,
+          status: "none", matches_out: 0, yellow_cards: newYellowCount,
+        });
+      }
+    }
+  }
+}
+
+async function upsertStatus(seasonId: string, clubId: string, playerName: string, status: string, matchesOut: number, yellowCards = 0) {
+  const { data: existing } = await supabase.from("player_status")
+    .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", playerName).maybeSingle();
+  if (existing) {
+    await supabase.from("player_status").update({
+      status, matches_out: Math.max(existing.matches_out ?? 0, matchesOut), yellow_cards: yellowCards,
+    }).eq("id", existing.id);
+  } else {
+    await supabase.from("player_status").insert({
+      season_id: seasonId, club_id: clubId, player_name: playerName,
+      status, matches_out: matchesOut, yellow_cards: yellowCards,
+    });
+  }
 }
 
 export async function POST(req: Request) {
@@ -48,9 +114,13 @@ export async function POST(req: Request) {
   if (!fixtures?.length) return Response.json({ error: "No fixtures" }, { status: 400 });
 
   const results: any[] = [];
+  const touchedClubs = new Set<string>();
 
   for (const fix of fixtures) {
     const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
+    touchedClubs.add(fix.home_club);
+    touchedClubs.add(fix.away_club);
+
     let homeGoals: number, awayGoals: number;
 
     if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
@@ -69,17 +139,24 @@ export async function POST(req: Request) {
     const homeAll = await getClubPlayers(fix.home_club);
     const awayAll = await getClubPlayers(fix.away_club);
 
+    // Исключаем недоступных (травма/дисквалификация) из пула старта
+    const homeUnavailable = await getUnavailable(seasonId, fix.home_club);
+    const awayUnavailable = await getUnavailable(seasonId, fix.away_club);
+
+    const homeAvailable = homeAll.filter((p: any) => !homeUnavailable.has(p.name));
+    const awayAvailable = awayAll.filter((p: any) => !awayUnavailable.has(p.name));
+
     const homeStarters = (fix.home_club === userClubId && userLineup?.length)
-      ? userLineup
-      : getStartingXI(homeAll);
+      ? userLineup.filter((p: any) => !homeUnavailable.has(p.name))
+      : getStartingXI(homeAvailable);
     const awayStarters = (fix.away_club === userClubId && userLineup?.length)
-      ? userLineup
-      : getStartingXI(awayAll);
+      ? userLineup.filter((p: any) => !awayUnavailable.has(p.name))
+      : getStartingXI(awayAvailable);
 
     const homeStartIds = new Set(homeStarters.map((p: any) => p.id ?? p.name));
     const awayStartIds = new Set(awayStarters.map((p: any) => p.id ?? p.name));
-    const homeBench = homeAll.filter((p: any) => !homeStartIds.has(p.id ?? p.name));
-    const awayBench = awayAll.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
+    const homeBench = homeAvailable.filter((p: any) => !homeStartIds.has(p.id ?? p.name));
+    const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
 
     const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
 
@@ -88,6 +165,10 @@ export async function POST(req: Request) {
       played: true, played_at: new Date().toISOString(),
       events,
     }).eq("id", fix.id);
+
+    // Применяем новые травмы/карточки
+    await applyEventStatuses(seasonId, fix.home_club, events, "home");
+    await applyEventStatuses(seasonId, fix.away_club, events, "away");
 
     results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, events, fixtureId: fix.id });
 
@@ -114,6 +195,11 @@ export async function POST(req: Request) {
         }).eq("season_id", seasonId).eq("club_id", clubId);
       }
     }
+  }
+
+  // Тикаем вниз счётчики пропусков для всех клубов которые играли (после своего матча)
+  for (const clubId of touchedClubs) {
+    await tickDownStatus(seasonId, clubId);
   }
 
   const { count } = await supabase.from("fixtures")

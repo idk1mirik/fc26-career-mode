@@ -279,6 +279,51 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
   );
 });
 
+// ─── NAME / CONFIRM MODALS ─────────────────────────────────────────────────────
+function NamePromptModal({ defaultValue, onConfirm, onCancel, theme }: {
+  defaultValue: string; onConfirm: (name: string) => void; onCancel: () => void; theme: string;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const isDark = theme !== "aurora";
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl p-6"
+        style={{ background: isDark ? "#0d1117" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #fce7f3" }}>
+        <div className={`text-sm font-black mb-3 ${isDark ? "text-white" : "text-pink-950"}`}>Name this formation</div>
+        <input autoFocus value={value} onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && value.trim()) onConfirm(value.trim()); }}
+          className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-4"
+          style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #fbcfe8", color: isDark ? "#fff" : "#500724" }} />
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", color: isDark ? "rgba(255,255,255,0.6)" : "#9d174d" }}>Cancel</button>
+          <button onClick={() => value.trim() && onConfirm(value.trim())} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "rgba(34,197,94,0.2)", color: "#22c55e" }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDeleteModal({ name, onConfirm, onCancel, theme }: {
+  name: string; onConfirm: () => void; onCancel: () => void; theme: string;
+}) {
+  const isDark = theme !== "aurora";
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl p-6"
+        style={{ background: isDark ? "#0d1117" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #fce7f3" }}>
+        <div className={`text-sm font-black mb-2 ${isDark ? "text-white" : "text-pink-950"}`}>Delete "{name}"?</div>
+        <div className={`text-xs mb-4 ${isDark ? "text-white/40" : "text-pink-900/40"}`}>This cannot be undone.</div>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", color: isDark ? "rgba(255,255,255,0.6)" : "#9d174d" }}>Cancel</button>
+          <button onClick={onConfirm} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function SquadPage() {
   const themeRaw = useThemeStore(s => s.theme);
@@ -308,6 +353,8 @@ export default function SquadPage() {
   const [search, setSearch]             = useState("");
   const [sort, setSort]                 = useState<"overall"|"name"|"age">("overall");
   const [justSaved, setJustSaved]       = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -362,19 +409,22 @@ export default function SquadPage() {
   // Сохранение происходит только вручную через кнопку Save Lineup
   const handleSaveLineup = useCallback(() => {
     if (formation === "Custom") {
-      const name = window.prompt("Name this formation:", "My Formation");
-      if (!name) return;
-      saveCustomFormationStore(name, customSlots, customPositions, lineup);
-      setFormationStore(name);
-      setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 1800);
+      setShowNamePrompt(true);
       return;
     }
     setLineupForFormationStore(formation, lineup);
     setFormationStore(formation);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1800);
-  }, [formation, lineup, customSlots, customPositions]);
+  }, [formation, lineup]);
+
+  const handleConfirmCustomName = useCallback((name: string) => {
+    saveCustomFormationStore(name, customSlots, customPositions, lineup);
+    setFormationStore(name);
+    setShowNamePrompt(false);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 1800);
+  }, [customSlots, customPositions, lineup]);
 
   const handleLoadCustomFormation = useCallback((name: string) => {
     const cf = customFormations[name];
@@ -509,7 +559,7 @@ export default function SquadPage() {
                   <button key={name} onClick={() => handleLoadCustomFormation(name)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${formation === name ? ui.tabActive : ui.tabIdle}`}>
                     📐 {name}
-                    <span onClick={e => { e.stopPropagation(); if (window.confirm(`Delete "${name}"?`)) deleteCustomFormationStore(name); }}
+                    <span onClick={e => { e.stopPropagation(); setDeleteTarget(name); }}
                       className="opacity-50 hover:opacity-100">✕</span>
                   </button>
                 ))}
@@ -663,6 +713,17 @@ export default function SquadPage() {
           onClose={closeModal}
           isClosing={modalClosing}
         />
+      )}
+
+      {showNamePrompt && (
+        <NamePromptModal defaultValue="My Formation" theme={theme}
+          onConfirm={handleConfirmCustomName} onCancel={() => setShowNamePrompt(false)} />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteModal name={deleteTarget} theme={theme}
+          onConfirm={() => { deleteCustomFormationStore(deleteTarget); setDeleteTarget(null); }}
+          onCancel={() => setDeleteTarget(null)} />
       )}
     </DashboardLayout>
   );
