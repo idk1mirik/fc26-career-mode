@@ -14,6 +14,13 @@ async function getClubPlayers(clubId: string): Promise<any[]> {
   return players;
 }
 
+// Топ-11 игроков клуба по рейтингу (это "стартовый состав" для AI команд и подмены пула)
+function getStartingXI(players: any[]): any[] {
+  const gk = players.filter(p => p.position === "GK").sort((a,b)=>b.overall-a.overall)[0];
+  const rest = players.filter(p => p.position !== "GK").sort((a,b)=>b.overall-a.overall).slice(0, 10);
+  return gk ? [gk, ...rest] : rest;
+}
+
 async function getClubRating(clubId: string): Promise<number> {
   if (CLUB_RATINGS[clubId]) return CLUB_RATINGS[clubId];
   const players = await getClubPlayers(clubId);
@@ -24,7 +31,7 @@ async function getClubRating(clubId: string): Promise<number> {
 }
 
 export async function POST(req: Request) {
-  const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic } = await req.json();
+  const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
 
   const { data: season, error: sErr } = await supabase
     .from("seasons").select("*").eq("id", seasonId).single();
@@ -59,9 +66,22 @@ export async function POST(req: Request) {
       awayGoals = result.awayGoals;
     }
 
-    const homePlayers = await getClubPlayers(fix.home_club);
-    const awayPlayers = await getClubPlayers(fix.away_club);
-    const events = generateMatchEvents(homeGoals, awayGoals, homePlayers, awayPlayers);
+    const homeAll = await getClubPlayers(fix.home_club);
+    const awayAll = await getClubPlayers(fix.away_club);
+
+    const homeStarters = (fix.home_club === userClubId && userLineup?.length)
+      ? userLineup
+      : getStartingXI(homeAll);
+    const awayStarters = (fix.away_club === userClubId && userLineup?.length)
+      ? userLineup
+      : getStartingXI(awayAll);
+
+    const homeStartIds = new Set(homeStarters.map((p: any) => p.id ?? p.name));
+    const awayStartIds = new Set(awayStarters.map((p: any) => p.id ?? p.name));
+    const homeBench = homeAll.filter((p: any) => !homeStartIds.has(p.id ?? p.name));
+    const awayBench = awayAll.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
+
+    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
 
     await supabase.from("fixtures").update({
       home_goals: homeGoals, away_goals: awayGoals,

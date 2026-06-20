@@ -282,7 +282,9 @@ export default function SquadPage() {
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const savedLineup    = useCareerStore(s => s.lineup);
   const savedFormation = useCareerStore(s => s.formation);
+  const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
   const setLineupStore = useCareerStore(s => s.setLineup);
+  const setLineupForFormationStore = useCareerStore(s => s.setLineupForFormation);
   const setFormationStore = useCareerStore(s => s.setFormation);
 
   const [players, setPlayers]           = useState<any[]>([]);
@@ -298,6 +300,7 @@ export default function SquadPage() {
   const [dragging, setDragging]         = useState<any>(null);
   const [search, setSearch]             = useState("");
   const [sort, setSort]                 = useState<"overall"|"name"|"age">("overall");
+  const [justSaved, setJustSaved]       = useState(false);
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -322,19 +325,18 @@ export default function SquadPage() {
     fetch(`/api/players?club=${encodeURIComponent(selectedClub.name)}`)
       .then(r => r.json()).then(data => {
         setPlayers(data);
-        // Если есть сохранённый состав — восстанавливаем
-        if (savedLineup && Object.keys(savedLineup).length > 0) {
-          // Маппим по id/name
+        const formToLoad = savedFormation || "4-3-3";
+        const savedForThisFormation = lineupsByFormation?.[formToLoad];
+        if (savedForThisFormation && Object.keys(savedForThisFormation).length > 0) {
           const byId: Record<string, any> = {};
           data.forEach((p: any) => { byId[p.id ?? p.name] = p; });
           const restored: Record<string, any> = {};
-          for (const [slot, p] of Object.entries(savedLineup)) {
-            if (p && byId[p.id ?? p.name]) restored[slot] = byId[p.id ?? p.name];
+          for (const [slot, p] of Object.entries(savedForThisFormation)) {
+            if (p && byId[(p as any).id ?? (p as any).name]) restored[slot] = byId[(p as any).id ?? (p as any).name];
           }
           setLineup(restored);
         } else {
-          // Авто-подбор
-          autoFill(data, savedFormation || "4-3-3");
+          autoFill(data, formToLoad);
         }
       }).catch(() => {});
   }, [hydrated, selectedClub]);
@@ -350,18 +352,22 @@ export default function SquadPage() {
     setLineup(auto);
   }
 
-  // Сохраняем состав при изменении
-  useEffect(() => {
-    if (hydrated && Object.keys(lineup).length > 0) setLineupStore(lineup);
-  }, [lineup, hydrated]);
-
-  useEffect(() => {
-    if (hydrated) setFormationStore(formation);
-  }, [formation, hydrated]);
+  // Сохранение происходит только вручную через кнопку Save Lineup
+  const handleSaveLineup = useCallback(() => {
+    setLineupForFormationStore(formation, lineup);
+    setFormationStore(formation);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 1800);
+  }, [formation, lineup]);
 
   const handleFormationChange = (f: string) => {
     setFormation(f);
-    autoFill(players, f);
+    const savedForF = lineupsByFormation?.[f];
+    if (savedForF && Object.keys(savedForF).length > 0) {
+      setLineup(savedForF);
+    } else {
+      autoFill(players, f);
+    }
   };
 
   const handleDrop = useCallback((slot: string, player: any) => {
@@ -455,11 +461,16 @@ export default function SquadPage() {
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${formation === "Custom" ? ui.tabActive : ui.tabIdle}`}>
                   ✏️ Custom
                 </button>
+                <button onClick={handleSaveLineup}
+                  className="px-3 py-1.5 rounded-xl text-xs font-black transition-all ml-auto"
+                  style={{ background: justSaved ? "rgba(34,197,94,0.25)" : `${glowColor}25`, color: justSaved ? "#22c55e" : glowColor, border: `1px solid ${justSaved ? "#22c55e" : glowColor}50` }}>
+                  {justSaved ? "✓ Saved!" : "💾 Save Lineup"}
+                </button>
               </div>
 
               {formation === "Custom" && (
                 <div className={`mb-3 p-3 rounded-xl text-xs ${ui.muted}`} style={{ background: theme === "aurora" ? "rgba(168,85,247,0.06)" : "rgba(255,255,255,0.03)" }}>
-                  Click empty pitch space to add a slot. Drag slots to reposition. Click a slot's position label to change it.
+                  Click empty pitch space to add a slot ({customSlots.length}/11). Click a slot's position label to change it.
                   <div className="mt-2">
                     <button onClick={() => setCustomSlots([{slot:"GK",x:50,y:90}])}
                       className="px-2 py-1 rounded-lg text-[10px] font-black" style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}>
@@ -478,6 +489,7 @@ export default function SquadPage() {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const x = ((e.clientX - rect.left) / rect.width) * 100;
                   const y = ((e.clientY - rect.top) / rect.height) * 100;
+                  if (customSlots.length >= 11) return; // максимум 11 игроков (включая GK)
                   const newSlot = `S${customSlots.length}`;
                   setCustomSlots(prev => [...prev, { slot: newSlot, x, y }]);
                 }}>

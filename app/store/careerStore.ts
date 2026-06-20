@@ -8,12 +8,14 @@ interface CareerState {
   seasonId:        string | null;
   matchday:        number;
   lineup:          Record<string, any>;
+  lineupsByFormation: Record<string, Record<string, any>>;
   formation:       string;
   setSelectedClub:   (club: any)              => void;
   setSelectedLeague: (league: any)            => void;
   setSeasonId:       (id: string)             => void;
   setMatchday:       (day: number)            => void;
   setLineup:         (lineup: Record<string, any>) => void;
+  setLineupForFormation: (formation: string, lineup: Record<string, any>) => void;
   setFormation:      (f: string)              => void;
   tactic:        string;
   setTactic:     (t: string)              => void;
@@ -30,6 +32,7 @@ export const useCareerStore = create<CareerState>()(
       seasonId:       null,
       matchday:       1,
       lineup:         {},
+      lineupsByFormation: {},
       formation:      "4-3-3",
       tactic:        "Balanced",
       customTactic:  { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
@@ -38,6 +41,10 @@ export const useCareerStore = create<CareerState>()(
       setSeasonId:       (id)      => set({ seasonId: id }),
       setMatchday:       (day)     => set({ matchday: day }),
       setLineup:         (lineup)  => set({ lineup }),
+      setLineupForFormation: (formation, lineup) => set(state => ({
+        lineupsByFormation: { ...state.lineupsByFormation, [formation]: lineup },
+        lineup,
+      })),
       setFormation:      (f)       => set({ formation: f }),
       setTactic:         (t)       => set({ tactic: t }),
       setCustomTactic:   (c)       => set({ customTactic: c }),

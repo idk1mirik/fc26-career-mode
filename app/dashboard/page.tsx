@@ -224,6 +224,7 @@ export default function DashboardPage() {
   const setMatchday    = useCareerStore(s => s.setMatchday);
   const tactic         = useCareerStore(s => s.tactic) || "Balanced";
   const customTactic   = useCareerStore(s => s.customTactic);
+  const lineup         = useCareerStore(s => s.lineup);
   const setSeasonId    = useCareerStore(s => s.setSeasonId);
 
   const [hydrated, setHydrated]     = useState(false);
@@ -268,7 +269,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/season/advance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic, userCustomTactic: tactic === "Custom" ? customTactic : undefined }),
+        body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic, userCustomTactic: tactic === "Custom" ? customTactic : undefined, userLineup: Object.values(lineup || {}).filter(Boolean) }),
       });
       if (res.ok) {
         const data = await res.json();

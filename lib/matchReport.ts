@@ -5,7 +5,7 @@ export interface MatchEvent {
   type: "goal" | "yellow" | "red" | "substitution" | "injury";
   team: "home" | "away";
   player?: string;
-  player2?: string; // для замен
+  player2?: string; // для замен — кто выходит
 }
 
 function pick<T>(arr: T[]): T | undefined {
@@ -14,7 +14,8 @@ function pick<T>(arr: T[]): T | undefined {
 
 export function generateMatchEvents(
   homeGoals: number, awayGoals: number,
-  homePlayers: any[], awayPlayers: any[]
+  homeStarters: any[], awayStarters: any[],
+  homeBench: any[] = [], awayBench: any[] = []
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const usedMinutes = new Set<number>();
@@ -29,21 +30,21 @@ export function generateMatchEvents(
   const attackers = (players: any[]) =>
     players.filter(p => ["ST","CF","LW","RW"].includes(p.position));
 
-  // Голы
+  // Голы — только из стартового состава
   for (let i = 0; i < homeGoals; i++) {
-    const scorer = pick(attackers(homePlayers)) ?? pick(homePlayers);
+    const scorer = pick(attackers(homeStarters)) ?? pick(homeStarters);
     events.push({ minute: randomMinute(), type: "goal", team: "home", player: scorer?.name ?? "Unknown" });
   }
   for (let i = 0; i < awayGoals; i++) {
-    const scorer = pick(attackers(awayPlayers)) ?? pick(awayPlayers);
+    const scorer = pick(attackers(awayStarters)) ?? pick(awayStarters);
     events.push({ minute: randomMinute(), type: "goal", team: "away", player: scorer?.name ?? "Unknown" });
   }
 
-  // Жёлтые карточки (1-4 случайно)
+  // Жёлтые карточки
   const yellowCount = Math.floor(Math.random() * 4) + 1;
   for (let i = 0; i < yellowCount; i++) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
-    const pool = team === "home" ? homePlayers : awayPlayers;
+    const pool = team === "home" ? homeStarters : awayStarters;
     const player = pick(pool);
     if (player) events.push({ minute: randomMinute(), type: "yellow", team, player: player.name });
   }
@@ -51,18 +52,20 @@ export function generateMatchEvents(
   // Красная карточка (10% шанс)
   if (Math.random() < 0.1) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
-    const pool = team === "home" ? homePlayers : awayPlayers;
+    const pool = team === "home" ? homeStarters : awayStarters;
     const player = pick(pool);
     if (player) events.push({ minute: randomMinute(), type: "red", team, player: player.name });
   }
 
-  // Замены (2-4 за матч после 55-й минуты)
+  // Замены — игрок ИЗ старта уходит, игрок С БЕНЧА выходит
   const subCount = Math.floor(Math.random() * 3) + 2;
   for (let i = 0; i < subCount; i++) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
-    const pool = team === "home" ? homePlayers : awayPlayers;
-    const out = pick(pool);
-    const inP = pick(pool.filter(p => p.name !== out?.name));
+    const startPool = team === "home" ? homeStarters : awayStarters;
+    const benchPool = team === "home" ? homeBench : awayBench;
+    // Не заменяем вратаря
+    const out = pick(startPool.filter(p => p.position !== "GK"));
+    const inP = benchPool.length ? pick(benchPool) : pick(startPool.filter(p => p.name !== out?.name));
     if (out && inP) {
       const minute = Math.floor(Math.random() * 35) + 55;
       events.push({ minute, type: "substitution", team, player: out.name, player2: inP.name });
@@ -72,7 +75,7 @@ export function generateMatchEvents(
   // Травма (15% шанс)
   if (Math.random() < 0.15) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
-    const pool = team === "home" ? homePlayers : awayPlayers;
+    const pool = team === "home" ? homeStarters : awayStarters;
     const player = pick(pool);
     if (player) events.push({ minute: randomMinute(), type: "injury", team, player: player.name });
   }
