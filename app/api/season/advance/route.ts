@@ -2,20 +2,16 @@
 import { supabase } from "@/lib/supabase";
 import { simulateMatchByRating, getClubTactic } from "@/lib/matchEngine";
 import { generateMatchEvents } from "@/lib/matchReport";
+import { getPlayersByClub } from "@/lib/players";
 
 const CLUB_RATINGS: Record<string, number> = {};
 const CLUB_PLAYERS_CACHE: Record<string, any[]> = {};
 
 async function getClubPlayers(clubId: string): Promise<any[]> {
   if (CLUB_PLAYERS_CACHE[clubId]) return CLUB_PLAYERS_CACHE[clubId];
-  try {
-    const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-    const res = await fetch(`${base}/api/players?club=${encodeURIComponent(clubId)}`);
-    if (!res.ok) return [];
-    const players = await res.json();
-    CLUB_PLAYERS_CACHE[clubId] = players;
-    return players;
-  } catch { return []; }
+  const players = await getPlayersByClub(clubId);
+  CLUB_PLAYERS_CACHE[clubId] = players;
+  return players;
 }
 
 async function getClubRating(clubId: string): Promise<number> {
@@ -63,7 +59,6 @@ export async function POST(req: Request) {
       awayGoals = result.awayGoals;
     }
 
-    // Генерируем Match Report
     const homePlayers = await getClubPlayers(fix.home_club);
     const awayPlayers = await getClubPlayers(fix.away_club);
     const events = generateMatchEvents(homeGoals, awayGoals, homePlayers, awayPlayers);

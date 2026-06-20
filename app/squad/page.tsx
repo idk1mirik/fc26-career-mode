@@ -96,6 +96,25 @@ const POS_GROUP: Record<string, string> = {
   LW: "Attackers", RW: "Attackers", CF: "Attackers", ST: "Attackers",
 };
 
+// Определяем допустимые позиции по зоне клика на поле (y: 0=атака, 100=вратарь)
+function getZonePositions(x: number, y: number): string[] {
+  if (y >= 85) return ["GK"];
+  if (y >= 60) {
+    if (x <= 25) return ["LB","LWB","CB"];
+    if (x >= 75) return ["RB","RWB","CB"];
+    return ["CB","SW"];
+  }
+  if (y >= 35) {
+    if (x <= 20) return ["LM","LW","LWB"];
+    if (x >= 80) return ["RM","RW","RWB"];
+    return ["CM","CDM","CAM"];
+  }
+  // Атакующая треть
+  if (x <= 25) return ["LW","LF","LM"];
+  if (x >= 75) return ["RW","RF","RM"];
+  return ["ST","CF","CAM"];
+}
+
 function pickBest(players: any[], positions: string[], used: Set<string>): any | null {
   for (const pos of positions) {
     const match = players
@@ -107,24 +126,42 @@ function pickBest(players: any[], positions: string[], used: Set<string>): any |
 }
 
 // ─── PITCH SLOT ───────────────────────────────────────────────────────────────
-const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpen, onRemove, onDrop, isDragging, setDragging }: {
+const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpen, onRemove, onDrop, isDragging, setDragging, isCustom, customPos, onPickPosition, onDeleteCustomSlot, onMoveCustomSlot }: {
   slot: string; player: any | null; x: number; y: number; glowColor: string;
   onOpen: (p: any) => void; onRemove: (slot: string) => void;
   onDrop: (slot: string, p: any) => void;
   isDragging: any; setDragging: (p: any) => void;
+  isCustom?: boolean; customPos?: string;
+  onPickPosition?: (slot: string) => void;
+  onDeleteCustomSlot?: (slot: string) => void;
+  onMoveCustomSlot?: (slot: string, x: number, y: number) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
-  const realPos = POS_PRIORITY[slot]?.[0] ?? slot;
+  const realPos = isCustom ? (customPos || "CM") : (POS_PRIORITY[slot]?.[0] ?? slot);
   const ovr = player ? getAdjustedOverall(player, realPos) : null;
   const isPenalized = player && ovr !== null && ovr < (player.overall ?? 0) - 2;
+  const displayLabel = isCustom ? (customPos || "?") : slot;
+
+  const handlePitchSlotDrag = (e: React.DragEvent) => {
+    if (isCustom && onMoveCustomSlot) {
+      e.dataTransfer.setData("customSlotMove", slot);
+    }
+  };
 
   return (
     <div style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%,-50%)", zIndex: 10 }}
+      onClick={e => e.stopPropagation()}
       onDragOver={e => e.preventDefault()}
-      onDrop={() => { if (isDragging) onDrop(slot, isDragging); }}>
+      onDrop={e => {
+        e.stopPropagation();
+        if (isDragging) onDrop(slot, isDragging);
+      }}>
       <div className="flex flex-col items-center gap-0.5 cursor-pointer group/slot"
-        draggable={!!player}
-        onDragStart={() => setDragging(player)}
+        draggable
+        onDragStart={e => {
+          if (player) setDragging(player);
+          handlePitchSlotDrag(e);
+        }}
         onDragEnd={() => setDragging(null)}>
 
         {/* Circle */}
@@ -136,10 +173,15 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
               ? <img src={getPlayerPhoto(player.name)} alt={player.name} className="w-16 h-16 object-contain" onError={() => setImgErr(true)} />
               : <div className="w-full h-full flex items-center justify-center text-white/30 text-lg">{player ? "👤" : "+"}</div>}
           </div>
-          {/* Remove btn */}
+          {/* Remove player btn */}
           {player && (
             <button onClick={e => { e.stopPropagation(); onRemove(slot); }}
               className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black hidden group-hover/slot:flex items-center justify-center shadow">✕</button>
+          )}
+          {/* Delete custom slot btn */}
+          {isCustom && onDeleteCustomSlot && (
+            <button onClick={e => { e.stopPropagation(); onDeleteCustomSlot(slot); }}
+              className="absolute -bottom-1 -left-1 w-4 h-4 rounded-full bg-gray-700 text-white text-[8px] font-black hidden group-hover/slot:flex items-center justify-center shadow">🗑</button>
           )}
         </div>
 
@@ -155,7 +197,10 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onOpe
               </div>
             </>
           ) : (
-            <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>{slot}</div>
+            <div onClick={e => { if (isCustom && onPickPosition) { e.stopPropagation(); onPickPosition(slot); } }}
+              className="text-[10px] font-black px-1.5 py-0.5 rounded" style={{ color: "rgba(255,255,255,0.7)", background: isCustom ? "rgba(34,197,94,0.2)" : "transparent", cursor: isCustom ? "pointer" : "default" }}>
+              {displayLabel}
+            </div>
           )}
         </div>
       </div>
@@ -247,6 +292,9 @@ export default function SquadPage() {
   const [tab, setTab]                   = useState<"lineup"|"squad">("lineup");
   const [lineup, setLineup]             = useState<Record<string, any>>({});
   const [formation, setFormation]       = useState("4-3-3");
+  const [customSlots, setCustomSlots]   = useState<{slot:string,x:number,y:number}[]>([{slot:"GK",x:50,y:90}]);
+  const [editingSlot, setEditingSlot]   = useState<string|null>(null);
+  const [customPositions, setCustomPositions] = useState<Record<string,string>>({GK:"GK"});
   const [dragging, setDragging]         = useState<any>(null);
   const [search, setSearch]             = useState("");
   const [sort, setSort]                 = useState<"overall"|"name"|"age">("overall");
@@ -368,7 +416,7 @@ export default function SquadPage() {
     return g;
   }, [filteredPlayers]);
 
-  const slots = FORMATIONS[formation] ?? FORMATIONS["4-3-3"];
+  const slots = formation === "Custom" ? customSlots : (FORMATIONS[formation] ?? FORMATIONS["4-3-3"]);
 
   if (!hydrated) return null;
 
@@ -397,17 +445,42 @@ export default function SquadPage() {
             <div className="flex-1">
               {/* Formation picker */}
               <div className="flex gap-2 mb-4 flex-wrap">
-                {Object.keys(FORMATIONS).map(f => (
+                {Object.keys(FORMATIONS).filter(f => f !== "Custom").map(f => (
                   <button key={f} onClick={() => handleFormationChange(f)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${formation === f ? ui.tabActive : ui.tabIdle}`}>
                     {f}
                   </button>
                 ))}
+                <button onClick={() => setFormation("Custom")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${formation === "Custom" ? ui.tabActive : ui.tabIdle}`}>
+                  ✏️ Custom
+                </button>
               </div>
+
+              {formation === "Custom" && (
+                <div className={`mb-3 p-3 rounded-xl text-xs ${ui.muted}`} style={{ background: theme === "aurora" ? "rgba(168,85,247,0.06)" : "rgba(255,255,255,0.03)" }}>
+                  Click empty pitch space to add a slot. Drag slots to reposition. Click a slot's position label to change it.
+                  <div className="mt-2">
+                    <button onClick={() => setCustomSlots([{slot:"GK",x:50,y:90}])}
+                      className="px-2 py-1 rounded-lg text-[10px] font-black" style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}>
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Pitch */}
               <div className="relative rounded-2xl overflow-hidden shadow-2xl mx-auto"
-                style={{ aspectRatio: "0.65", background: ui.pitchBg, width: "min(340px, 100%)" }}>
+                style={{ aspectRatio: "0.65", background: ui.pitchBg, width: "min(340px, 100%)" }}
+                onClick={e => {
+                  if (formation !== "Custom") return;
+                  // Игнорируем клики на существующих слотах (они обрабатывают stopPropagation)
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width) * 100;
+                  const y = ((e.clientY - rect.top) / rect.height) * 100;
+                  const newSlot = `S${customSlots.length}`;
+                  setCustomSlots(prev => [...prev, { slot: newSlot, x, y }]);
+                }}>
                 {/* Grass stripes */}
                 <div className="absolute inset-0" style={{
                   backgroundImage: `repeating-linear-gradient(180deg, transparent, transparent 8%, rgba(255,255,255,0.03) 8%, rgba(255,255,255,0.03) 16%)`,
@@ -431,8 +504,36 @@ export default function SquadPage() {
                     x={x} y={y} glowColor={glowColor}
                     onDrop={handleDrop} onOpen={openModal}
                     onRemove={s => setLineup(prev => { const n = {...prev}; delete n[s]; return n; })}
-                    isDragging={dragging} setDragging={setDragging} />
+                    isDragging={dragging} setDragging={setDragging}
+                    isCustom={formation === "Custom"}
+                    customPos={customPositions[slot]}
+                    onPickPosition={s => setEditingSlot(s)}
+                    onDeleteCustomSlot={s => {
+                      setCustomSlots(prev => prev.filter(cs => cs.slot !== s));
+                      setLineup(prev => { const n = {...prev}; delete n[s]; return n; });
+                    }} />
                 ))}
+
+                {/* Position picker overlay for custom slot */}
+                {editingSlot && formation === "Custom" && (() => {
+                  const slotData = customSlots.find(cs => cs.slot === editingSlot);
+                  if (!slotData) return null;
+                  const options = getZonePositions(slotData.x, slotData.y);
+                  return (
+                    <div className="absolute inset-0 flex items-center justify-center z-30" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setEditingSlot(null)}>
+                      <div className="flex flex-wrap gap-2 p-4 rounded-xl max-w-[280px]" style={{ background: "rgba(20,20,30,0.95)" }} onClick={e => e.stopPropagation()}>
+                        {options.map(pos => (
+                          <button key={pos} onClick={() => {
+                            setCustomPositions(prev => ({ ...prev, [editingSlot]: pos }));
+                            setEditingSlot(null);
+                          }} className="px-3 py-1.5 rounded-lg text-xs font-black text-white" style={{ background: `${glowColor}40`, border: `1px solid ${glowColor}` }}>
+                            {pos}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

@@ -30,8 +30,9 @@ const GROUP_DISTANCE: Record<string, Record<string, number>> = {
  * Возвращает множитель 0..1 (1 = нет штрафа).
  */
 export function getPositionPenalty(mainPos: string, altPositions: string[], actualPos: string): number {
+  // Своя основная позиция ИЛИ любая из собственных альтернативных — без штрафа
   if (mainPos === actualPos) return 1.0;
-  if (altPositions?.includes(actualPos)) return 0.95; // небольшой штраф на альт. позиции
+  if (altPositions?.includes(actualPos)) return 1.0;
 
   const mainGroup = POSITION_GROUPS[mainPos] ?? "CM";
   const actualGroup = POSITION_GROUPS[actualPos] ?? "CM";
