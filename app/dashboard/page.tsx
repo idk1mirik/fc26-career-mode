@@ -11,7 +11,6 @@ import {
 import { getLeagueTheme, getOverallColor } from "@/constants/themes";
 import { getClubLogo } from "@/data/clublogos";
 import { getLeagueLogo } from "@/data/leagueLogos";
-import ThemeToggle from "@/components/ThemeToggle";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
 import React from "react";
@@ -368,7 +367,6 @@ export default function DashboardPage() {
               {selectedClub?.name} — Season 2025/26
             </h2>
           </div>
-          <ThemeToggle />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">

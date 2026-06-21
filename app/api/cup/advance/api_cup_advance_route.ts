@@ -88,13 +88,7 @@ export async function POST(req: Request) {
   }
 
   if (pairs.length > 0) {
-    const roundName = getRoundName(
-      pairs.length === 1 ? 1 :
-      pairs.length <= 2 ? 2 :
-      pairs.length <= 4 ? 4 :
-      pairs.length <= 8 ? 8 :
-      16
-    );
+    const roundName = getRoundName(pairs.length);
     const rows = pairs.map(p => ({
       competition_id: competitionId, round: nextRound, round_name: roundName,
       home_club: p.home, away_club: p.away,

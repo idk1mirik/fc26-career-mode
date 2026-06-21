@@ -62,6 +62,8 @@ const THEME_UI = {
     pitchBg: "#0a1f0a",
     pitchLine: "rgba(255,255,255,0.12)",
     font: {},
+    saveBtn: "rounded-xl uppercase tracking-widest font-mono",
+    saveLabel: "Save Lineup", savedLabel: "Saved!",
   },
   aurora: {
     bg: "bg-[#fef6ff]", text: "text-pink-950", muted: "text-pink-900/40",
@@ -74,6 +76,8 @@ const THEME_UI = {
     pitchBg: "#1a3a1a",
     pitchLine: "rgba(255,255,255,0.15)",
     font: { fontFamily: "'Fraunces',serif" },
+    saveBtn: "rounded-full font-black",
+    saveLabel: "Keep this lineup ✦", savedLabel: "Saved with love ✦",
   },
   maleficent: {
     bg: "bg-[#04000a]", text: "text-purple-100", muted: "text-purple-500/40",
@@ -86,6 +90,8 @@ const THEME_UI = {
     pitchBg: "#08001a",
     pitchLine: "rgba(139,92,246,0.25)",
     font: { fontFamily: "'Share Tech Mono',monospace" },
+    saveBtn: "rounded-none uppercase tracking-widest font-mono",
+    saveLabel: ">_ COMMIT_LINEUP.exe", savedLabel: ">_ COMMITTED ✓",
   },
 };
 
@@ -610,9 +616,9 @@ export default function SquadPage() {
                   </button>
                 ))}
                 <button onClick={handleSaveLineup}
-                  className="px-3 py-1.5 rounded-xl text-xs font-black transition-all ml-auto"
+                  className={`px-4 py-1.5 text-xs transition-all ml-auto ${ui.saveBtn}`}
                   style={{ background: justSaved ? "rgba(34,197,94,0.25)" : `${glowColor}25`, color: justSaved ? "#22c55e" : glowColor, border: `1px solid ${justSaved ? "#22c55e" : glowColor}50` }}>
-                  {justSaved ? "✓ Saved!" : "💾 Save Lineup"}
+                  {justSaved ? ui.savedLabel : ui.saveLabel}
                 </button>
               </div>
 
