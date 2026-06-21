@@ -42,15 +42,26 @@ const THEME_UI = {
   },
 };
 
+const COMP_ICON: Record<string, string> = {
+  league: "⚽", domestic_cup: "🏆", super_cup: "⚡", continental: "🌍",
+};
+
+const COMP_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "league", label: "League" },
+  { key: "domestic_cup", label: "Cup" },
+  { key: "continental", label: "Europe" },
+  { key: "super_cup", label: "Super Cup" },
+];
+
 export default function FixturesPage() {
   const router = useRouter();
   const themeRaw = useThemeStore(s => s.theme);
   const seasonId   = useCareerStore(s => s.seasonId);
-  const matchday   = useCareerStore(s => s.matchday);
   const selectedClub = useCareerStore(s => s.selectedClub);
-  const [fixtures, setFixtures]   = useState<any[]>([]);
-  const [activeDay, setActiveDay] = useState<number | null>(null);
-  const [hydrated, setHydrated]   = useState(false);
+  const [matches, setMatches] = useState<any[]>([]);
+  const [filter, setFilter]   = useState("all");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -60,26 +71,30 @@ export default function FixturesPage() {
 
   const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
   const ui    = THEME_UI[theme] ?? THEME_UI.classic;
+  const userClub = selectedClub?.name || "";
 
   useEffect(() => {
     if (!hydrated || !seasonId) return;
-    fetch(`/api/fixtures?seasonId=${seasonId}`)
-      .then(r => r.json()).then(data => {
-        setFixtures(data);
-        setActiveDay(matchday);
-      }).catch(() => {});
-  }, [hydrated, seasonId, matchday]);
+    fetch(`/api/calendar?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
+      .then(r => r.json()).then(data => setMatches(data.matches ?? []))
+      .catch(() => {});
+  }, [hydrated, seasonId, userClub]);
 
-  const matchdays = useMemo(() =>
-    [...new Set(fixtures.map((f: any) => f.matchday))].sort((a: any, b: any) => a - b) as number[],
-    [fixtures]
-  );
-  const shown = useMemo(() =>
-    activeDay ? fixtures.filter((f: any) => f.matchday === activeDay) : [],
-    [fixtures, activeDay]
-  );
+  const filtered = useMemo(() => {
+    if (filter === "all") return matches;
+    return matches.filter(m => m.competition_type === filter);
+  }, [matches, filter]);
 
-  const userClub = selectedClub?.name || "";
+  // Группируем по месяцу для удобной навигации
+  const grouped = useMemo(() => {
+    const g: Record<string, any[]> = {};
+    filtered.forEach(m => {
+      const key = m.match_date ? m.match_date.slice(0, 7) : "TBD";
+      if (!g[key]) g[key] = [];
+      g[key].push(m);
+    });
+    return g;
+  }, [filtered]);
 
   if (!hydrated) return null;
 
@@ -87,52 +102,62 @@ export default function FixturesPage() {
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Fixtures</div>
-          <h1 className="text-2xl font-black">Season 2025/26</h1>
+          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Calendar</div>
+          <h1 className="text-2xl font-black">Season 2025/26 — All Competitions</h1>
         </div>
 
-        {/* Matchday tabs */}
+        {/* Competition filter */}
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
-          {matchdays.map(md => (
-            <button key={md} onClick={() => setActiveDay(md)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${activeDay === md ? ui.tabActive : ui.tabIdle}`}>
-              MD {md}{md === matchday ? " ▶" : ""}
+          {COMP_FILTERS.map(f => (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${filter === f.key ? ui.tabActive : ui.tabIdle}`}>
+              {COMP_ICON[f.key] ?? "📋"} {f.label}
             </button>
           ))}
         </div>
 
-        {/* Matches */}
-        <div className={`rounded-2xl overflow-hidden ${ui.card}`}>
-          {shown.length === 0 && (
-            <div className={`text-center py-10 ${ui.muted} text-sm`}>No fixtures</div>
-          )}
-          {(shown as any[]).map((f, i) => {
-            const isUser = f.home_club === userClub || f.away_club === userClub;
-            const played = f.played;
-            const dateStr = f.match_date
-              ? new Date(f.match_date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
-              : `MD ${f.matchday}`;
-            return (
-              <div key={f.id}
-                className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
-                <div className={`text-[10px] leading-tight ${ui.muted} sm:w-20 sm:shrink-0`}>{dateStr}</div>
-                <div className="flex items-center justify-between gap-2 sm:flex-1">
-                  <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-end min-w-0">
-                    <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
-                    <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+        {Object.keys(grouped).length === 0 && (
+          <div className={`text-center py-10 ${ui.muted} text-sm`}>No matches found</div>
+        )}
+
+        {Object.entries(grouped).map(([month, monthMatches]) => (
+          <div key={month} className="mb-6">
+            <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>
+              {month === "TBD" ? "Date TBD" : new Date(month + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+            </div>
+            <div className={`rounded-2xl overflow-hidden ${ui.card}`}>
+              {monthMatches.map((f, i) => {
+                const isUser = f.home_club === userClub || f.away_club === userClub;
+                const played = f.played;
+                const dateStr = f.match_date
+                  ? new Date(f.match_date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })
+                  : "TBD";
+                return (
+                  <div key={f.id}
+                    className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
+                    <div className={`text-[10px] leading-tight ${ui.muted} sm:w-24 sm:shrink-0 flex items-center gap-1`}>
+                      <span>{COMP_ICON[f.competition_type] ?? "⚽"}</span>
+                      <span>{dateStr} · {f.competition_name}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 sm:flex-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-end min-w-0">
+                        <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
+                        <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                      </div>
+                      <div className={`w-14 sm:w-16 text-center font-black text-xs sm:text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
+                        {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
+                      </div>
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-start min-w-0">
+                        <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                        <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className={`w-14 sm:w-16 text-center font-black text-xs sm:text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
-                    {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
-                  </div>
-                  <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-start min-w-0">
-                    <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
-                    <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </DashboardLayout>
   );

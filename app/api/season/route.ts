@@ -5,6 +5,9 @@
 import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
 import { simulateMatchByRating } from "@/lib/matchEngine";
+import { createSeasonCompetitions } from "@/lib/createCompetitions";
+
+import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 
 // round-robin расписание
 function buildFixtures(clubs: string[], seasonId: string) {
@@ -15,13 +18,7 @@ function buildFixtures(clubs: string[], seasonId: string) {
   const half = list.length / 2;
   const rounds = list.length - 1;
 
-  // Сезон начинается 1 августа, каждый тур через 7 дней
-  const seasonStart = new Date("2025-08-01");
-  const matchdayDate = (md: number) => {
-    const d = new Date(seasonStart);
-    d.setDate(d.getDate() + (md - 1) * 7);
-    return d.toISOString().split("T")[0];
-  };
+  const matchdayDate = (md: number) => getLeagueMatchdayDate(md);
 
   for (let round = 0; round < rounds; round++) {
     const matchday = round + 1;
@@ -72,6 +69,11 @@ export async function POST(req: Request) {
   const standingsRows = clubs.map(c => ({ season_id: season.id, club_id: c }));
   const { error: stErr } = await supabase.from("standings").insert(standingsRows);
   if (stErr) return Response.json({ error: stErr.message }, { status: 500 });
+
+  // Создаём кубки/евро-кубки/суперкубок для этого сезона
+  try {
+    await createSeasonCompetitions(season.id, league.name);
+  } catch (e) { console.error("Competition creation failed", e); }
 
   return Response.json({ seasonId: season.id });
 }

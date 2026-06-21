@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award } from "lucide-react";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useThemeStore } from "@/app/store/themeStore";
@@ -15,6 +15,7 @@ const NAV = [
   { label: "Transfers",    icon: ArrowRightLeft,  href: "/transfers" },
   { label: "Fixtures",     icon: CalendarDays,    href: "/fixtures" },
   { label: "League Table", icon: Trophy,          href: "/table" },
+  { label: "Cups",         icon: Award,           href: "/cups" },
 ];
 
 const SIDEBAR = {
