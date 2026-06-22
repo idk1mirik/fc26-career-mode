@@ -9,6 +9,8 @@ import {
   ArrowRightLeft, Coins, ChevronRight, Zap, Star, Shield,
 } from "lucide-react";
 import { getLeagueTheme, getOverallColor } from "@/constants/themes";
+import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
+import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 import { getClubLogo } from "@/data/clublogos";
 import { getLeagueLogo } from "@/data/leagueLogos";
 import { useThemeStore } from "@/app/store/themeStore";
@@ -170,6 +172,11 @@ const EVENT_ICON: Record<string, string> = {
 
 function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; theme: string; onClose: () => void }) {
   const events = fix.events ?? [];
+  const ratings = fix.ratings ?? { home: [], away: [] };
+  const [tab, setTab] = useState<"events" | "ratings">("events");
+
+  const ratingColor = (r: number) => r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
+
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} onClick={onClose}>
       <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card}`} onClick={e => e.stopPropagation()}>
@@ -177,7 +184,7 @@ function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; them
           <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Match Report</div>
           <button onClick={onClose} className={`text-lg ${ui.muted}`}>✕</button>
         </div>
-        <div className="flex items-center justify-center gap-4 mb-6">
+        <div className="flex items-center justify-center gap-4 mb-5">
           <div className="flex flex-col items-center gap-1">
             <img src={getClubLogo(fix.home_club)} alt="" className="w-10 h-10 object-contain" />
             <span className={`text-xs font-bold ${ui.text}`}>{fix.home_club}</span>
@@ -188,23 +195,58 @@ function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; them
             <span className={`text-xs font-bold ${ui.text}`}>{fix.away_club}</span>
           </div>
         </div>
-        <div className="space-y-2">
-          {events.length === 0 && <div className={`text-center text-sm ${ui.muted} py-4`}>No events recorded</div>}
-          {events.map((e: any, i: number) => (
-            <div key={i} className={`flex items-center gap-3 py-2 px-3 rounded-xl ${ui.tableRow}`}>
-              <span className={`text-xs font-black w-8 ${ui.muted}`}>{e.minute}'</span>
-              <span className="text-base">{EVENT_ICON[e.type] ?? "•"}</span>
-              <div className="flex-1">
-                <div className={`text-sm font-bold ${ui.text}`}>
-                  {e.type === "substitution" ? `${e.player2} ↔ ${e.player}` : e.player}
-                </div>
-                <div className={`text-[10px] ${ui.muted} capitalize`}>
-                  {e.team === "home" ? fix.home_club : fix.away_club} · {e.type}
+
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setTab("events")}
+            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${tab === "events" ? ui.tabActive : ui.tabIdle}`}>
+            Events
+          </button>
+          <button onClick={() => setTab("ratings")}
+            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${tab === "ratings" ? ui.tabActive : ui.tabIdle}`}>
+            Player Ratings
+          </button>
+        </div>
+
+        {tab === "events" && (
+          <div className="space-y-2">
+            {events.length === 0 && <div className={`text-center text-sm ${ui.muted} py-4`}>No events recorded</div>}
+            {events.map((e: any, i: number) => (
+              <div key={i} className={`flex items-center gap-3 py-2 px-3 rounded-xl ${ui.tableRow}`}>
+                <span className={`text-xs font-black w-8 ${ui.muted}`}>{e.minute}'</span>
+                <span className="text-base">{EVENT_ICON[e.type] ?? "•"}</span>
+                <div className="flex-1">
+                  <div className={`text-sm font-bold ${ui.text}`}>
+                    {e.type === "substitution" ? `${e.player2} ↔ ${e.player}` : e.player}
+                  </div>
+                  <div className={`text-[10px] ${ui.muted} capitalize`}>
+                    {e.team === "home" ? fix.home_club : fix.away_club} · {e.type}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "ratings" && (
+          <div className="space-y-4">
+            {[{ label: fix.home_club, list: ratings.home ?? [] }, { label: fix.away_club, list: ratings.away ?? [] }].map(({ label, list }) => (
+              <div key={label}>
+                <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>{label}</div>
+                <div className="space-y-1">
+                  {list.length === 0 && <div className={`text-xs ${ui.muted}`}>No data</div>}
+                  {[...list].sort((a: any, b: any) => b.rating - a.rating).map((p: any, i: number) => (
+                    <div key={i} className={`flex items-center justify-between py-1.5 px-2 rounded-lg ${ui.tableRow}`}>
+                      <span className={`text-sm font-bold ${ui.text}`}>{p.name}</span>
+                      <span className="text-sm font-black px-2 py-0.5 rounded-md" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
+                        {p.rating.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -224,6 +266,8 @@ export default function DashboardPage() {
   const tactic         = useCareerStore(s => s.tactic) || "Balanced";
   const customTactic   = useCareerStore(s => s.customTactic);
   const lineup         = useCareerStore(s => s.lineup);
+  const lineupValid    = isLineupValid(lineup);
+  const lineupCount    = getLineupCount(lineup);
   const formation       = useCareerStore(s => s.formation) || "4-3-3";
   const setFormation     = useCareerStore(s => s.setFormation);
   const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
@@ -239,6 +283,7 @@ export default function DashboardPage() {
   const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
+  const [simulatingCup, setSimulatingCup] = useState(false);
 
   useEffect(() => { setHydrated(true); }, []);
   useEffect(() => {
@@ -283,6 +328,19 @@ export default function DashboardPage() {
     return calendar.find(m => !m.played) ?? null;
   }, [calendar]);
 
+  // Симуляция кубкового раунда
+  const advanceCupRound = async () => {
+    if (!nextMatch?.competition_id || simulatingCup || !lineupValid) return;
+    setSimulatingCup(true);
+    try {
+      const res = await fetch("/api/cup/advance", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitionId: nextMatch.competition_id, userClubId: userClub, userTactic: tactic, userLineup: Object.values(lineup || {}).filter(Boolean) }),
+      });
+      if (res.ok) await loadCalendar(seasonId!, userClub);
+    } catch (e) { console.error(e); }
+    setSimulatingCup(false);
+  };
 
 
   // Симуляция тура
@@ -359,24 +417,36 @@ export default function DashboardPage() {
           {/* LEFT: fixtures + simulate */}
           <div className="xl:col-span-3 space-y-5 fade-in">
 
-            {/* Next Match — read-only preview. Симуляция доступна только на /fixtures и /cups */}
-            {seasonId && nextMatch && (
-              <div className={`p-5 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
-                <div className={`${ui.subLabel} mb-1.5 flex items-center gap-2`}>
-                  <span>{nextMatch.source === "cup" ? "🏆" : "⚽"} Next: {nextMatch.competition_name}</span>
+            {/* Next Match — показывает кубковый матч если его очередь пришла; для лиги используется отдельный блок ниже */}
+            {seasonId && nextMatch && nextMatch.source === "cup" && (() => {
+              const careerDate = getLeagueMatchdayDate(matchday);
+              const isReady = !nextMatch.match_date || nextMatch.match_date <= careerDate;
+              return (
+                <div className={`p-5 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
+                  <div className={`${ui.subLabel} mb-1.5 flex items-center gap-2`}>
+                    <span>🏆 {nextMatch.competition_name} — {nextMatch.round_name}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className={`text-base font-black ${ui.text} flex items-center gap-2`}>
+                      <img src={getClubLogo(nextMatch.home_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                      {nextMatch.home_club} vs {nextMatch.away_club}
+                      <img src={getClubLogo(nextMatch.away_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                    </div>
+                    {isReady ? (
+                      <button onClick={advanceCupRound} disabled={simulatingCup || !lineupValid}
+                        className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 disabled:opacity-50 ${ui.btnPrimary}`}>
+                        <Zap size={13} />
+                        {simulatingCup ? "Simulating…" : "Play Match"}
+                      </button>
+                    ) : (
+                      <span className={`text-[10px] ${ui.muted}`}>
+                        🔒 {new Date(nextMatch.match_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className={`text-base font-black ${ui.text} flex items-center gap-2`}>
-                  <img src={getClubLogo(nextMatch.home_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                  {nextMatch.home_club} vs {nextMatch.away_club}
-                  <img src={getClubLogo(nextMatch.away_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                </div>
-                <div className={`text-xs mt-1 ${ui.muted}`}>
-                  {nextMatch.round_name ?? `Matchday ${nextMatch.matchday}`}
-                  {nextMatch.match_date ? ` · ${new Date(nextMatch.match_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
-                  {" · "}<Link href={nextMatch.source === "cup" ? "/cups" : "/fixtures"} className="underline">Go play →</Link>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Simulate button (League) */}
             {!seasonId ? (
@@ -391,12 +461,17 @@ export default function DashboardPage() {
                     <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
                     <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
                   </div>
-                  <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played)}
+                  <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played) || !lineupValid}
                     className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
                     <Zap size={16} />
                     {simulating ? "Simulating…" : "Simulate Matchday"}
                   </button>
                 </div>
+                {!lineupValid && (
+                  <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+                    ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play ({lineupCount}/{MIN_LINEUP_SIZE} selected). <Link href="/squad" className="underline">Set up your Squad →</Link>
+                  </div>
+                )}
                 {/* Choose lineup for this matchday */}
                 <div className="flex items-center gap-2 flex-wrap pt-3 border-t" style={{ borderColor: theme === "classic" ? "rgba(255,255,255,0.05)" : theme === "aurora" ? "#fce7f3" : "rgba(139,92,246,0.15)" }}>
                   <span className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Lineup:</span>

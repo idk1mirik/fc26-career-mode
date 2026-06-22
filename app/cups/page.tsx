@@ -7,6 +7,7 @@ import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { Trophy, Zap, Lock } from "lucide-react";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
+import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 
 const THEME_UI = {
   classic: {
@@ -52,6 +53,9 @@ export default function CupsPage() {
   const userClub        = useCareerStore(s => s.selectedClub)?.name || "";
   const tactic          = useCareerStore(s => s.tactic) || "Balanced";
   const currentMatchday = useCareerStore(s => s.matchday) || 1;
+  const lineup           = useCareerStore(s => s.lineup);
+  const lineupValid       = isLineupValid(lineup);
+  const lineupCount       = getLineupCount(lineup);
   const [hydrated, setHydrated] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
@@ -82,11 +86,12 @@ export default function CupsPage() {
   }, [hydrated, seasonId]);
 
   const advanceCup = async (competitionId: string) => {
+    if (!lineupValid) return;
     setSimulating(competitionId);
     try {
       const res = await fetch("/api/cup/advance", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionId, userClubId: userClub, userTactic: tactic }),
+        body: JSON.stringify({ competitionId, userClubId: userClub, userTactic: tactic, userLineup: Object.values(lineup || {}).filter(Boolean) }),
       });
       if (res.ok) await loadData();
     } catch (e) { console.error(e); }
@@ -102,6 +107,12 @@ export default function CupsPage() {
           <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Cups & Trophies</div>
           <h1 className="text-2xl font-black">Cups, Super Cups & Continental</h1>
         </div>
+
+        {!lineupValid && (
+          <div className="mb-5 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+            ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play matches ({lineupCount}/{MIN_LINEUP_SIZE} selected).
+          </div>
+        )}
 
         {!seasonId ? (
           <div className={`p-6 rounded-2xl text-center ${ui.card}`}>
@@ -148,7 +159,7 @@ export default function CupsPage() {
                         );
                       }
                       return (
-                        <button onClick={() => advanceCup(comp.id)} disabled={simulating === comp.id}
+                        <button onClick={() => advanceCup(comp.id)} disabled={simulating === comp.id || !lineupValid}
                           className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all disabled:opacity-50 ${ui.btnPrimary}`}>
                           <Zap size={13} />
                           {simulating === comp.id ? "Simulating…" : "Simulate Round"}

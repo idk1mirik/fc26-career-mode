@@ -17,7 +17,12 @@ async function getRating(clubId: string): Promise<number> {
 }
 
 export async function POST(req: Request) {
-  const { competitionId, userClubId, userHomeGoals, userAwayGoals, userTactic } = await req.json();
+  const { competitionId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
+
+  // Запрещаем играть с неполным составом
+  if (userLineup && userLineup.filter(Boolean).length < 11) {
+    return Response.json({ error: "Your lineup must have at least 11 players to play a match." }, { status: 400 });
+  }
 
   const { data: comp } = await supabase.from("competitions").select("*").eq("id", competitionId).single();
   if (!comp || comp.status === "finished") return Response.json({ error: "Competition not found or finished" }, { status: 404 });

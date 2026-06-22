@@ -2,6 +2,7 @@
 import { supabase } from "@/lib/supabase";
 import { simulateMatchByRating, getClubTactic } from "@/lib/matchEngine";
 import { generateMatchEvents } from "@/lib/matchReport";
+import { generateMatchRatings } from "@/lib/playerRatings";
 import { getPlayersByClub } from "@/lib/players";
 
 const CLUB_RATINGS: Record<string, number> = {};
@@ -99,6 +100,11 @@ async function upsertStatus(seasonId: string, clubId: string, playerName: string
 export async function POST(req: Request) {
   const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
 
+  // Запрещаем играть с неполным составом (минимум 11 игроков)
+  if (userLineup && userLineup.filter(Boolean).length < 11) {
+    return Response.json({ error: "Your lineup must have at least 11 players to play a match." }, { status: 400 });
+  }
+
   const { data: season, error: sErr } = await supabase
     .from("seasons").select("*").eq("id", seasonId).single();
   if (sErr) return Response.json({ error: "Season not found" }, { status: 404 });
@@ -159,18 +165,19 @@ export async function POST(req: Request) {
     const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
 
     const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
+    const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events);
 
     await supabase.from("fixtures").update({
       home_goals: homeGoals, away_goals: awayGoals,
       played: true, played_at: new Date().toISOString(),
-      events,
+      events, ratings,
     }).eq("id", fix.id);
 
     // Применяем новые травмы/карточки
     await applyEventStatuses(seasonId, fix.home_club, events, "home");
     await applyEventStatuses(seasonId, fix.away_club, events, "away");
 
-    results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, events, fixtureId: fix.id });
+    results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, events, ratings, fixtureId: fix.id });
 
     for (const [clubId, isHome] of [[fix.home_club, true], [fix.away_club, false]] as [string, boolean][]) {
       const goals   = isHome ? homeGoals : awayGoals;
