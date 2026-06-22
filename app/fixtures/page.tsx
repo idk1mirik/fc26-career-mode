@@ -74,7 +74,7 @@ export default function FixturesPage() {
   const userClub = selectedClub?.name || "";
 
   useEffect(() => {
-    if (!hydrated || !seasonId) return;
+    if (!hydrated || !seasonId || !userClub) return;
     fetch(`/api/calendar?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
       .then(r => r.json()).then(data => setMatches(data.matches ?? []))
       .catch(() => {});
