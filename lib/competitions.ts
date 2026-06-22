@@ -1,31 +1,34 @@
-// lib/competitions.ts — определения турниров: реальные составы евро-кубков сезона 2025/26,
-// внутренние кубки, суперкубки, призовые.
+// lib/competitions.ts — определения турниров с реальными форматами под каждую страну
 
 export interface CompetitionDef {
   name: string;
   type: "domestic_cup" | "super_cup" | "continental";
-  format: "knockout" | "single_match";
+  format: "knockout" | "single_match" | "semis_final";
   prizeWinner: number;
   prizeRunner: number;
   prizeParticipation: number;
+  season: "summer" | "winter"; // когда проходит
 }
 
 // ─── Внутренние кубки ────────────────────────────────────────────────────────
 export const DOMESTIC_CUPS: Record<string, CompetitionDef> = {
-  "Premier League": { name: "FA Cup", type: "domestic_cup", format: "knockout", prizeWinner: 2_000_000, prizeRunner: 1_000_000, prizeParticipation: 100_000 },
-  "LALIGA EA SPORTS": { name: "Copa del Rey", type: "domestic_cup", format: "knockout", prizeWinner: 1_800_000, prizeRunner: 900_000, prizeParticipation: 100_000 },
-  "Bundesliga": { name: "DFB-Pokal", type: "domestic_cup", format: "knockout", prizeWinner: 1_500_000, prizeRunner: 750_000, prizeParticipation: 80_000 },
-  "Serie A Enilive": { name: "Coppa Italia", type: "domestic_cup", format: "knockout", prizeWinner: 1_500_000, prizeRunner: 750_000, prizeParticipation: 80_000 },
-  "Ligue 1 McDonald's": { name: "Coupe de France", type: "domestic_cup", format: "knockout", prizeWinner: 1_200_000, prizeRunner: 600_000, prizeParticipation: 60_000 },
+  "Premier League": { name: "FA Cup", type: "domestic_cup", format: "knockout", prizeWinner: 2_000_000, prizeRunner: 1_000_000, prizeParticipation: 100_000, season: "winter" },
+  "LALIGA EA SPORTS": { name: "Copa del Rey", type: "domestic_cup", format: "knockout", prizeWinner: 1_800_000, prizeRunner: 900_000, prizeParticipation: 100_000, season: "winter" },
+  "Bundesliga": { name: "DFB-Pokal", type: "domestic_cup", format: "knockout", prizeWinner: 1_500_000, prizeRunner: 750_000, prizeParticipation: 80_000, season: "winter" },
+  "Serie A Enilive": { name: "Coppa Italia", type: "domestic_cup", format: "knockout", prizeWinner: 1_500_000, prizeRunner: 750_000, prizeParticipation: 80_000, season: "winter" },
+  "Ligue 1 McDonald's": { name: "Coupe de France", type: "domestic_cup", format: "knockout", prizeWinner: 1_200_000, prizeRunner: 600_000, prizeParticipation: 60_000, season: "winter" },
 };
 
-// ─── Суперкубки (1 матч) ─────────────────────────────────────────────────────
+// ─── Суперкубки — РЕАЛЬНЫЕ форматы под страну ───────────────────────────────
+// England: 1 матч, лето (перед стартом сезона)
+// Spain: 4 команды, 2 полуфинала + финал, январь
+// Germany/Italy/France: 1 матч, лето
 export const SUPER_CUPS: Record<string, CompetitionDef> = {
-  "Premier League": { name: "Community Shield", type: "super_cup", format: "single_match", prizeWinner: 1_000_000, prizeRunner: 500_000, prizeParticipation: 0 },
-  "LALIGA EA SPORTS": { name: "Supercopa de España", type: "super_cup", format: "single_match", prizeWinner: 1_000_000, prizeRunner: 500_000, prizeParticipation: 0 },
-  "Bundesliga": { name: "DFL-Supercup", type: "super_cup", format: "single_match", prizeWinner: 800_000, prizeRunner: 400_000, prizeParticipation: 0 },
-  "Serie A Enilive": { name: "Supercoppa Italiana", type: "super_cup", format: "single_match", prizeWinner: 800_000, prizeRunner: 400_000, prizeParticipation: 0 },
-  "Ligue 1 McDonald's": { name: "Trophée des Champions", type: "super_cup", format: "single_match", prizeWinner: 700_000, prizeRunner: 350_000, prizeParticipation: 0 },
+  "Premier League":      { name: "Community Shield",       type: "super_cup", format: "single_match", prizeWinner: 1_000_000, prizeRunner: 500_000, prizeParticipation: 0, season: "summer" },
+  "LALIGA EA SPORTS":    { name: "Supercopa de España",    type: "super_cup", format: "semis_final",  prizeWinner: 1_000_000, prizeRunner: 500_000, prizeParticipation: 250_000, season: "winter" },
+  "Bundesliga":          { name: "DFL-Supercup",           type: "super_cup", format: "single_match", prizeWinner: 800_000, prizeRunner: 400_000, prizeParticipation: 0, season: "summer" },
+  "Serie A Enilive":     { name: "Supercoppa Italiana",    type: "super_cup", format: "single_match", prizeWinner: 800_000, prizeRunner: 400_000, prizeParticipation: 0, season: "summer" },
+  "Ligue 1 McDonald's":  { name: "Trophée des Champions",  type: "super_cup", format: "single_match", prizeWinner: 700_000, prizeRunner: 350_000, prizeParticipation: 0, season: "summer" },
 };
 
 export const TOP5_LEAGUES = [
@@ -33,7 +36,6 @@ export const TOP5_LEAGUES = [
 ];
 
 // ─── Реальные составы евро-кубков сезона 2025/26 ────────────────────────────
-// Имена точно соответствуют твоей базе data/leagues.json
 export const CHAMPIONS_LEAGUE_CLUBS_2025 = [
   "Paris SG", "Real Madrid", "FC Barcelona", "Arsenal", "Liverpool", "Manchester City",
   "Chelsea", "Spurs", "Newcastle Utd", "Lombardia FC", "SSC Napoli", "Bergamo Calcio", "Juventus",
@@ -61,21 +63,19 @@ export const CONFERENCE_LEAGUE_CLUBS_2025 = [
   "Crystal Palace", "Fiorentina", "FC Lorient",
 ];
 
-// Призовые евро-кубков
 export const CHAMPIONS_LEAGUE: CompetitionDef = {
   name: "Champions League", type: "continental", format: "knockout",
-  prizeWinner: 20_000_000, prizeRunner: 12_500_000, prizeParticipation: 3_500_000,
+  prizeWinner: 20_000_000, prizeRunner: 12_500_000, prizeParticipation: 3_500_000, season: "winter",
 };
 export const EUROPA_LEAGUE: CompetitionDef = {
   name: "Europa League", type: "continental", format: "knockout",
-  prizeWinner: 8_000_000, prizeRunner: 5_000_000, prizeParticipation: 1_000_000,
+  prizeWinner: 8_000_000, prizeRunner: 5_000_000, prizeParticipation: 1_000_000, season: "winter",
 };
 export const CONFERENCE_LEAGUE: CompetitionDef = {
   name: "Europa Conference League", type: "continental", format: "knockout",
-  prizeWinner: 4_000_000, prizeRunner: 2_500_000, prizeParticipation: 500_000,
+  prizeWinner: 4_000_000, prizeRunner: 2_500_000, prizeParticipation: 500_000, season: "winter",
 };
 
-// Призовые за финальное место в лиге
 export function getLeaguePositionPrize(position: number, totalClubs: number): number {
   if (position === 1) return 5_000_000;
   if (position <= 4) return 3_000_000;

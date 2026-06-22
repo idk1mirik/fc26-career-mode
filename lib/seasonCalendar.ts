@@ -21,8 +21,16 @@ function domesticCupDate(round: number): string {
   return start.toISOString().split("T")[0];
 }
 
-function superCupDate(): string {
-  return "2025-08-10"; // суперкубок традиционно перед стартом сезона
+// Суперкубок: разные даты под формат и страну
+function superCupDate(leagueName?: string): string {
+  if (leagueName === "LALIGA EA SPORTS") return "2026-01-08"; // Испания играет зимой
+  return "2025-08-10"; // остальные — летом перед стартом сезона
+}
+
+// Суперкубок Испании — 2 полуфинала + финал с разницей в несколько дней
+function superCupRoundDate(round: number): string {
+  const dates = ["2026-01-08", "2026-01-11"]; // полуфиналы → финал
+  return dates[Math.min(round - 1, dates.length - 1)];
 }
 
 export function getEuroCupRoundDate(comp: "champions_league" | "europa_league" | "conference_league", round: number): string {
@@ -34,8 +42,12 @@ export function getDomesticCupRoundDate(round: number): string {
   return domesticCupDate(round);
 }
 
-export function getSuperCupDate(): string {
-  return superCupDate();
+export function getSuperCupDate(leagueName?: string): string {
+  return superCupDate(leagueName);
+}
+
+export function getSuperCupRoundDate(round: number): string {
+  return superCupRoundDate(round);
 }
 
 // Сезон лиги начинается 16 августа (типичный старт топ-5 лиг), каждый тур через 7 дней

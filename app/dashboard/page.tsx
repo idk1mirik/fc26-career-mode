@@ -239,7 +239,6 @@ export default function DashboardPage() {
   const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
-  const [simulatingCup, setSimulatingCup] = useState(false);
 
   useEffect(() => { setHydrated(true); }, []);
   useEffect(() => {
@@ -284,21 +283,7 @@ export default function DashboardPage() {
     return calendar.find(m => !m.played) ?? null;
   }, [calendar]);
 
-  // Симуляция кубкового раунда (через competition_id)
-  const advanceCupRound = async () => {
-    if (!nextMatch?.competition_id || simulatingCup) return;
-    setSimulatingCup(true);
-    try {
-      const res = await fetch("/api/cup/advance", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionId: nextMatch.competition_id, userClubId: userClub, userTactic: tactic }),
-      });
-      if (res.ok) {
-        await loadCalendar(seasonId!, userClub);
-      }
-    } catch (e) { console.error(e); }
-    setSimulatingCup(false);
-  };
+
 
   // Симуляция тура
   const advanceMatchday = async () => {
@@ -374,26 +359,21 @@ export default function DashboardPage() {
           {/* LEFT: fixtures + simulate */}
           <div className="xl:col-span-3 space-y-5 fade-in">
 
-            {/* Next Match block — shows whichever is next: league OR a cup */}
-            {seasonId && nextMatch && nextMatch.source === "cup" && (
-              <div className={`p-6 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className={`${ui.subLabel} mb-1 flex items-center gap-2`}>
-                      <span>🏆 {nextMatch.competition_name}</span>
-                    </div>
-                    <div className={`text-lg font-black ${ui.text} flex items-center gap-2`}>
-                      <img src={getClubLogo(nextMatch.home_club)} className="w-6 h-6 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                      {nextMatch.home_club} vs {nextMatch.away_club}
-                      <img src={getClubLogo(nextMatch.away_club)} className="w-6 h-6 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                    </div>
-                    <div className={`text-xs mt-1 ${ui.muted}`}>{nextMatch.round_name}</div>
-                  </div>
-                  <button onClick={advanceCupRound} disabled={simulatingCup}
-                    className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
-                    <Zap size={16} />
-                    {simulatingCup ? "Simulating…" : "Play Match"}
-                  </button>
+            {/* Next Match — read-only preview. Симуляция доступна только на /fixtures и /cups */}
+            {seasonId && nextMatch && (
+              <div className={`p-5 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
+                <div className={`${ui.subLabel} mb-1.5 flex items-center gap-2`}>
+                  <span>{nextMatch.source === "cup" ? "🏆" : "⚽"} Next: {nextMatch.competition_name}</span>
+                </div>
+                <div className={`text-base font-black ${ui.text} flex items-center gap-2`}>
+                  <img src={getClubLogo(nextMatch.home_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                  {nextMatch.home_club} vs {nextMatch.away_club}
+                  <img src={getClubLogo(nextMatch.away_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                </div>
+                <div className={`text-xs mt-1 ${ui.muted}`}>
+                  {nextMatch.round_name ?? `Matchday ${nextMatch.matchday}`}
+                  {nextMatch.match_date ? ` · ${new Date(nextMatch.match_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
+                  {" · "}<Link href={nextMatch.source === "cup" ? "/cups" : "/fixtures"} className="underline">Go play →</Link>
                 </div>
               </div>
             )}

@@ -5,7 +5,8 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
-import { Trophy, Zap } from "lucide-react";
+import { Trophy, Zap, Lock } from "lucide-react";
+import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 
 const THEME_UI = {
   classic: {
@@ -50,6 +51,7 @@ export default function CupsPage() {
   const seasonId       = useCareerStore(s => s.seasonId);
   const userClub        = useCareerStore(s => s.selectedClub)?.name || "";
   const tactic          = useCareerStore(s => s.tactic) || "Balanced";
+  const currentMatchday = useCareerStore(s => s.matchday) || 1;
   const [hydrated, setHydrated] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
@@ -131,13 +133,28 @@ export default function CupsPage() {
                         </div>
                       </div>
                     </div>
-                    {comp.status !== "finished" && (
-                      <button onClick={() => advanceCup(comp.id)} disabled={simulating === comp.id || allPlayed === false ? false : false}
-                        className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${ui.btnPrimary}`}>
-                        <Zap size={13} />
-                        {simulating === comp.id ? "Simulating…" : "Simulate Round"}
-                      </button>
-                    )}
+                    {comp.status !== "finished" && (() => {
+                      // Дата текущего раунда кубка против "сегодняшней" даты карьеры (дата текущего тура лиги)
+                      const roundDate = currentRoundFixtures[0]?.match_date ?? null;
+                      const careerDate = getLeagueMatchdayDate(currentMatchday);
+                      const isFuture = roundDate ? roundDate > careerDate : false;
+
+                      if (isFuture) {
+                        return (
+                          <div className={`px-3 py-2 rounded-xl text-[10px] font-black flex items-center gap-1.5 ${ui.muted}`}>
+                            <Lock size={12} />
+                            {new Date(roundDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                          </div>
+                        );
+                      }
+                      return (
+                        <button onClick={() => advanceCup(comp.id)} disabled={simulating === comp.id}
+                          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all disabled:opacity-50 ${ui.btnPrimary}`}>
+                          <Zap size={13} />
+                          {simulating === comp.id ? "Simulating…" : "Simulate Round"}
+                        </button>
+                      );
+                    })()}
                     {comp.status === "finished" && <Trophy size={18} className="text-yellow-400" />}
                   </div>
 
