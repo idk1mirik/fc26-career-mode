@@ -64,7 +64,12 @@ export const useCareerStore = create<CareerState>()(
       setTactic:         (t)       => set({ tactic: t }),
       setLocale:         (l)       => set({ locale: l }),
       setCustomTactic:   (c)       => set({ customTactic: c }),
-      resetCareer: () => set({ selectedClub: null, selectedLeague: null, seasonId: null, matchday: 1, lineup: {}, formation: "4-3-3" }),
+      resetCareer: () => set({
+        selectedClub: null, selectedLeague: null, seasonId: null, matchday: 1,
+        lineup: {}, formation: "4-3-3", tactic: "Balanced",
+        customTactic: { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
+        lineupsByFormation: {}, customFormations: {},
+      }),
     }),
     { name: "career-store", skipHydration: true }
   )

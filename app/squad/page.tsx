@@ -193,27 +193,37 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
 });
 
 // ─── PLAYER ROW ───────────────────────────────────────────────────────────────
-const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots }: {
+const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status }: {
   p: any; ui: typeof THEME_UI["classic"]; onOpen: (p: any) => void; isXI?: boolean; onAddToLineup?: (p: any) => void;
   emptySlots?: { slot: string; label: string }[];
+  status?: { status: string; matches_out: number; yellow_cards: number } | null;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [showSlots, setShowSlots] = useState(false);
   const ovr = p.overall ?? 75;
   const pot = p.potential ?? ovr;
+  const isUnavailable = status && status.matches_out > 0;
 
   return (
-    <div className={`rounded-2xl transition-all ${ui.card} ${ui.cardHover} ${isXI ? "ring-1 ring-emerald-500/40" : ""}`}>
+    <div className={`rounded-2xl transition-all ${ui.card} ${ui.cardHover} ${isXI ? "ring-1 ring-emerald-500/40" : ""} ${isUnavailable ? "opacity-60" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-2.5 cursor-pointer" onClick={() => onOpen(p)}>
-        <div className="w-10 h-10 shrink-0">
+        <div className="w-10 h-10 shrink-0 relative">
           {!imgErr
             ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-10 h-10 object-contain" onError={() => setImgErr(true)} />
             : <span className="text-2xl opacity-30">👤</span>}
+          {isUnavailable && (
+            <span className="absolute -top-1 -right-1 text-sm">{status!.status === "injured" ? "🩹" : "🟥"}</span>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className={`font-black text-sm truncate ${ui.nameColor}`}>
             {p.name}
             {isXI && <span className="ml-2 text-[9px] font-black text-emerald-400 uppercase">XI</span>}
+            {isUnavailable && (
+              <span className="ml-2 text-[9px] font-black text-red-400 uppercase">
+                {status!.status === "injured" ? `OUT ${status!.matches_out}` : `BAN ${status!.matches_out}`}
+              </span>
+            )}
           </div>
           <div className={`text-[10px] ${ui.muted}`}>
             {p.position}{p.alternatePositions?.length > 0 ? ` · ${p.alternatePositions.slice(0,2).join(" · ")}` : ""}
@@ -379,6 +389,7 @@ export default function SquadPage() {
   const themeRaw = useThemeStore(s => s.theme);
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
+  const seasonId       = useCareerStore(s => s.seasonId);
   const savedLineup    = useCareerStore(s => s.lineup);
   const savedFormation = useCareerStore(s => s.formation);
   const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
@@ -390,6 +401,7 @@ export default function SquadPage() {
   const setFormationStore = useCareerStore(s => s.setFormation);
 
   const [players, setPlayers]           = useState<any[]>([]);
+  const [playerStatuses, setPlayerStatuses] = useState<any[]>([]);
   const [hydrated, setHydrated]         = useState(false);
   const [modalPlayer, setModalPlayer]   = useState<any>(null);
   const [modalClosing, setModalClosing] = useState(false);
@@ -731,7 +743,8 @@ export default function SquadPage() {
                   .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0))
                   .map(p => (
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
-                      onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots} />
+                      onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
+                      status={playerStatuses.find(s => s.player_name === p.name)} />
                   ))}
               </div>
             </div>
@@ -763,7 +776,8 @@ export default function SquadPage() {
                       <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                         onOpen={openModal}
                         isXI={startingIds.has(p.id ?? p.name)}
-                        onAddToLineup={handleAddToLineup} emptySlots={emptySlots} />
+                        onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
+                        status={playerStatuses.find(s => s.player_name === p.name)} />
                     ))}
                   </div>
                 </div>

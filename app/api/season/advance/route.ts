@@ -52,47 +52,92 @@ async function tickDownStatus(seasonId: string, clubId: string) {
 }
 
 // Применяем события матча (карточки/травмы) к статусам игроков
+// Пороги накопления жёлтых карточек (как в Premier League): 5→1 матч, 10→2 матча, 15→3 матча.
+// Счётчик НЕ сбрасывается после бана — продолжает копиться к следующему порогу.
+const YELLOW_THRESHOLDS: { count: number; ban: number }[] = [
+  { count: 5, ban: 1 }, { count: 10, ban: 2 }, { count: 15, ban: 3 },
+];
+
+async function getStatusRow(seasonId: string, clubId: string, playerName: string) {
+  const { data } = await supabase.from("player_status")
+    .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", playerName).maybeSingle();
+  return data;
+}
+
 async function applyEventStatuses(seasonId: string, clubId: string, events: any[], teamSide: "home" | "away") {
+  // Считаем по событиям: 2 жёлтые в ОДНОМ матче = красная (вторая жёлтая)
+  const yellowsThisMatch: Record<string, number> = {};
+
   for (const e of events) {
     if (e.team !== teamSide) continue;
-    if (e.type === "red") {
-      await upsertStatus(seasonId, clubId, e.player, "suspended", 1);
-    }
-    if (e.type === "injury") {
-      const weeks = Math.floor(Math.random() * 3) + 1; // 1-3 матча
-      await upsertStatus(seasonId, clubId, e.player, "injured", weeks);
-    }
+
     if (e.type === "yellow") {
-      // считаем накопленные жёлтые
-      const { data: existing } = await supabase.from("player_status")
-        .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", e.player).maybeSingle();
-      const newYellowCount = (existing?.yellow_cards ?? 0) + 1;
-      if (newYellowCount >= 2) {
-        // 2 жёлтые = пропуск следующего матча, сброс счётчика
-        await upsertStatus(seasonId, clubId, e.player, "suspended", 1, 0);
-      } else if (existing) {
-        await supabase.from("player_status").update({ yellow_cards: newYellowCount }).eq("id", existing.id);
+      yellowsThisMatch[e.player] = (yellowsThisMatch[e.player] ?? 0) + 1;
+
+      // Вторая жёлтая в этом же матче → красная карточка (мгновенный бан 1 матч)
+      if (yellowsThisMatch[e.player] === 2) {
+        await upsertSuspension(seasonId, clubId, e.player, 1);
+        continue;
+      }
+
+      const existing = await getStatusRow(seasonId, clubId, e.player);
+      const newTotal = (existing?.yellow_cards ?? 0) + 1;
+
+      // Проверяем пересечение порога (5/10/15)
+      const crossed = YELLOW_THRESHOLDS.find(t => newTotal === t.count);
+
+      if (existing) {
+        await supabase.from("player_status").update({ yellow_cards: newTotal }).eq("id", existing.id);
       } else {
         await supabase.from("player_status").insert({
           season_id: seasonId, club_id: clubId, player_name: e.player,
-          status: "none", matches_out: 0, yellow_cards: newYellowCount,
+          status: "none", matches_out: 0, yellow_cards: newTotal,
         });
       }
+
+      if (crossed) {
+        await upsertSuspension(seasonId, clubId, e.player, crossed.ban);
+      }
+    }
+
+    if (e.type === "red") {
+      await upsertSuspension(seasonId, clubId, e.player, 1);
+    }
+
+    if (e.type === "injury") {
+      const weeks = Math.floor(Math.random() * 3) + 1; // 1-3 матча
+      await upsertInjury(seasonId, clubId, e.player, weeks);
     }
   }
 }
 
-async function upsertStatus(seasonId: string, clubId: string, playerName: string, status: string, matchesOut: number, yellowCards = 0) {
-  const { data: existing } = await supabase.from("player_status")
-    .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", playerName).maybeSingle();
+// Добавляем бан (накладывается на текущий matches_out, не заменяет — если уже травмирован и получил красную, суммируем)
+async function upsertSuspension(seasonId: string, clubId: string, playerName: string, banMatches: number) {
+  const existing = await getStatusRow(seasonId, clubId, playerName);
   if (existing) {
     await supabase.from("player_status").update({
-      status, matches_out: Math.max(existing.matches_out ?? 0, matchesOut), yellow_cards: yellowCards,
+      status: "suspended",
+      matches_out: Math.max(existing.matches_out ?? 0, banMatches),
     }).eq("id", existing.id);
   } else {
     await supabase.from("player_status").insert({
       season_id: seasonId, club_id: clubId, player_name: playerName,
-      status, matches_out: matchesOut, yellow_cards: yellowCards,
+      status: "suspended", matches_out: banMatches, yellow_cards: 0,
+    });
+  }
+}
+
+async function upsertInjury(seasonId: string, clubId: string, playerName: string, weeks: number) {
+  const existing = await getStatusRow(seasonId, clubId, playerName);
+  if (existing) {
+    await supabase.from("player_status").update({
+      status: "injured",
+      matches_out: Math.max(existing.matches_out ?? 0, weeks),
+    }).eq("id", existing.id);
+  } else {
+    await supabase.from("player_status").insert({
+      season_id: seasonId, club_id: clubId, player_name: playerName,
+      status: "injured", matches_out: weeks, yellow_cards: 0,
     });
   }
 }

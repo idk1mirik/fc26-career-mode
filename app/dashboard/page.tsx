@@ -46,6 +46,8 @@ const GLOBAL_UI = {
     tableRow: "hover:bg-white/[0.03]",
     tableHeader: "text-white/25",
     highlight: "bg-emerald-500/10 border-l-2 border-emerald-500",
+    tabActive: "bg-emerald-500 text-black",
+    tabIdle: "bg-white/[0.05] text-white/40 hover:bg-white/[0.1]",
   },
   aurora: {
     sidebar: "bg-white/55 border-r border-pink-100 backdrop-blur-3xl",
@@ -67,6 +69,8 @@ const GLOBAL_UI = {
     tableRow: "hover:bg-pink-50/50",
     tableHeader: "text-pink-800/40",
     highlight: "bg-violet-50 border-l-2 border-violet-400",
+    tabActive: "bg-violet-500 text-white",
+    tabIdle: "bg-pink-50 text-pink-400 hover:bg-pink-100",
   },
   maleficent: {
     sidebar: "bg-black/85 border-r border-purple-900/40 backdrop-blur-3xl",
@@ -88,6 +92,8 @@ const GLOBAL_UI = {
     tableRow: "hover:bg-purple-950/20",
     tableHeader: "text-purple-500/40 font-mono",
     highlight: "bg-fuchsia-950/30 border-l-2 border-fuchsia-500",
+    tabActive: "bg-fuchsia-900/40 border border-fuchsia-700 text-fuchsia-300 font-mono",
+    tabIdle: "bg-purple-950/20 text-purple-500/50 hover:bg-purple-950/40 font-mono",
   },
 };
 

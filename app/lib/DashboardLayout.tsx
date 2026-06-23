@@ -7,16 +7,17 @@ import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
+import { getThemeCopy } from "@/lib/i18n";
 
-const NAV = [
-  { label: "Overview",     icon: LayoutDashboard, href: "/dashboard" },
-  { label: "Squad",        icon: Users,           href: "/squad" },
-  { label: "Tactics",      icon: Target,          href: "/tactics" },
-  { label: "Transfers",    icon: ArrowRightLeft,  href: "/transfers" },
-  { label: "Fixtures",     icon: CalendarDays,    href: "/fixtures" },
-  { label: "League Table", icon: Trophy,          href: "/table" },
-  { label: "Cups",         icon: Award,           href: "/cups" },
-];
+const NAV_ICONS = [
+  { key: "navOverview",  icon: LayoutDashboard, href: "/dashboard" },
+  { key: "navSquad",     icon: Users,           href: "/squad" },
+  { key: "navTactics",   icon: Target,          href: "/tactics" },
+  { key: "navTransfers", icon: ArrowRightLeft,  href: "/transfers" },
+  { key: "navFixtures",  icon: CalendarDays,    href: "/fixtures" },
+  { key: "navTable",     icon: Trophy,          href: "/table" },
+  { key: "navCups",      icon: Award,           href: "/cups" },
+] as const;
 
 const SIDEBAR = {
   classic:    "bg-black/90 border-r border-white/[0.06] backdrop-blur-3xl text-white",
@@ -38,6 +39,31 @@ const GLOW = {
   aurora:     "#a855f7",
   maleficent: "#e879f9",
 };
+const NAV_FONT = {
+  classic: "",
+  aurora: "",
+  maleficent: "font-mono",
+};
+
+function LangToggle({ theme }: { theme: keyof typeof SIDEBAR }) {
+  const locale = useCareerStore(s => s.locale) || "en";
+  const setLocale = useCareerStore(s => s.setLocale);
+  const isDark = theme !== "aurora";
+  return (
+    <div className="flex gap-1">
+      {(["en", "ru"] as const).map(l => (
+        <button key={l} onClick={() => setLocale(l)}
+          className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
+            locale === l
+              ? (isDark ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700")
+              : (isDark ? "text-white/30 hover:text-white/60" : "text-pink-900/30 hover:text-pink-900/60")
+          }`}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
   theme: keyof typeof SIDEBAR; glowColor: string; pathname: string; onNavigate?: () => void;
@@ -46,6 +72,8 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const matchday       = useCareerStore(s => s.matchday);
+  const locale         = useCareerStore(s => s.locale) || "en";
+  const copy = getThemeCopy(locale, theme);
 
   return (
     <>
@@ -56,6 +84,10 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
           <div className="text-sm font-black truncate max-w-[140px]">{selectedClub?.name || "No Club"}</div>
           <div className="text-[10px] opacity-40">{selectedLeague?.name || ""}</div>
         </div>
+      </div>
+
+      <div className={`mb-3 flex justify-end`}>
+        <LangToggle theme={theme} />
       </div>
 
       <div className={`mb-5 p-3 rounded-2xl ${theme === "classic" ? "bg-white/[0.03] border border-white/[0.07]" : theme === "aurora" ? "bg-white/50 border border-violet-100" : "bg-black/40 border border-purple-900/30"}`}>
@@ -70,15 +102,16 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {NAV.map(item => {
+        {NAV_ICONS.map(item => {
           const Icon = item.icon;
           const active = pathname === item.href;
+          const label = copy[item.key as keyof typeof copy];
           return (
             <Link key={item.href} href={item.href} onClick={onNavigate}>
               <div className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all duration-200 relative ${active ? NAV_ACTIVE[theme] : NAV_IDLE[theme]}`}>
                 {active && <div className="absolute left-0 w-[3px] h-6 rounded-r-full" style={{ background: glowColor }} />}
                 <Icon size={15} />
-                <span className="text-sm font-bold">{item.label}</span>
+                <span className={`text-sm font-bold ${NAV_FONT[theme]}`}>{label}</span>
               </div>
             </Link>
           );
@@ -86,8 +119,8 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
       </nav>
 
       <button onClick={() => { useCareerStore.getState().resetCareer(); router.push("/"); onNavigate?.(); }}
-        className={`mt-4 w-full py-2.5 text-xs font-black uppercase tracking-widest rounded-2xl transition-all ${theme === "classic" ? "bg-red-950/30 border border-red-900/40 text-red-400 hover:bg-red-900/40" : theme === "aurora" ? "bg-red-50 border border-red-200 text-red-500 hover:bg-red-100" : "border border-red-900/60 text-red-500/70 hover:bg-red-950/20"}`}>
-        Quit Career
+        className={`mt-4 w-full py-2.5 text-xs font-black uppercase tracking-widest rounded-2xl transition-all ${NAV_FONT[theme]} ${theme === "classic" ? "bg-red-950/30 border border-red-900/40 text-red-400 hover:bg-red-900/40" : theme === "aurora" ? "bg-red-50 border border-red-200 text-red-500 hover:bg-red-100" : "border border-red-900/60 text-red-500/70 hover:bg-red-950/20"}`}>
+        {copy.navQuit}
       </button>
     </>
   );
