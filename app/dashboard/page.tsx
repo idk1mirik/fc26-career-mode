@@ -180,6 +180,7 @@ function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; them
   const events = fix.events ?? [];
   const ratings = fix.ratings ?? { home: [], away: [] };
   const [tab, setTab] = useState<"events" | "ratings">("events");
+  const [selectedRatingPlayer, setSelectedRatingPlayer] = useState<any>(null);
 
   const ratingColor = (r: number) => r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
 
@@ -234,23 +235,81 @@ function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; them
         )}
 
         {tab === "ratings" && (
-          <div className="space-y-4">
-            {[{ label: fix.home_club, list: ratings.home ?? [] }, { label: fix.away_club, list: ratings.away ?? [] }].map(({ label, list }) => (
-              <div key={label}>
-                <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>{label}</div>
-                <div className="space-y-1">
-                  {list.length === 0 && <div className={`text-xs ${ui.muted}`}>No data</div>}
-                  {[...list].sort((a: any, b: any) => b.rating - a.rating).map((p: any, i: number) => (
-                    <div key={i} className={`flex items-center justify-between py-1.5 px-2 rounded-lg ${ui.tableRow}`}>
-                      <span className={`text-sm font-bold ${ui.text}`}>{p.name}</span>
-                      <span className="text-sm font-black px-2 py-0.5 rounded-md" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
-                        {p.rating.toFixed(1)}
-                      </span>
+          <div className="space-y-5">
+            {[{ label: fix.home_club, list: ratings.home ?? [] }, { label: fix.away_club, list: ratings.away ?? [] }].map(({ label, list }) => {
+              const starters = list.filter((p: any) => !p.subbedIn);
+              const subs = list.filter((p: any) => p.subbedIn);
+              return (
+                <div key={label}>
+                  <div className={`text-[10px] uppercase tracking-widest font-black mb-2 flex items-center gap-1.5 ${ui.muted}`}>
+                    <img src={getClubLogo(label)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                    {label}
+                  </div>
+
+                  {/* Стартовый состав — сетка как на поле, по линиям */}
+                  <div className="grid grid-cols-3 gap-1.5 mb-2">
+                    {starters.length === 0 && <div className={`text-xs col-span-3 ${ui.muted}`}>No data</div>}
+                    {starters.map((p: any, i: number) => (
+                      <button key={i} onClick={() => setSelectedRatingPlayer(p)}
+                        className={`flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors ${ui.tableRow}`}>
+                        <span className={`text-[11px] font-bold truncate ${ui.text}`}>{p.name}</span>
+                        <span className="text-xs font-black px-1.5 py-0.5 rounded-md shrink-0 ml-1" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
+                          {p.rating.toFixed(1)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Замены — отдельным блоком */}
+                  {subs.length > 0 && (
+                    <div>
+                      <div className={`text-[9px] uppercase tracking-widest mb-1 ${ui.muted}`}>Substitutes</div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {subs.map((p: any, i: number) => (
+                          <button key={i} onClick={() => setSelectedRatingPlayer(p)}
+                            className={`flex items-center justify-between py-1.5 px-2 rounded-lg opacity-80 transition-colors ${ui.tableRow}`}>
+                            <span className={`text-[11px] font-bold truncate ${ui.text}`}>{p.name}</span>
+                            <span className="text-xs font-black px-1.5 py-0.5 rounded-md shrink-0 ml-1" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
+                              {p.rating.toFixed(1)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        )}
+
+        {selectedRatingPlayer && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setSelectedRatingPlayer(null)}>
+            <div className={`w-full max-w-xs rounded-2xl p-5 ${ui.card}`} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <span className={`text-sm font-black ${ui.text}`}>{selectedRatingPlayer.name}</span>
+                <span className="text-lg font-black px-2 py-0.5 rounded-md" style={{ color: ratingColor(selectedRatingPlayer.rating), background: `${ratingColor(selectedRatingPlayer.rating)}18` }}>
+                  {selectedRatingPlayer.rating.toFixed(1)}
+                </span>
               </div>
-            ))}
+              <div className="space-y-1.5">
+                {[
+                  ["Goals", selectedRatingPlayer.stats?.goals],
+                  ["Assists", selectedRatingPlayer.stats?.assists],
+                  ["Key Passes", selectedRatingPlayer.stats?.keyPasses],
+                  ["Saves", selectedRatingPlayer.stats?.saves],
+                  ["Tackles", selectedRatingPlayer.stats?.tackles],
+                  ["Interceptions", selectedRatingPlayer.stats?.interceptions],
+                  ["Mistakes", selectedRatingPlayer.stats?.mistakes],
+                  ["Minutes", selectedRatingPlayer.stats?.minutesPlayed],
+                ].filter(([, v]) => v !== undefined).map(([label, value]) => (
+                  <div key={label as string} className={`flex items-center justify-between text-xs ${ui.muted}`}>
+                    <span>{label}</span>
+                    <span className={`font-bold ${ui.text}`}>{value as any}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

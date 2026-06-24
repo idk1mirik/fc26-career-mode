@@ -193,16 +193,19 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
 });
 
 // ─── PLAYER ROW ───────────────────────────────────────────────────────────────
-const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status }: {
+const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating }: {
   p: any; ui: typeof THEME_UI["classic"]; onOpen: (p: any) => void; isXI?: boolean; onAddToLineup?: (p: any) => void;
   emptySlots?: { slot: string; label: string }[];
   status?: { status: string; matches_out: number; yellow_cards: number } | null;
+  avgRating?: number | null;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [showSlots, setShowSlots] = useState(false);
   const ovr = p.overall ?? 75;
   const pot = p.potential ?? ovr;
   const isUnavailable = status && status.matches_out > 0;
+
+  const sofaColor = (r: number) => r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
 
   return (
     <div className={`rounded-2xl transition-all ${ui.card} ${ui.cardHover} ${isXI ? "ring-1 ring-emerald-500/40" : ""} ${isUnavailable ? "opacity-60" : ""}`}>
@@ -237,6 +240,13 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
         <div className="text-center w-11">
           <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
         </div>
+        {avgRating != null && avgRating > 0 && (
+          <div className="text-center w-11 hidden sm:block">
+            <span className="text-xs font-black px-1.5 py-0.5 rounded-md" style={{ color: sofaColor(avgRating), background: `${sofaColor(avgRating)}15` }}>
+              {avgRating.toFixed(1)}
+            </span>
+          </div>
+        )}
         {/* Add to lineup button */}
         {onAddToLineup && !isXI && (
           <button onClick={e => { e.stopPropagation(); setShowSlots(s => !s); }}
@@ -402,6 +412,7 @@ export default function SquadPage() {
 
   const [players, setPlayers]           = useState<any[]>([]);
   const [playerStatuses, setPlayerStatuses] = useState<any[]>([]);
+  const [seasonStats, setSeasonStats] = useState<any[]>([]);
   const [hydrated, setHydrated]         = useState(false);
   const [modalPlayer, setModalPlayer]   = useState<any>(null);
   const [modalClosing, setModalClosing] = useState(false);
@@ -409,6 +420,7 @@ export default function SquadPage() {
   const [lineup, setLineup]             = useState<Record<string, any>>({});
   const [formation, setFormation]       = useState("4-3-3");
   const [customSlots, setCustomSlots]   = useState<{slot:string,x:number,y:number}[]>([{slot:"GK",x:50,y:90}]);
+  const [slotCounter, setSlotCounter]   = useState(1); // монотонный счётчик — ID слотов никогда не повторяются
   const [editingSlot, setEditingSlot]   = useState<string|null>(null);
   const [customPositions, setCustomPositions] = useState<Record<string,string>>({GK:"GK"});
   const [dragging, setDragging]         = useState<any>(null);
@@ -508,6 +520,9 @@ export default function SquadPage() {
 
   const handleFormationChange = (f: string) => {
     setFormation(f);
+    // Уходим из Custom-режима — сбрасываем кастомные слоты, у каждой формации своя жизнь
+    setCustomSlots([{ slot: "GK", x: 50, y: 90 }]);
+    setCustomPositions({ GK: "GK" });
     const savedForF = lineupsByFormation?.[f];
     if (savedForF && Object.keys(savedForF).length > 0) {
       setLineup(savedForF);
@@ -615,7 +630,13 @@ export default function SquadPage() {
                     {f}
                   </button>
                 ))}
-                <button onClick={() => setFormation("Custom")}
+                <button onClick={() => {
+                    setFormation("Custom");
+                    setLineup({});
+                    setCustomSlots([{ slot: "GK", x: 50, y: 90 }]);
+                    setCustomPositions({ GK: "GK" });
+                    setSlotCounter(1);
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${formation === "Custom" ? ui.tabActive : ui.tabIdle}`}>
                   ✏️ New Custom
                 </button>
@@ -656,7 +677,8 @@ export default function SquadPage() {
                   const x = ((e.clientX - rect.left) / rect.width) * 100;
                   const y = ((e.clientY - rect.top) / rect.height) * 100;
                   if (customSlots.length >= 11) return; // максимум 11 игроков (включая GK)
-                  const newSlot = `S${customSlots.length}`;
+                  const newSlot = `S${slotCounter}`;
+                  setSlotCounter(c => c + 1);
                   setCustomSlots(prev => [...prev, { slot: newSlot, x, y }]);
                 }}>
                 {/* Grass stripes */}
@@ -744,7 +766,8 @@ export default function SquadPage() {
                   .map(p => (
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                       onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
-                      status={playerStatuses.find(s => s.player_name === p.name)} />
+                      status={playerStatuses.find(s => s.player_name === p.name)}
+                      avgRating={seasonStats.find(s => s.player_name === p.name)?.avg_rating} />
                   ))}
               </div>
             </div>
@@ -777,7 +800,8 @@ export default function SquadPage() {
                         onOpen={openModal}
                         isXI={startingIds.has(p.id ?? p.name)}
                         onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
-                        status={playerStatuses.find(s => s.player_name === p.name)} />
+                        status={playerStatuses.find(s => s.player_name === p.name)}
+                        avgRating={seasonStats.find(s => s.player_name === p.name)?.avg_rating} />
                     ))}
                   </div>
                 </div>

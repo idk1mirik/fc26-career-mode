@@ -20,6 +20,11 @@ export interface PlayerMatchStats {
 export interface PlayerRating {
   name: string;
   rating: number; // 1.0–10.0
+  subbedIn?: boolean;
+  stats?: {
+    goals: number; assists: number; keyPasses: number; saves: number;
+    tackles: number; interceptions: number; mistakes: number; minutesPlayed: number;
+  };
 }
 
 // Базовый рейтинг зависит от позиции (нейтральный, до учёта результата матча)
@@ -122,7 +127,14 @@ export function generateMatchRatings(
         rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
       }
 
-      return { name: p.name, rating };
+      return {
+        name: p.name, rating, subbedIn,
+        stats: {
+          goals: stats.goals, assists: stats.assists, keyPasses: stats.keyPasses,
+          saves: stats.saves, tackles: stats.tackles, interceptions: stats.interceptions,
+          mistakes: stats.mistakes, minutesPlayed: stats.minutesPlayed,
+        },
+      };
     });
   };
 
