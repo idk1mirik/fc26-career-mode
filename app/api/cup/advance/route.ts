@@ -1,7 +1,7 @@
 // app/api/cup/advance/route.ts
 // Симулирует текущий раунд указанного кубка и продвигает в следующий
 import { supabase } from "@/lib/supabase";
-import { simulateMatchByRating, getClubTactic } from "@/lib/matchEngine";
+import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/matchEngine";
 import { getPlayersByClub } from "@/lib/players";
 import { getRoundName } from "@/lib/competitions";
 import { getLeaguePositionPrize } from "@/lib/competitions";
@@ -14,6 +14,12 @@ async function getRating(clubId: string): Promise<number> {
   const avg = players.slice(0, 18).reduce((s, p) => s + (p.overall ?? 75), 0) / Math.min(players.length, 18);
   RATINGS[clubId] = Math.round(avg);
   return RATINGS[clubId];
+}
+
+function getStartingXI(players: any[]): any[] {
+  const gk = players.filter(p => p.position === "GK").sort((a,b)=>b.overall-a.overall)[0];
+  const rest = players.filter(p => p.position !== "GK").sort((a,b)=>b.overall-a.overall).slice(0, 10);
+  return gk ? [gk, ...rest] : rest;
 }
 
 export async function POST(req: Request) {
@@ -40,11 +46,24 @@ export async function POST(req: Request) {
 
     if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
       homeGoals = userHomeGoals; awayGoals = userAwayGoals;
+    } else if (isUserMatch && userLineup?.length) {
+      // Реальный состав/формация пользователя влияет на результат
+      const userIsHome = fix.home_club === userClubId;
+      const oppClub = userIsHome ? fix.away_club : fix.home_club;
+      const oppAll = await getPlayersByClub(oppClub);
+      const oppXI = getStartingXI(oppAll);
+      const userTac = userTactic || "Balanced";
+      const oppTac = getClubTactic(oppClub);
+
+      const result = userIsHome
+        ? simulateMatch(userLineup, oppXI, userTac, oppTac)
+        : simulateMatch(oppXI, userLineup, oppTac, userTac);
+      homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const hr = await getRating(fix.home_club);
       const ar = await getRating(fix.away_club);
-      const ht = isUserMatch && fix.home_club === userClubId ? (userTactic || "Balanced") : getClubTactic(fix.home_club);
-      const at = isUserMatch && fix.away_club === userClubId ? (userTactic || "Balanced") : getClubTactic(fix.away_club);
+      const ht = getClubTactic(fix.home_club);
+      const at = getClubTactic(fix.away_club);
       const r = simulateMatchByRating(hr, ar, ht, at);
       homeGoals = r.homeGoals; awayGoals = r.awayGoals;
     }

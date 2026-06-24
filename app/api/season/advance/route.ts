@@ -1,6 +1,6 @@
 // app/api/season/advance/route.ts
 import { supabase } from "@/lib/supabase";
-import { simulateMatchByRating, getClubTactic } from "@/lib/matchEngine";
+import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/matchEngine";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { getPlayersByClub } from "@/lib/players";
@@ -142,6 +142,33 @@ async function upsertInjury(seasonId: string, clubId: string, playerName: string
   }
 }
 
+// Накопление сезонной статистики каждого игрока
+async function updateSeasonStats(seasonId: string, clubId: string, playerRatings: { name: string; rating: number }[], events: any[], side: "home" | "away") {
+  for (const pr of playerRatings) {
+    const goals = events.filter(e => e.team === side && e.type === "goal" && e.player === pr.name).length;
+    const yellow = events.some(e => e.team === side && e.type === "yellow" && e.player === pr.name) ? 1 : 0;
+    const red = events.some(e => e.team === side && e.type === "red" && e.player === pr.name) ? 1 : 0;
+
+    const { data: existing } = await supabase.from("player_season_stats")
+      .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", pr.name).maybeSingle();
+
+    if (existing) {
+      await supabase.from("player_season_stats").update({
+        matches_played: (existing.matches_played ?? 0) + 1,
+        total_rating: (existing.total_rating ?? 0) + pr.rating,
+        goals: (existing.goals ?? 0) + goals,
+        yellow_cards: (existing.yellow_cards ?? 0) + yellow,
+        red_cards: (existing.red_cards ?? 0) + red,
+      }).eq("id", existing.id);
+    } else {
+      await supabase.from("player_season_stats").insert({
+        season_id: seasonId, club_id: clubId, player_name: pr.name,
+        matches_played: 1, total_rating: pr.rating, goals, yellow_cards: yellow, red_cards: red,
+      });
+    }
+  }
+}
+
 export async function POST(req: Request) {
   const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
 
@@ -172,21 +199,6 @@ export async function POST(req: Request) {
     touchedClubs.add(fix.home_club);
     touchedClubs.add(fix.away_club);
 
-    let homeGoals: number, awayGoals: number;
-
-    if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
-      homeGoals = userHomeGoals;
-      awayGoals = userAwayGoals;
-    } else {
-      const homeRating = await getClubRating(fix.home_club);
-      const awayRating = await getClubRating(fix.away_club);
-      const homeTactic = isUserMatch && fix.home_club === userClubId ? (userTactic || "Balanced") : getClubTactic(fix.home_club);
-      const awayTactic = isUserMatch && fix.away_club === userClubId ? (userTactic || "Balanced") : getClubTactic(fix.away_club);
-      const result = simulateMatchByRating(homeRating, awayRating, homeTactic, awayTactic);
-      homeGoals = result.homeGoals;
-      awayGoals = result.awayGoals;
-    }
-
     const homeAll = await getClubPlayers(fix.home_club);
     const awayAll = await getClubPlayers(fix.away_club);
 
@@ -196,6 +208,38 @@ export async function POST(req: Request) {
 
     const homeAvailable = homeAll.filter((p: any) => !homeUnavailable.has(p.name));
     const awayAvailable = awayAll.filter((p: any) => !awayUnavailable.has(p.name));
+
+    let homeGoals: number, awayGoals: number;
+
+    if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
+      // Явно переданный результат (для будущего "ручного" режима матча)
+      homeGoals = userHomeGoals;
+      awayGoals = userAwayGoals;
+    } else if (isUserMatch && userLineup?.length) {
+      // Матч пользователя — считаем по РЕАЛЬНОМУ составу/формации, не по среднему рейтингу клуба.
+      // Это то что делает формацию (5-3-2, 3-4-3 итд) реально влияющей на результат.
+      const userIsHome = fix.home_club === userClubId;
+      const oppAll = userIsHome ? awayAvailable : homeAvailable;
+      const oppXI = getStartingXI(oppAll);
+      const userTac = userTactic || "Balanced";
+      const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
+
+      const result = userIsHome
+        ? simulateMatch(userLineup.filter((p: any) => !homeUnavailable.has(p.name)), oppXI, userTac, oppTac)
+        : simulateMatch(oppXI, userLineup.filter((p: any) => !awayUnavailable.has(p.name)), oppTac, userTac);
+
+      homeGoals = result.homeGoals;
+      awayGoals = result.awayGoals;
+    } else {
+      // AI vs AI — обычная симуляция по рейтингу
+      const homeRating = await getClubRating(fix.home_club);
+      const awayRating = await getClubRating(fix.away_club);
+      const homeTactic = getClubTactic(fix.home_club);
+      const awayTactic = getClubTactic(fix.away_club);
+      const result = simulateMatchByRating(homeRating, awayRating, homeTactic, awayTactic);
+      homeGoals = result.homeGoals;
+      awayGoals = result.awayGoals;
+    }
 
     const homeStarters = (fix.home_club === userClubId && userLineup?.length)
       ? userLineup.filter((p: any) => !homeUnavailable.has(p.name))
@@ -210,7 +254,7 @@ export async function POST(req: Request) {
     const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
 
     const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
-    const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events);
+    const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
 
     await supabase.from("fixtures").update({
       home_goals: homeGoals, away_goals: awayGoals,
@@ -221,6 +265,10 @@ export async function POST(req: Request) {
     // Применяем новые травмы/карточки
     await applyEventStatuses(seasonId, fix.home_club, events, "home");
     await applyEventStatuses(seasonId, fix.away_club, events, "away");
+
+    // Накопление сезонной статистики (для среднего рейтинга за сезон)
+    await updateSeasonStats(seasonId, fix.home_club, ratings.home, events, "home");
+    await updateSeasonStats(seasonId, fix.away_club, ratings.away, events, "away");
 
     results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, events, ratings, fixtureId: fix.id });
 

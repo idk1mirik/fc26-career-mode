@@ -423,61 +423,67 @@ export default function DashboardPage() {
           {/* LEFT: fixtures + simulate */}
           <div className="xl:col-span-3 space-y-5 fade-in">
 
-            {/* Next Match — показывает кубковый матч если его очередь пришла; для лиги используется отдельный блок ниже */}
-            {seasonId && nextMatch && nextMatch.source === "cup" && (() => {
+            {/* Главный игровой блок: либо кубковый матч (если его очередь пришла), либо лига.
+                Кубок ПОЛНОСТЬЮ заменяет лигу на этой неделе — они никогда не показываются одновременно. */}
+            {(() => {
               const careerDate = getLeagueMatchdayDate(matchday);
-              const isReady = !nextMatch.match_date || nextMatch.match_date <= careerDate;
-              return (
-                <div className={`p-5 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
-                  <div className={`${ui.subLabel} mb-1.5 flex items-center gap-2`}>
-                    <span>🏆 {nextMatch.competition_name} — {nextMatch.round_name}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className={`text-base font-black ${ui.text} flex items-center gap-2`}>
-                      <img src={getClubLogo(nextMatch.home_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                      {nextMatch.home_club} vs {nextMatch.away_club}
-                      <img src={getClubLogo(nextMatch.away_club)} className="w-5 h-5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+              const cupReady = seasonId && nextMatch && nextMatch.source === "cup" &&
+                (!nextMatch.match_date || nextMatch.match_date <= careerDate);
+
+              if (cupReady) {
+                return (
+                  <div className={`p-6 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
+                    <div className={`${ui.subLabel} mb-2 flex items-center gap-2`}>
+                      <span>🏆 {nextMatch.competition_name} — {nextMatch.round_name}</span>
                     </div>
-                    {isReady ? (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className={`text-lg font-black ${ui.text} flex items-center gap-2`}>
+                        <img src={getClubLogo(nextMatch.home_club)} className="w-6 h-6 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                        {nextMatch.home_club} vs {nextMatch.away_club}
+                        <img src={getClubLogo(nextMatch.away_club)} className="w-6 h-6 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                      </div>
                       <button onClick={advanceCupRound} disabled={simulatingCup || !lineupValid}
-                        className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 disabled:opacity-50 ${ui.btnPrimary}`}>
-                        <Zap size={13} />
+                        className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
+                        <Zap size={16} />
                         {simulatingCup ? "Simulating…" : "Play Match"}
                       </button>
-                    ) : (
-                      <span className={`text-[10px] ${ui.muted}`}>
-                        🔒 {new Date(nextMatch.match_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                      </span>
+                    </div>
+                    {!lineupValid && (
+                      <div className="mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+                        ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play ({lineupCount}/{MIN_LINEUP_SIZE} selected). <Link href="/squad" className="underline">Set up your Squad →</Link>
+                      </div>
                     )}
                   </div>
-                </div>
-              );
-            })()}
+                );
+              }
 
-            {/* Simulate button (League) */}
-            {!seasonId ? (
-              <div className={`p-6 ${ui.card} text-center`}>
-                <p className={`${ui.muted} mb-4 text-sm`}>No active season. Start a career first.</p>
-                <Link href="/leagues"><button className={`px-6 py-3 ${ui.btnPrimary}`}>Start Career</button></Link>
-              </div>
-            ) : (
-              <div className={`p-6 ${ui.card}`}>
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div>
-                    <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
-                    <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
+              if (!seasonId) {
+                return (
+                  <div className={`p-6 ${ui.card} text-center`}>
+                    <p className={`${ui.muted} mb-4 text-sm`}>No active season. Start a career first.</p>
+                    <Link href="/leagues"><button className={`px-6 py-3 ${ui.btnPrimary}`}>Start Career</button></Link>
                   </div>
-                  <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played) || !lineupValid}
-                    className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
-                    <Zap size={16} />
-                    {simulating ? "Simulating…" : "Simulate Matchday"}
-                  </button>
-                </div>
-                {!lineupValid && (
-                  <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                    ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play ({lineupCount}/{MIN_LINEUP_SIZE} selected). <Link href="/squad" className="underline">Set up your Squad →</Link>
+                );
+              }
+
+              return (
+                <div className={`p-6 ${ui.card}`}>
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div>
+                      <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
+                      <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
+                    </div>
+                    <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played) || !lineupValid}
+                      className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
+                      <Zap size={16} />
+                      {simulating ? "Simulating…" : "Simulate Matchday"}
+                    </button>
                   </div>
-                )}
+                  {!lineupValid && (
+                    <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+                      ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play ({lineupCount}/{MIN_LINEUP_SIZE} selected). <Link href="/squad" className="underline">Set up your Squad →</Link>
+                    </div>
+                  )}
                 {/* Choose lineup for this matchday */}
                 <div className="flex items-center gap-2 flex-wrap pt-3 border-t" style={{ borderColor: theme === "classic" ? "rgba(255,255,255,0.05)" : theme === "aurora" ? "#fce7f3" : "rgba(139,92,246,0.15)" }}>
                   <span className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Lineup:</span>
@@ -504,7 +510,8 @@ export default function DashboardPage() {
                   <Link href="/squad" className="text-[10px] underline opacity-50 hover:opacity-100">Manage in Squad →</Link>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Last results */}
             {showResults && lastResults.length > 0 && (
