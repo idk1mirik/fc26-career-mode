@@ -240,11 +240,15 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
         <div className="text-center w-11">
           <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
         </div>
-        {avgRating != null && avgRating > 0 && (
-          <div className="text-center w-11 hidden sm:block">
-            <span className="text-xs font-black px-1.5 py-0.5 rounded-md" style={{ color: sofaColor(avgRating), background: `${sofaColor(avgRating)}15` }}>
+        {avgRating != null && avgRating > 0 ? (
+          <div className="text-center w-10 shrink-0">
+            <span className="text-[11px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ color: sofaColor(avgRating), background: `${sofaColor(avgRating)}15` }}>
               {avgRating.toFixed(1)}
             </span>
+          </div>
+        ) : (
+          <div className="text-center w-10 shrink-0">
+            <span className="text-[10px] opacity-30">—</span>
           </div>
         )}
         {/* Add to lineup button */}

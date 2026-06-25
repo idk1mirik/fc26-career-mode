@@ -331,8 +331,6 @@ export default function DashboardPage() {
   const tactic         = useCareerStore(s => s.tactic) || "Balanced";
   const customTactic   = useCareerStore(s => s.customTactic);
   const lineup         = useCareerStore(s => s.lineup);
-  const lineupValid    = isLineupValid(lineup);
-  const lineupCount    = getLineupCount(lineup);
   const formation       = useCareerStore(s => s.formation) || "4-3-3";
   const setFormation     = useCareerStore(s => s.setFormation);
   const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
@@ -345,10 +343,24 @@ export default function DashboardPage() {
   const [simulating, setSimulating] = useState(false);
   const [lastResults, setLastResults] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [seasonFinished, setSeasonFinished] = useState(false);
   const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
+  const [unavailableNames, setUnavailableNames] = useState<Set<string>>(new Set());
   const [simulatingCup, setSimulatingCup] = useState(false);
+
+  const availableLineupPlayers = useMemo(() =>
+    Object.values(lineup || {}).filter((p: any) => p && !unavailableNames.has(p.name)),
+    [lineup, unavailableNames]
+  );
+  const lineupValid    = availableLineupPlayers.length >= MIN_LINEUP_SIZE;
+  const unavailableInLineup = useMemo(() =>
+    Object.values(lineup || {}).filter((p: any) => p && unavailableNames.has(p.name)).map((p: any) => p.name),
+    [lineup, unavailableNames]
+  );
+  const lineupCount    = availableLineupPlayers.length;
 
   useEffect(() => { setHydrated(true); }, []);
   useEffect(() => {
@@ -372,6 +384,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!seasonId) return;
     loadData(seasonId);
+    fetch(`/api/season?id=${seasonId}`).then(r => r.ok ? r.json() : null).then(s => {
+      if (s?.status === "finished") setSeasonFinished(true);
+    }).catch(() => {});
   }, [seasonId, loadData]);
 
   // Загружаем единый календарь (лига + кубки) для определения следующего матча
@@ -380,6 +395,11 @@ export default function DashboardPage() {
     if (res.ok) {
       const data = await res.json();
       setCalendar(data.matches ?? []);
+    }
+    const statusRes = await fetch(`/api/player-status?seasonId=${sid}&clubId=${encodeURIComponent(clubId)}`);
+    if (statusRes.ok) {
+      const sd = await statusRes.json();
+      setUnavailableNames(new Set((sd.statuses ?? []).map((s: any) => s.player_name)));
     }
   }, []);
 
@@ -413,21 +433,25 @@ export default function DashboardPage() {
     if (!seasonId || simulating) return;
     setSimulating(true);
     setShowResults(false);
+    setApiError(null);
     try {
       const res = await fetch("/api/season/advance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic, userCustomTactic: tactic === "Custom" ? customTactic : undefined, userLineup: Object.values(lineup || {}).filter(Boolean) }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setLastResults(data.results || []);
         setMatchday(data.nextMatchday);
         setShowResults(true);
         await loadData(seasonId);
         await loadCalendar(seasonId, userClub);
+        if (data.finished) setSeasonFinished(true);
+      } else {
+        setApiError(data.error || "Could not simulate matchday.");
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); setApiError("Network error — try again."); }
     setSimulating(false);
   };
 
@@ -446,7 +470,57 @@ export default function DashboardPage() {
   const userRow = standings.find(s => s.club_id === userClub);
   const userPos = userRow ? standings.indexOf(userRow) + 1 : "—";
 
+  const [startingNewSeason, setStartingNewSeason] = useState(false);
+  const handleStartNewSeason = async () => {
+    if (!seasonId || startingNewSeason) return;
+    setStartingNewSeason(true);
+    try {
+      const res = await fetch("/api/season/new", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldSeasonId: seasonId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        useCareerStore.getState().setSeasonId(data.seasonId);
+        useCareerStore.getState().setMatchday(1);
+        setSeasonFinished(false);
+        setStandings([]); setFixtures([]); setCalendar([]); setLastResults([]); setShowResults(false);
+      }
+    } catch (e) { console.error(e); }
+    setStartingNewSeason(false);
+  };
+
   if (!hydrated || !selectedClub) return null;
+
+  if (seasonFinished) {
+    const sortedStandings = [...standings].sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
+    return (
+      <DashboardLayout>
+        <main className={`min-h-screen relative overflow-hidden flex items-center justify-center p-6 ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
+          <div className={`w-full max-w-lg p-8 rounded-3xl text-center ${ui.card}`}>
+            <div className="text-5xl mb-3">🏁</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>Season Complete</div>
+            <h1 className={`text-2xl font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
+            <div className={`text-sm mb-6 ${ui.muted}`}>Final position: #{userPos} of {sortedStandings.length}</div>
+
+            <div className="flex justify-center gap-2 mb-6">
+              <img src={getClubLogo(sortedStandings[0]?.club_id || "")} className="w-10 h-10 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+              <div className="text-left">
+                <div className={`text-[10px] uppercase ${ui.muted}`}>Champion</div>
+                <div className={`text-sm font-black ${ui.text}`}>{sortedStandings[0]?.club_id}</div>
+              </div>
+            </div>
+
+            <button onClick={handleStartNewSeason} disabled={startingNewSeason}
+              className={`w-full py-4 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${ui.btnPrimary}`}>
+              <Zap size={16} />
+              {startingNewSeason ? "Starting new season…" : "Start New Season →"}
+            </button>
+          </div>
+        </main>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -509,7 +583,9 @@ export default function DashboardPage() {
                     </div>
                     {!lineupValid && (
                       <div className="mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                        ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play ({lineupCount}/{MIN_LINEUP_SIZE} selected). <Link href="/squad" className="underline">Set up your Squad →</Link>
+                        ⚠️ You need {MIN_LINEUP_SIZE} available players to play ({lineupCount}/{MIN_LINEUP_SIZE} available).
+                    {unavailableInLineup.length > 0 && <> Unavailable: <b>{unavailableInLineup.join(", ")}</b>.</>}
+                    {" "}<Link href="/squad" className="underline">Set up your Squad →</Link>
                       </div>
                     )}
                   </div>
@@ -540,7 +616,9 @@ export default function DashboardPage() {
                   </div>
                   {!lineupValid && (
                     <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                      ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play ({lineupCount}/{MIN_LINEUP_SIZE} selected). <Link href="/squad" className="underline">Set up your Squad →</Link>
+                      ⚠️ You need {MIN_LINEUP_SIZE} available players to play ({lineupCount}/{MIN_LINEUP_SIZE} available).
+                    {unavailableInLineup.length > 0 && <> Unavailable: <b>{unavailableInLineup.join(", ")}</b>.</>}
+                    {" "}<Link href="/squad" className="underline">Set up your Squad →</Link>
                     </div>
                   )}
                 {/* Choose lineup for this matchday */}

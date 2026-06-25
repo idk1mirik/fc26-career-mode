@@ -172,14 +172,23 @@ async function updateSeasonStats(seasonId: string, clubId: string, playerRatings
 export async function POST(req: Request) {
   const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
 
-  // Запрещаем играть с неполным составом (минимум 11 игроков)
-  if (userLineup && userLineup.filter(Boolean).length < 11) {
-    return Response.json({ error: "Your lineup must have at least 11 players to play a match." }, { status: 400 });
-  }
-
   const { data: season, error: sErr } = await supabase
     .from("seasons").select("*").eq("id", seasonId).single();
   if (sErr) return Response.json({ error: "Season not found" }, { status: 404 });
+
+  // Запрещаем играть с неполным составом — проверяем ПОСЛЕ исключения травмированных/дисквалифицированных,
+  // не просто длину переданного массива (иначе травмированный игрок "числится" но реально не играет).
+  if (userLineup && userClubId) {
+    const userUnavailable = await getUnavailable(seasonId, userClubId);
+    const availableCount = userLineup.filter((p: any) => p && !userUnavailable.has(p.name)).length;
+    if (availableCount < 11) {
+      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavailable.has(p.name)).map((p: any) => p.name);
+      return Response.json({
+        error: `Your lineup has only ${availableCount} available players (need 11). Unavailable: ${unavailableInLineup.join(", ") || "none in lineup, but bench is short"}.`,
+        availableCount, unavailablePlayers: unavailableInLineup,
+      }, { status: 400 });
+    }
+  }
 
   const matchday = season.matchday;
 

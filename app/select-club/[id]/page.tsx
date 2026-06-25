@@ -94,7 +94,7 @@ function ConfirmCareerModal({ theme, clubColor, onConfirm, onCancel }: {
           Start New Career?
         </h2>
         <p style={{ margin: "0 0 28px", fontSize: 14, color: (subColor as any)[theme], lineHeight: 1.6 }}>
-          This will overwrite your existing progress.
+          ⚠️ Your current career — squad, stats, standings, everything — will be permanently deleted. This cannot be undone.
         </p>
         <div style={{ display: "flex", gap: 12 }}>
           <button
@@ -268,7 +268,8 @@ export default function SelectClubPage() {
             </select>
             <button
               onClick={() => {
-                if (localStorage.getItem("career_state")) {
+                const existingSeasonId = useCareerStore.getState().seasonId;
+                if (existingSeasonId) {
                   setShowConfirm(true);
                 } else {
                   startCareer();

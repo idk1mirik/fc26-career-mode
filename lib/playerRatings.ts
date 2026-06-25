@@ -36,35 +36,39 @@ function basePositionRating(position: string): number {
 }
 
 export function calculatePlayerRating(stats: PlayerMatchStats, teamGoalDiff: number): number {
+  if (!stats.isStarter && stats.minutesPlayed === 0) return 0;
+
+  const minuteFactor = Math.min(1, stats.minutesPlayed / 90);
+
   let rating = basePositionRating(stats.position);
 
-  // Командный результат — РЕАЛЬНО влияет на базу. Крупное поражение тянет всю команду вниз,
-  // крупная победа поднимает (как в реальном футболе — разгром 4-0 даёт почти всем 7.5+, разгром в свои ворота — почти всем <6).
-  rating += teamGoalDiff * 0.45; // на каждый гол разницы ±0.45 к базе
-  rating = Math.max(4.5, Math.min(8.0, rating)); // зажимаем влияние результата в разумных пределах перед бонусами за личные действия
+  // Командный результат влияет на базу, НО пропорционально времени на поле —
+  // игрок вышедший на 10 минут не получает полный бонус за разгром который сделали другие.
+  const resultImpact = teamGoalDiff * 0.45 * minuteFactor;
+  rating += resultImpact;
+  rating = Math.max(4.5, Math.min(8.0, rating));
 
-  // Голы и ассисты — это то что реально может вытащить рейтинг игрока выше командного среднего
+  // Личные действия — НЕ зависят от времени напрямую (они либо случились, либо нет),
+  // но у игрока с малым временем на поле их физически меньше (это уже заложено через minuteFactor выше при генерации статов)
   rating += stats.goals * (stats.position === "GK" ? 1.8 : 1.0);
   rating += stats.assists * 0.7;
   rating += stats.keyPasses * 0.12;
-
-  // Вратарские сейвы (особенно ценны при поражении — "спас от большего разгрома")
   rating += stats.saves * (teamGoalDiff < 0 ? 0.35 : 0.2);
-
-  // Защитные действия
   rating += stats.tackles * 0.07;
   rating += stats.interceptions * 0.05;
 
-  // Штрафы
   rating -= stats.mistakes * 0.6;
   rating -= stats.yellowCard ? 0.3 : 0;
   rating -= stats.redCard ? 1.6 : 0;
   rating -= stats.ownGoal ? 1.3 : 0;
 
-  if (!stats.isStarter && stats.minutesPlayed === 0) return 0;
+  // Шум тоже приглушается коротким временем на поле — мало сыгранных минут = рейтинг ближе к нейтральному
+  rating += (Math.random() - 0.5) * 0.4 * minuteFactor;
 
-  // Небольшой шум для реализма, но меньше чем раньше — индивидуальные действия должны решать больше
-  rating += (Math.random() - 0.5) * 0.4;
+  // Финальное стягивание к нейтральному (6.0) пропорционально НЕ сыгранному времени —
+  // 10 минут на поле без статов → рейтинг близко к 6.0, не к командному 7.5+
+  const neutral = 6.0;
+  rating = neutral + (rating - neutral) * Math.max(0.3, minuteFactor);
 
   return Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
 }
@@ -119,13 +123,7 @@ export function generateMatchRatings(
         minutesPlayed,
       };
 
-      let rating = calculatePlayerRating(stats, goalDiff);
-
-      // Игроки сыгравшие мало минут — рейтинг ближе к нейтральному (меньше шанса повлиять)
-      if (subbedIn && minutesPlayed < 25) {
-        rating = 6.0 + (rating - 6.0) * 0.5;
-        rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
-      }
+      const rating = calculatePlayerRating(stats, goalDiff);
 
       return {
         name: p.name, rating, subbedIn,
