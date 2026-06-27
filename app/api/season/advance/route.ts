@@ -1,19 +1,11 @@
 // app/api/season/advance/route.ts
+// Оптимизировано: все составы/статусы грузятся параллельно ОДИН раз,
+// все обновления накапливаются в памяти и пишутся пачками в конце.
 import { supabase } from "@/lib/supabase";
 import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/matchEngine";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { getPlayersByClub } from "@/lib/players";
-
-const CLUB_RATINGS: Record<string, number> = {};
-const CLUB_PLAYERS_CACHE: Record<string, any[]> = {};
-
-async function getClubPlayers(clubId: string): Promise<any[]> {
-  if (CLUB_PLAYERS_CACHE[clubId]) return CLUB_PLAYERS_CACHE[clubId];
-  const players = await getPlayersByClub(clubId);
-  CLUB_PLAYERS_CACHE[clubId] = players;
-  return players;
-}
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a,b)=>b.overall-a.overall)[0];
@@ -21,153 +13,7 @@ function getStartingXI(players: any[]): any[] {
   return gk ? [gk, ...rest] : rest;
 }
 
-async function getClubRating(clubId: string): Promise<number> {
-  if (CLUB_RATINGS[clubId]) return CLUB_RATINGS[clubId];
-  const players = await getClubPlayers(clubId);
-  if (!players.length) return 75;
-  const avg = players.slice(0, 18).reduce((s: number, p: any) => s + (p.overall ?? 75), 0) / Math.min(players.length, 18);
-  CLUB_RATINGS[clubId] = Math.round(avg);
-  return CLUB_RATINGS[clubId];
-}
-
-// Получаем список недоступных игроков клуба (травма/дисквалификация)
-async function getUnavailable(seasonId: string, clubId: string): Promise<Set<string>> {
-  const { data } = await supabase.from("player_status")
-    .select("player_name").eq("season_id", seasonId).eq("club_id", clubId).gt("matches_out", 0);
-  return new Set((data ?? []).map((r: any) => r.player_name));
-}
-
-// Уменьшаем счётчик пропущенных матчей у всех недоступных игроков клуба
-async function tickDownStatus(seasonId: string, clubId: string) {
-  const { data } = await supabase.from("player_status")
-    .select("*").eq("season_id", seasonId).eq("club_id", clubId).gt("matches_out", 0);
-  for (const row of data ?? []) {
-    const newOut = row.matches_out - 1;
-    if (newOut <= 0) {
-      await supabase.from("player_status").delete().eq("id", row.id);
-    } else {
-      await supabase.from("player_status").update({ matches_out: newOut }).eq("id", row.id);
-    }
-  }
-}
-
-// Применяем события матча (карточки/травмы) к статусам игроков
-// Пороги накопления жёлтых карточек (как в Premier League): 5→1 матч, 10→2 матча, 15→3 матча.
-// Счётчик НЕ сбрасывается после бана — продолжает копиться к следующему порогу.
-const YELLOW_THRESHOLDS: { count: number; ban: number }[] = [
-  { count: 5, ban: 1 }, { count: 10, ban: 2 }, { count: 15, ban: 3 },
-];
-
-async function getStatusRow(seasonId: string, clubId: string, playerName: string) {
-  const { data } = await supabase.from("player_status")
-    .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", playerName).maybeSingle();
-  return data;
-}
-
-async function applyEventStatuses(seasonId: string, clubId: string, events: any[], teamSide: "home" | "away") {
-  // Считаем по событиям: 2 жёлтые в ОДНОМ матче = красная (вторая жёлтая)
-  const yellowsThisMatch: Record<string, number> = {};
-
-  for (const e of events) {
-    if (e.team !== teamSide) continue;
-
-    if (e.type === "yellow") {
-      yellowsThisMatch[e.player] = (yellowsThisMatch[e.player] ?? 0) + 1;
-
-      // Вторая жёлтая в этом же матче → красная карточка (мгновенный бан 1 матч)
-      if (yellowsThisMatch[e.player] === 2) {
-        await upsertSuspension(seasonId, clubId, e.player, 1);
-        continue;
-      }
-
-      const existing = await getStatusRow(seasonId, clubId, e.player);
-      const newTotal = (existing?.yellow_cards ?? 0) + 1;
-
-      // Проверяем пересечение порога (5/10/15)
-      const crossed = YELLOW_THRESHOLDS.find(t => newTotal === t.count);
-
-      if (existing) {
-        await supabase.from("player_status").update({ yellow_cards: newTotal }).eq("id", existing.id);
-      } else {
-        await supabase.from("player_status").insert({
-          season_id: seasonId, club_id: clubId, player_name: e.player,
-          status: "none", matches_out: 0, yellow_cards: newTotal,
-        });
-      }
-
-      if (crossed) {
-        await upsertSuspension(seasonId, clubId, e.player, crossed.ban);
-      }
-    }
-
-    if (e.type === "red") {
-      await upsertSuspension(seasonId, clubId, e.player, 1);
-    }
-
-    if (e.type === "injury") {
-      const weeks = Math.floor(Math.random() * 3) + 1; // 1-3 матча
-      await upsertInjury(seasonId, clubId, e.player, weeks);
-    }
-  }
-}
-
-// Добавляем бан (накладывается на текущий matches_out, не заменяет — если уже травмирован и получил красную, суммируем)
-async function upsertSuspension(seasonId: string, clubId: string, playerName: string, banMatches: number) {
-  const existing = await getStatusRow(seasonId, clubId, playerName);
-  if (existing) {
-    await supabase.from("player_status").update({
-      status: "suspended",
-      matches_out: Math.max(existing.matches_out ?? 0, banMatches),
-    }).eq("id", existing.id);
-  } else {
-    await supabase.from("player_status").insert({
-      season_id: seasonId, club_id: clubId, player_name: playerName,
-      status: "suspended", matches_out: banMatches, yellow_cards: 0,
-    });
-  }
-}
-
-async function upsertInjury(seasonId: string, clubId: string, playerName: string, weeks: number) {
-  const existing = await getStatusRow(seasonId, clubId, playerName);
-  if (existing) {
-    await supabase.from("player_status").update({
-      status: "injured",
-      matches_out: Math.max(existing.matches_out ?? 0, weeks),
-    }).eq("id", existing.id);
-  } else {
-    await supabase.from("player_status").insert({
-      season_id: seasonId, club_id: clubId, player_name: playerName,
-      status: "injured", matches_out: weeks, yellow_cards: 0,
-    });
-  }
-}
-
-// Накопление сезонной статистики каждого игрока
-async function updateSeasonStats(seasonId: string, clubId: string, playerRatings: { name: string; rating: number }[], events: any[], side: "home" | "away") {
-  for (const pr of playerRatings) {
-    const goals = events.filter(e => e.team === side && e.type === "goal" && e.player === pr.name).length;
-    const yellow = events.some(e => e.team === side && e.type === "yellow" && e.player === pr.name) ? 1 : 0;
-    const red = events.some(e => e.team === side && e.type === "red" && e.player === pr.name) ? 1 : 0;
-
-    const { data: existing } = await supabase.from("player_season_stats")
-      .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_name", pr.name).maybeSingle();
-
-    if (existing) {
-      await supabase.from("player_season_stats").update({
-        matches_played: (existing.matches_played ?? 0) + 1,
-        total_rating: (existing.total_rating ?? 0) + pr.rating,
-        goals: (existing.goals ?? 0) + goals,
-        yellow_cards: (existing.yellow_cards ?? 0) + yellow,
-        red_cards: (existing.red_cards ?? 0) + red,
-      }).eq("id", existing.id);
-    } else {
-      await supabase.from("player_season_stats").insert({
-        season_id: seasonId, club_id: clubId, player_name: pr.name,
-        matches_played: 1, total_rating: pr.rating, goals, yellow_cards: yellow, red_cards: red,
-      });
-    }
-  }
-}
+const YELLOW_THRESHOLDS = [{ count: 5, ban: 1 }, { count: 10, ban: 2 }, { count: 15, ban: 3 }];
 
 export async function POST(req: Request) {
   const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
@@ -176,78 +22,96 @@ export async function POST(req: Request) {
     .from("seasons").select("*").eq("id", seasonId).single();
   if (sErr) return Response.json({ error: "Season not found" }, { status: 404 });
 
-  // Запрещаем играть с неполным составом — проверяем ПОСЛЕ исключения травмированных/дисквалифицированных,
-  // не просто длину переданного массива (иначе травмированный игрок "числится" но реально не играет).
+  const matchday = season.matchday;
+
+  const { data: fixtures } = await supabase
+    .from("fixtures").select("*")
+    .eq("season_id", seasonId).eq("matchday", matchday).eq("played", false);
+
+  if (!fixtures?.length) return Response.json({ error: "No fixtures" }, { status: 400 });
+
+  // ── Шаг 1: собираем все клубы участвующие в этом туре, грузим ВСЁ параллельно одним батчем ──
+  const allClubs = [...new Set(fixtures.flatMap((f: any) => [f.home_club, f.away_club]))];
+
+  const [playersArr, statusRes, standingsRes] = await Promise.all([
+    Promise.all(allClubs.map(c => getPlayersByClub(c))),
+    supabase.from("player_status").select("*").eq("season_id", seasonId).in("club_id", allClubs),
+    supabase.from("standings").select("*").eq("season_id", seasonId).in("club_id", allClubs),
+  ]);
+
+  const playersByClub: Record<string, any[]> = Object.fromEntries(allClubs.map((c, i) => [c, playersArr[i]]));
+  const statusRows = statusRes.data ?? [];
+  const standingsRows = standingsRes.data ?? [];
+
+  const unavailableByClub: Record<string, Set<string>> = {};
+  for (const c of allClubs) unavailableByClub[c] = new Set();
+  for (const row of statusRows) {
+    if (row.matches_out > 0) unavailableByClub[row.club_id]?.add(row.player_name);
+  }
+
+  // Проверка состава пользователя ПОСЛЕ исключения недоступных
   if (userLineup && userClubId) {
-    const userUnavailable = await getUnavailable(seasonId, userClubId);
-    const availableCount = userLineup.filter((p: any) => p && !userUnavailable.has(p.name)).length;
+    const userUnavail = unavailableByClub[userClubId] ?? new Set();
+    const availableCount = userLineup.filter((p: any) => p && !userUnavail.has(p.name)).length;
     if (availableCount < 11) {
-      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavailable.has(p.name)).map((p: any) => p.name);
+      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavail.has(p.name)).map((p: any) => p.name);
       return Response.json({
-        error: `Your lineup has only ${availableCount} available players (need 11). Unavailable: ${unavailableInLineup.join(", ") || "none in lineup, but bench is short"}.`,
+        error: `Your lineup has only ${availableCount} available players (need 11). Unavailable: ${unavailableInLineup.join(", ") || "bench too short"}.`,
         availableCount, unavailablePlayers: unavailableInLineup,
       }, { status: 400 });
     }
   }
 
-  const matchday = season.matchday;
-
-  const { data: fixtures } = await supabase
-    .from("fixtures").select("*")
-    .eq("season_id", seasonId)
-    .eq("matchday", matchday)
-    .eq("played", false);
-
-  if (!fixtures?.length) return Response.json({ error: "No fixtures" }, { status: 400 });
+  const ratingCache: Record<string, number> = {};
+  const getRating = (clubId: string) => {
+    if (ratingCache[clubId] !== undefined) return ratingCache[clubId];
+    const players = playersByClub[clubId] ?? [];
+    const avg = players.length ? players.slice(0, 18).reduce((s: number, p: any) => s + (p.overall ?? 75), 0) / Math.min(players.length, 18) : 75;
+    ratingCache[clubId] = Math.round(avg);
+    return ratingCache[clubId];
+  };
 
   const results: any[] = [];
-  const touchedClubs = new Set<string>();
+  const fixtureUpdates: any[] = [];
+  const standingsDeltas: Record<string, { played: number; won: number; drawn: number; lost: number; gf: number; ga: number; points: number }> = {};
+  const statusUpdates: Record<string, { status: string; matches_out: number; yellow_cards: number; existing?: any }> = {};
+  const seasonStatsAccum: Record<string, { matches_played: number; total_rating: number; goals: number; yellow_cards: number; red_cards: number }> = {};
 
+  const getDelta = (clubId: string) => {
+    if (!standingsDeltas[clubId]) standingsDeltas[clubId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
+    return standingsDeltas[clubId];
+  };
+
+  // ── Шаг 2: считаем все матчи тура в памяти (без запросов к БД внутри цикла) ──
   for (const fix of fixtures) {
+    const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
+    const awayUnavailable = unavailableByClub[fix.away_club] ?? new Set();
+    const homeAvailable = (playersByClub[fix.home_club] ?? []).filter((p: any) => !homeUnavailable.has(p.name));
+    const awayAvailable = (playersByClub[fix.away_club] ?? []).filter((p: any) => !awayUnavailable.has(p.name));
+
     const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
-    touchedClubs.add(fix.home_club);
-    touchedClubs.add(fix.away_club);
-
-    const homeAll = await getClubPlayers(fix.home_club);
-    const awayAll = await getClubPlayers(fix.away_club);
-
-    // Исключаем недоступных (травма/дисквалификация) из пула старта
-    const homeUnavailable = await getUnavailable(seasonId, fix.home_club);
-    const awayUnavailable = await getUnavailable(seasonId, fix.away_club);
-
-    const homeAvailable = homeAll.filter((p: any) => !homeUnavailable.has(p.name));
-    const awayAvailable = awayAll.filter((p: any) => !awayUnavailable.has(p.name));
-
     let homeGoals: number, awayGoals: number;
 
     if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
-      // Явно переданный результат (для будущего "ручного" режима матча)
-      homeGoals = userHomeGoals;
-      awayGoals = userAwayGoals;
+      homeGoals = userHomeGoals; awayGoals = userAwayGoals;
     } else if (isUserMatch && userLineup?.length) {
-      // Матч пользователя — считаем по РЕАЛЬНОМУ составу/формации, не по среднему рейтингу клуба.
-      // Это то что делает формацию (5-3-2, 3-4-3 итд) реально влияющей на результат.
       const userIsHome = fix.home_club === userClubId;
-      const oppAll = userIsHome ? awayAvailable : homeAvailable;
-      const oppXI = getStartingXI(oppAll);
+      const oppAvailable = userIsHome ? awayAvailable : homeAvailable;
+      const oppXI = getStartingXI(oppAvailable);
       const userTac = userTactic || "Balanced";
       const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
+      const userUnavail = userIsHome ? homeUnavailable : awayUnavailable;
+      const cleanLineup = userLineup.filter((p: any) => !userUnavail.has(p.name));
 
       const result = userIsHome
-        ? simulateMatch(userLineup.filter((p: any) => !homeUnavailable.has(p.name)), oppXI, userTac, oppTac)
-        : simulateMatch(oppXI, userLineup.filter((p: any) => !awayUnavailable.has(p.name)), oppTac, userTac);
-
-      homeGoals = result.homeGoals;
-      awayGoals = result.awayGoals;
+        ? simulateMatch(cleanLineup, oppXI, userTac, oppTac)
+        : simulateMatch(oppXI, cleanLineup, oppTac, userTac);
+      homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
-      // AI vs AI — обычная симуляция по рейтингу
-      const homeRating = await getClubRating(fix.home_club);
-      const awayRating = await getClubRating(fix.away_club);
       const homeTactic = getClubTactic(fix.home_club);
       const awayTactic = getClubTactic(fix.away_club);
-      const result = simulateMatchByRating(homeRating, awayRating, homeTactic, awayTactic);
-      homeGoals = result.homeGoals;
-      awayGoals = result.awayGoals;
+      const result = simulateMatchByRating(getRating(fix.home_club), getRating(fix.away_club), homeTactic, awayTactic);
+      homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     }
 
     const homeStarters = (fix.home_club === userClubId && userLineup?.length)
@@ -265,62 +129,173 @@ export async function POST(req: Request) {
     const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
 
-    await supabase.from("fixtures").update({
-      home_goals: homeGoals, away_goals: awayGoals,
-      played: true, played_at: new Date().toISOString(),
-      events, ratings,
-    }).eq("id", fix.id);
-
-    // Применяем новые травмы/карточки
-    await applyEventStatuses(seasonId, fix.home_club, events, "home");
-    await applyEventStatuses(seasonId, fix.away_club, events, "away");
-
-    // Накопление сезонной статистики (для среднего рейтинга за сезон)
-    await updateSeasonStats(seasonId, fix.home_club, ratings.home, events, "home");
-    await updateSeasonStats(seasonId, fix.away_club, ratings.away, events, "away");
+    fixtureUpdates.push({
+      id: fix.id, home_goals: homeGoals, away_goals: awayGoals,
+      played: true, played_at: new Date().toISOString(), events, ratings,
+    });
 
     results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, events, ratings, fixtureId: fix.id });
 
+    // Таблица
     for (const [clubId, isHome] of [[fix.home_club, true], [fix.away_club, false]] as [string, boolean][]) {
-      const goals   = isHome ? homeGoals : awayGoals;
+      const goals = isHome ? homeGoals : awayGoals;
       const against = isHome ? awayGoals : homeGoals;
-      const won = goals > against ? 1 : 0;
-      const drawn = goals === against ? 1 : 0;
-      const lost = goals < against ? 1 : 0;
-      const pts = won ? 3 : drawn ? 1 : 0;
+      const d = getDelta(clubId);
+      d.played += 1; d.gf += goals; d.ga += against;
+      if (goals > against) { d.won += 1; d.points += 3; }
+      else if (goals === against) { d.drawn += 1; d.points += 1; }
+      else { d.lost += 1; }
+    }
 
-      const { data: cur } = await supabase.from("standings")
-        .select("*").eq("season_id", seasonId).eq("club_id", clubId).single();
+    // Карточки/травмы — копим в памяти на конкретного игрока
+    const applySide = (side: "home" | "away", clubId: string) => {
+      const yellowsThisMatch: Record<string, number> = {};
+      for (const e of events) {
+        if (e.team !== side) continue;
+        const key = `${clubId}::${e.player}`;
+        const existingRow = statusRows.find((r: any) => r.club_id === clubId && r.player_name === e.player);
 
-      if (cur) {
-        await supabase.from("standings").update({
-          played: (cur.played || 0) + 1,
-          won:    (cur.won   || 0) + won,
-          drawn:  (cur.drawn || 0) + drawn,
-          lost:   (cur.lost  || 0) + lost,
-          gf:     (cur.gf    || 0) + goals,
-          ga:     (cur.ga    || 0) + against,
-          points: (cur.points|| 0) + pts,
-        }).eq("season_id", seasonId).eq("club_id", clubId);
+        if (e.type === "yellow") {
+          yellowsThisMatch[e.player] = (yellowsThisMatch[e.player] ?? 0) + 1;
+          if (yellowsThisMatch[e.player] === 2) {
+            const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
+            statusUpdates[key] = { status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+            continue;
+          }
+          const prevYellow = statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0;
+          const newTotal = prevYellow + 1;
+          const crossed = YELLOW_THRESHOLDS.find(t => newTotal === t.count);
+          const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
+          statusUpdates[key] = {
+            status: crossed ? "suspended" : (statusUpdates[key]?.status ?? existingRow?.status ?? "none"),
+            matches_out: crossed ? Math.max(prevOut, crossed.ban) : prevOut,
+            yellow_cards: newTotal, existing: existingRow,
+          };
+        }
+        if (e.type === "red") {
+          const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
+          statusUpdates[key] = { status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+        }
+        if (e.type === "injury") {
+          const weeks = Math.floor(Math.random() * 3) + 1;
+          const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
+          statusUpdates[key] = { status: "injured", matches_out: Math.max(prevOut, weeks), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+        }
+      }
+    };
+    applySide("home", fix.home_club);
+    applySide("away", fix.away_club);
+
+    // Сезонная статистика — копим в памяти
+    const accumulateStats = (clubId: string, side: "home" | "away", playerRatings: any[]) => {
+      for (const pr of playerRatings) {
+        const key = `${clubId}::${pr.name}`;
+        const goals = events.filter((e: any) => e.team === side && e.type === "goal" && e.player === pr.name).length;
+        const yellow = events.some((e: any) => e.team === side && e.type === "yellow" && e.player === pr.name) ? 1 : 0;
+        const red = events.some((e: any) => e.team === side && e.type === "red" && e.player === pr.name) ? 1 : 0;
+
+        const prev = seasonStatsAccum[key] ?? { matches_played: 0, total_rating: 0, goals: 0, yellow_cards: 0, red_cards: 0 };
+        seasonStatsAccum[key] = {
+          matches_played: prev.matches_played + 1,
+          total_rating: prev.total_rating + pr.rating,
+          goals: prev.goals + goals,
+          yellow_cards: prev.yellow_cards + yellow,
+          red_cards: prev.red_cards + red,
+        };
+      }
+    };
+    accumulateStats(fix.home_club, "home", ratings.home);
+    accumulateStats(fix.away_club, "away", ratings.away);
+  }
+
+  // ── Шаг 3: загружаем существующие season_stats для накопления (один батч-запрос) ──
+  const { data: existingStats } = await supabase.from("player_season_stats")
+    .select("*").eq("season_id", seasonId).in("club_id", allClubs);
+  const existingStatsMap: Record<string, any> = {};
+  for (const row of existingStats ?? []) existingStatsMap[`${row.club_id}::${row.player_name}`] = row;
+
+  // ── Шаг 4: пишем всё пачками, параллельно ──
+  const writes: Promise<any>[] = [];
+
+  for (const u of fixtureUpdates) {
+    writes.push(supabase.from("fixtures").update({
+      home_goals: u.home_goals, away_goals: u.away_goals, played: u.played, played_at: u.played_at, events: u.events, ratings: u.ratings,
+    }).eq("id", u.id));
+  }
+
+  for (const [clubId, delta] of Object.entries(standingsDeltas)) {
+    const cur = standingsRows.find((r: any) => r.club_id === clubId);
+    if (cur) {
+      writes.push(supabase.from("standings").update({
+        played: (cur.played || 0) + delta.played,
+        won: (cur.won || 0) + delta.won,
+        drawn: (cur.drawn || 0) + delta.drawn,
+        lost: (cur.lost || 0) + delta.lost,
+        gf: (cur.gf || 0) + delta.gf,
+        ga: (cur.ga || 0) + delta.ga,
+        points: (cur.points || 0) + delta.points,
+      }).eq("season_id", seasonId).eq("club_id", clubId));
+    }
+  }
+
+  for (const [key, upd] of Object.entries(statusUpdates)) {
+    const [clubId, playerName] = key.split("::");
+    if (upd.existing) {
+      writes.push(supabase.from("player_status").update({
+        status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
+      }).eq("id", upd.existing.id));
+    } else {
+      writes.push(supabase.from("player_status").insert({
+        season_id: seasonId, club_id: clubId, player_name: playerName,
+        status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
+      }));
+    }
+  }
+
+  // Тикаем вниз счётчики у игроков НЕ затронутых новыми событиями в этом туре
+  for (const row of statusRows) {
+    const key = `${row.club_id}::${row.player_name}`;
+    if (statusUpdates[key]) continue;
+    if (row.matches_out > 0) {
+      const newOut = row.matches_out - 1;
+      if (newOut <= 0) {
+        writes.push(supabase.from("player_status").delete().eq("id", row.id));
+      } else {
+        writes.push(supabase.from("player_status").update({ matches_out: newOut }).eq("id", row.id));
       }
     }
   }
 
-  // Тикаем вниз счётчики пропусков для всех клубов которые играли (после своего матча)
-  for (const clubId of touchedClubs) {
-    await tickDownStatus(seasonId, clubId);
+  for (const [key, upd] of Object.entries(seasonStatsAccum)) {
+    const [clubId, playerName] = key.split("::");
+    const existing = existingStatsMap[key];
+    if (existing) {
+      writes.push(supabase.from("player_season_stats").update({
+        matches_played: (existing.matches_played ?? 0) + upd.matches_played,
+        total_rating: (existing.total_rating ?? 0) + upd.total_rating,
+        goals: (existing.goals ?? 0) + upd.goals,
+        yellow_cards: (existing.yellow_cards ?? 0) + upd.yellow_cards,
+        red_cards: (existing.red_cards ?? 0) + upd.red_cards,
+      }).eq("id", existing.id));
+    } else {
+      writes.push(supabase.from("player_season_stats").insert({
+        season_id: seasonId, club_id: clubId, player_name: playerName,
+        matches_played: upd.matches_played, total_rating: upd.total_rating,
+        goals: upd.goals, yellow_cards: upd.yellow_cards, red_cards: upd.red_cards,
+      }));
+    }
   }
+
+  await Promise.all(writes);
 
   const { count } = await supabase.from("fixtures")
     .select("*", { count: "exact", head: true })
     .eq("season_id", seasonId).eq("played", false);
 
   const nextMatchday = (count ?? 0) > 0 ? matchday + 1 : matchday;
-  const newStatus   = (count ?? 0) === 0 ? "finished" : "active";
+  const newStatus = (count ?? 0) === 0 ? "finished" : "active";
 
-  await supabase.from("seasons").update({
-    matchday: nextMatchday, status: newStatus,
-  }).eq("id", seasonId);
+  await supabase.from("seasons").update({ matchday: nextMatchday, status: newStatus }).eq("id", seasonId);
 
   const userResult = results.find(r => r.home === userClubId || r.away === userClubId) || null;
   return Response.json({ matchday, nextMatchday, finished: newStatus === "finished", results, userResult });

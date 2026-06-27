@@ -11,6 +11,9 @@ interface CareerState {
   lineupsByFormation: Record<string, Record<string, any>>;
   customFormations: Record<string, { slots: {slot:string,x:number,y:number}[]; positions: Record<string,string>; lineup: Record<string, any> }>;
   formation:       string;
+  tactic:          string;
+  customTactic:    any;
+  locale:          "en" | "ru";
   setSelectedClub:   (club: any)              => void;
   setSelectedLeague: (league: any)            => void;
   setSeasonId:       (id: string)             => void;
@@ -20,12 +23,9 @@ interface CareerState {
   saveCustomFormation: (name: string, slots: any[], positions: Record<string,string>, lineup: Record<string, any>) => void;
   deleteCustomFormation: (name: string) => void;
   setFormation:      (f: string)              => void;
-  tactic:        string;
-  setTactic:     (t: string)              => void;
-  locale:        "en" | "ru";
-  setLocale:     (l: "en" | "ru")         => void;
-  customTactic:  any;
-  setCustomTactic: (c: any)              => void;
+  setTactic:         (t: string)              => void;
+  setCustomTactic:   (c: any)                 => void;
+  setLocale:         (l: "en" | "ru")          => void;
   resetCareer:       ()                       => void;
 }
 
@@ -40,9 +40,9 @@ export const useCareerStore = create<CareerState>()(
       lineupsByFormation: {},
       customFormations: {},
       formation:      "4-3-3",
-      tactic:        "Balanced",
-      locale:        "en" as "en" | "ru",
-      customTactic:  { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
+      tactic:         "Balanced",
+      customTactic:   { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
+      locale:         "en",
       setSelectedClub:   (club)    => set({ selectedClub: club }),
       setSelectedLeague: (league)  => set({ selectedLeague: league }),
       setSeasonId:       (id)      => set({ seasonId: id }),
@@ -62,8 +62,8 @@ export const useCareerStore = create<CareerState>()(
       }),
       setFormation:      (f)       => set({ formation: f }),
       setTactic:         (t)       => set({ tactic: t }),
-      setLocale:         (l)       => set({ locale: l }),
       setCustomTactic:   (c)       => set({ customTactic: c }),
+      setLocale:         (l)       => set({ locale: l }),
       resetCareer: () => set({
         selectedClub: null, selectedLeague: null, seasonId: null, matchday: 1,
         lineup: {}, formation: "4-3-3", tactic: "Balanced",
