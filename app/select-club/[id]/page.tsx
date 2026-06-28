@@ -325,7 +325,11 @@ export default function SelectClubPage() {
           clubColor={leagueTheme.rawColor}
           onCancel={() => setShowConfirm(false)}
           onConfirm={() => {
-            localStorage.removeItem("career_state");
+            // ВАЖНО: это и было причиной утечки составов между карьерами.
+            // localStorage.removeItem("career_state") был устаревшим механизмом который
+            // больше ничего не очищал. Теперь реально стираем lineup/lineupsByFormation/
+            // customFormations/tactic из стора перед созданием новой карьеры.
+            useCareerStore.getState().resetCareer();
             startCareer();
           }}
         />

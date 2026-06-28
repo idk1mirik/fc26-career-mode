@@ -118,7 +118,14 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
         })}
       </nav>
 
-      <button onClick={() => { useCareerStore.getState().resetCareer(); router.push("/"); onNavigate?.(); }}
+      {/*
+        ВАЖНО: эта кнопка теперь ТОЛЬКО возвращает на главное меню.
+        Она НЕ вызывает resetCareer() — карьера (seasonId, состав, тактика) остаётся
+        целой в сторе, чтобы кнопка "Continue Career" на главной странице могла её подхватить.
+        Полное удаление карьеры происходит только через явное подтверждение
+        в select-club при старте НОВОЙ карьеры (см. ConfirmCareerModal).
+      */}
+      <button onClick={() => { router.push("/"); onNavigate?.(); }}
         className={`mt-4 w-full py-2.5 text-xs font-black uppercase tracking-widest rounded-2xl transition-all ${NAV_FONT[theme]} ${theme === "classic" ? "bg-red-950/30 border border-red-900/40 text-red-400 hover:bg-red-900/40" : theme === "aurora" ? "bg-red-50 border border-red-200 text-red-500 hover:bg-red-100" : "border border-red-900/60 text-red-500/70 hover:bg-red-950/20"}`}>
         {copy.navQuit}
       </button>
