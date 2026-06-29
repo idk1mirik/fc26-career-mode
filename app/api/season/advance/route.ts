@@ -155,7 +155,7 @@ export async function POST(req: Request) {
         const key = `${clubId}::${e.player}`;
         const existingRow = statusRows.find((r: any) => r.club_id === clubId && r.player_name === e.player);
 
-        if (e.type === "yellow") {
+        if (e.type === "yellow" && e.player) {
           yellowsThisMatch[e.player] = (yellowsThisMatch[e.player] ?? 0) + 1;
           if (yellowsThisMatch[e.player] === 2) {
             const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
