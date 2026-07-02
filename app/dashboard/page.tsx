@@ -352,12 +352,12 @@ export default function DashboardPage() {
   const [simulatingCup, setSimulatingCup] = useState(false);
 
   const availableLineupPlayers = useMemo(() =>
-    Object.values(lineup || {}).filter((p: any) => p && !unavailableNames.has(p.name)),
+    Object.values(lineup || {}).filter((p: any) => p && !unavailableNames.has(p.id ?? p.name)),
     [lineup, unavailableNames]
   );
   const lineupValid    = availableLineupPlayers.length >= MIN_LINEUP_SIZE;
   const unavailableInLineup = useMemo(() =>
-    Object.values(lineup || {}).filter((p: any) => p && unavailableNames.has(p.name)).map((p: any) => p.name),
+    Object.values(lineup || {}).filter((p: any) => p && unavailableNames.has(p.id ?? p.name)).map((p: any) => p.name),
     [lineup, unavailableNames]
   );
   const lineupCount    = availableLineupPlayers.length;
@@ -399,7 +399,7 @@ export default function DashboardPage() {
     const statusRes = await fetch(`/api/player-status?seasonId=${sid}&clubId=${encodeURIComponent(clubId)}`);
     if (statusRes.ok) {
       const sd = await statusRes.json();
-      setUnavailableNames(new Set((sd.statuses ?? []).map((s: any) => s.player_name)));
+      setUnavailableNames(new Set((sd.statuses ?? []).map((s: any) => s.player_id || s.player_name)));
     }
   }, []);
 

@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
 import { simulateMatchByRating } from "@/lib/matchEngine";
 import { createSeasonCompetitions } from "@/lib/createCompetitions";
+import { getPlayersByClub } from "@/lib/players";
+import { computeInitialBudget } from "@/lib/finance";
 
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 
@@ -65,8 +67,15 @@ export async function POST(req: Request) {
   const { error: fErr } = await supabase.from("fixtures").insert(fixtures);
   if (fErr) return Response.json({ error: fErr.message }, { status: 500 });
 
-  // Инициализируем таблицу
-  const standingsRows = clubs.map(c => ({ season_id: season.id, club_id: c }));
+  // Инициализируем таблицу — включая стартовый бюджет клуба (раньше это
+  // значение нигде не сохранялось и пересчитывалось на лету при каждом рендере).
+  const budgets = await Promise.all(clubs.map(async (c) => {
+    const players = await getPlayersByClub(c, season.id);
+    const squadValue = players.reduce((s, p: any) => s + (p.market_value ?? 0), 0);
+    const avgOverall = players.length ? players.reduce((s, p: any) => s + (p.overall ?? 70), 0) / players.length : 70;
+    return computeInitialBudget(squadValue, avgOverall);
+  }));
+  const standingsRows = clubs.map((c, i) => ({ season_id: season.id, club_id: c, budget: budgets[i] }));
   const { error: stErr } = await supabase.from("standings").insert(standingsRows);
   if (stErr) return Response.json({ error: stErr.message }, { status: 500 });
 

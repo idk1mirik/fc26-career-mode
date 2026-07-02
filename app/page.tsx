@@ -352,7 +352,20 @@ export default function HomePage() {
   useEffect(() => {
     setMounted(true);
     initializeTheme();
-    setHasCareer(!!localStorage.getItem("career_state"));
+    // ВАЖНО: зустand-стор карьеры персистится под ключом "career-store"
+    // (см. app/store/careerStore.ts). Раньше здесь проверялся несуществующий
+    // ключ "career_state" — из-за этого карточка "Continue Career" никогда
+    // не показывалась, даже когда карьера была цела в сторе после выхода
+    // через кнопку в сайдбаре. Плюс сам факт наличия ключа не значит, что
+    // карьера активна — resetCareer() тоже пишет в этот ключ, просто с
+    // seasonId: null, поэтому проверяем реальное содержимое.
+    try {
+      const raw = localStorage.getItem("career-store");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setHasCareer(!!parsed?.state?.seasonId && !!parsed?.state?.selectedClub);
+    } catch {
+      setHasCareer(false);
+    }
   }, [initializeTheme]); // stable Zustand ref, safe to add
 
   return (

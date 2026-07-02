@@ -37,15 +37,29 @@ function computeMarketValue(ovr: number): number {
   return Math.round(value / 100_000) * 100_000;
 }
 
-function computePotential(ovr: number, age: number): number {
+// Детерминированный псевдослучайный [0,1) на основе id игрока — раньше здесь
+// был Math.random(), из-за чего "потенциал" одного и того же игрока менялся
+// при каждом холодном старте сервера. Теперь он стабилен для конкретного id.
+function seededRandom(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h ^= h >>> 15;
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+function computePotential(ovr: number, age: number, id: string): number {
   if (age <= 0 || ovr <= 0) return ovr;
   const ceiling = ovr >= 88 ? ovr + 3 : ovr >= 82 ? ovr + 8 : ovr >= 75 ? ovr + 12 : ovr + 6;
+  const r = seededRandom(id);
   let bonus = 0;
-  if (age <= 17)      bonus = Math.floor(Math.random() * 8) + 7;
-  else if (age <= 19) bonus = Math.floor(Math.random() * 7) + 5;
-  else if (age <= 21) bonus = Math.floor(Math.random() * 6) + 3;
-  else if (age <= 23) bonus = Math.floor(Math.random() * 4) + 1;
-  else if (age <= 26) bonus = Math.floor(Math.random() * 2);
+  if (age <= 17)      bonus = Math.floor(r * 8) + 7;
+  else if (age <= 19) bonus = Math.floor(r * 7) + 5;
+  else if (age <= 21) bonus = Math.floor(r * 6) + 3;
+  else if (age <= 23) bonus = Math.floor(r * 4) + 1;
+  else if (age <= 26) bonus = Math.floor(r * 2);
   return Math.min(99, Math.min(ceiling, ovr + bonus));
 }
 
@@ -86,7 +100,7 @@ export function loadAllPlayers(): Promise<Player[]> {
 
         results.push({
           id: row.id ?? "", name,
-          overall: ovr, potential: computePotential(ovr, age),
+          overall: ovr, potential: computePotential(ovr, age, row.id ?? name),
           position: row.position ?? "", alternatePositions: altPos, positionType: row.positionType ?? "",
           team: row.team ?? "", league: row.leagueName ?? "", nationality: row.nationality ?? "",
           age, height: Number(row.height ?? 0), weight: Number(row.weight ?? 0),
@@ -116,7 +130,47 @@ export function loadAllPlayers(): Promise<Player[]> {
   return cacheLoading;
 }
 
-export async function getPlayersByClub(clubName: string): Promise<Player[]> {
+// ── Трансферы: squad_overrides хранит "текущий клуб" игрока для конкретного
+// сезона, если он был куплен/продан в ходе карьеры. Без seasonId функция
+// работает как раньше (чистый состав из CSV, без трансферов) — это нужно
+// для мест, где сезон ещё не выбран (общий список игроков, лендинг и т.п.).
+let overridesCache: Record<string, { byId: Map<string, string> }> = {};
+
+async function getOverridesForSeason(seasonId: string): Promise<Map<string, string>> {
+  if (overridesCache[seasonId]) return overridesCache[seasonId].byId;
+  const { supabase } = await import("./supabase");
+  const { data } = await supabase.from("squad_overrides").select("player_id, club_id").eq("season_id", seasonId);
+  const byId = new Map<string, string>((data ?? []).map((r: any) => [r.player_id, r.club_id]));
+  overridesCache[seasonId] = { byId };
+  return byId;
+}
+
+// Вызывать после любой записи в squad_overrides (трансфер), иначе следующий
+// getPlayersByClub в этом же процессе отдаст устаревший состав.
+export function invalidateOverridesCache(seasonId: string) {
+  delete overridesCache[seasonId];
+}
+
+export async function getPlayersByClub(clubName: string, seasonId?: string): Promise<Player[]> {
   const all = await loadAllPlayers();
-  return all.filter(p => p.team.toLowerCase() === clubName.toLowerCase());
+  const base = all.filter(p => p.team.toLowerCase() === clubName.toLowerCase());
+  if (!seasonId) return base;
+
+  const overrides = await getOverridesForSeason(seasonId);
+  if (overrides.size === 0) return base;
+
+  // Игроки клуба "по CSV", которых увели трансфером в другой клуб — убираем
+  const stayed = base.filter(p => {
+    const movedTo = overrides.get(p.id);
+    return !movedTo || movedTo.toLowerCase() === clubName.toLowerCase();
+  });
+
+  // Игроки, которых КУПИЛИ в этот клуб (их изначальный team — другой) — добавляем
+  const incomingIds = [...overrides.entries()].filter(([, toClub]) => toClub.toLowerCase() === clubName.toLowerCase());
+  const stayedIds = new Set(stayed.map(p => p.id));
+  const incoming = incomingIds
+    .map(([playerId]) => all.find(p => p.id === playerId))
+    .filter((p): p is Player => !!p && !stayedIds.has(p.id));
+
+  return [...stayed, ...incoming];
 }

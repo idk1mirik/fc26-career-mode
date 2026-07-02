@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
 import { createSeasonCompetitions } from "@/lib/createCompetitions";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
+import { getPlayersByClub } from "@/lib/players";
+import { computeInitialBudget } from "@/lib/finance";
 
 function buildFixtures(clubs: string[], seasonId: string) {
   const rows: any[] = [];
@@ -60,11 +62,47 @@ export async function POST(req: Request) {
   const fixtures = buildFixtures(clubs, newSeason.id);
   await supabase.from("fixtures").insert(fixtures);
 
-  const standingsRows = clubs.map(c => ({ season_id: newSeason.id, club_id: c }));
+  // ── Бюджет переносится в новый сезон (остаток прошлого + пересчитанный
+  // прирост от роста стоимости состава), а не обнуляется каждый раз ──
+  const { data: oldStandings } = await supabase.from("standings").select("*").eq("season_id", oldSeasonId);
+  const oldBudgetByClub: Record<string, number> = Object.fromEntries((oldStandings ?? []).map((r: any) => [r.club_id, r.budget ?? 0]));
+
+  const budgets = await Promise.all(clubs.map(async (c) => {
+    const players = await getPlayersByClub(c, newSeason.id);
+    const squadValue = players.reduce((s, p: any) => s + (p.market_value ?? 0), 0);
+    const avgOverall = players.length ? players.reduce((s, p: any) => s + (p.overall ?? 70), 0) / players.length : 70;
+    const freshBudget = computeInitialBudget(squadValue, avgOverall);
+    const carriedOver = oldBudgetByClub[c] ?? 0;
+    // Берём большее из "рыночного" бюджета по новому составу и перенесённого остатка,
+    // чтобы деньги, заработанные в прошлом сезоне, не сгорали, но и не занижали
+    // бюджет клубов, которые внезапно похорошели по составу.
+    return Math.max(freshBudget, carriedOver);
+  }));
+  const standingsRows = clubs.map((c, i) => ({ season_id: newSeason.id, club_id: c, budget: budgets[i] }));
   await supabase.from("standings").insert(standingsRows);
 
+  // ── Реальные финалисты прошлого сезона для Суперкубка (вместо произвольных
+  // первых клубов списка лиги) ──
+  let prevSeasonFinalists: { leagueChampion?: string; leagueRunnerUp?: string; cupWinner?: string; cupRunnerUp?: string } = {};
   try {
-    await createSeasonCompetitions(newSeason.id, league.name);
+    const sortedOld = [...(oldStandings ?? [])].sort((a: any, b: any) => (b.points - a.points) || (b.gf - a.gf));
+    prevSeasonFinalists.leagueChampion = sortedOld[0]?.club_id;
+    prevSeasonFinalists.leagueRunnerUp = sortedOld[1]?.club_id;
+
+    const { data: domesticCup } = await supabase.from("competitions")
+      .select("*").eq("season_id", oldSeasonId).eq("type", "domestic_cup").eq("status", "finished").maybeSingle();
+    if (domesticCup) {
+      const { data: finalFixture } = await supabase.from("cup_fixtures")
+        .select("*").eq("competition_id", domesticCup.id).order("round", { ascending: false }).limit(1).maybeSingle();
+      if (finalFixture) {
+        prevSeasonFinalists.cupWinner = domesticCup.winner_club;
+        prevSeasonFinalists.cupRunnerUp = finalFixture.home_club === domesticCup.winner_club ? finalFixture.away_club : finalFixture.home_club;
+      }
+    }
+  } catch (e) { console.error("Could not resolve previous season finalists", e); }
+
+  try {
+    await createSeasonCompetitions(newSeason.id, league.name, prevSeasonFinalists);
   } catch (e) { console.error("Competition creation failed", e); }
 
   return Response.json({ seasonId: newSeason.id, seasonNum: newSeason.season_num });

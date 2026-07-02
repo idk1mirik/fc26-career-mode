@@ -6,6 +6,7 @@ import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/match
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { getPlayersByClub } from "@/lib/players";
+import { awardLeaguePositionPrizes } from "@/lib/finance";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a,b)=>b.overall-a.overall)[0];
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   const allClubs = [...new Set(fixtures.flatMap((f: any) => [f.home_club, f.away_club]))];
 
   const [playersArr, statusRes, standingsRes] = await Promise.all([
-    Promise.all(allClubs.map(c => getPlayersByClub(c))),
+    Promise.all(allClubs.map(c => getPlayersByClub(c, seasonId))),
     supabase.from("player_status").select("*").eq("season_id", seasonId).in("club_id", allClubs),
     supabase.from("standings").select("*").eq("season_id", seasonId).in("club_id", allClubs),
   ]);
@@ -43,18 +44,24 @@ export async function POST(req: Request) {
   const statusRows = statusRes.data ?? [];
   const standingsRows = standingsRes.data ?? [];
 
+  // Ключ игрока — id (стабилен и уникален), с фолбэком на имя для старых
+  // строк player_status, записанных до миграции на player_id. Так тёзки в
+  // одном клубе больше не путают друг другу травмы/дисквалификации.
+  const keyOf = (p: any) => p?.id ?? p?.name;
+  const rowKeyOf = (row: any) => row.player_id || row.player_name;
+
   const unavailableByClub: Record<string, Set<string>> = {};
   for (const c of allClubs) unavailableByClub[c] = new Set();
   for (const row of statusRows) {
-    if (row.matches_out > 0) unavailableByClub[row.club_id]?.add(row.player_name);
+    if (row.matches_out > 0) unavailableByClub[row.club_id]?.add(rowKeyOf(row));
   }
 
   // Проверка состава пользователя ПОСЛЕ исключения недоступных
   if (userLineup && userClubId) {
     const userUnavail = unavailableByClub[userClubId] ?? new Set();
-    const availableCount = userLineup.filter((p: any) => p && !userUnavail.has(p.name)).length;
+    const availableCount = userLineup.filter((p: any) => p && !userUnavail.has(keyOf(p))).length;
     if (availableCount < 11) {
-      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavail.has(p.name)).map((p: any) => p.name);
+      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavail.has(keyOf(p))).map((p: any) => p.name);
       return Response.json({
         error: `Your lineup has only ${availableCount} available players (need 11). Unavailable: ${unavailableInLineup.join(", ") || "bench too short"}.`,
         availableCount, unavailablePlayers: unavailableInLineup,
@@ -74,8 +81,8 @@ export async function POST(req: Request) {
   const results: any[] = [];
   const fixtureUpdates: any[] = [];
   const standingsDeltas: Record<string, { played: number; won: number; drawn: number; lost: number; gf: number; ga: number; points: number }> = {};
-  const statusUpdates: Record<string, { status: string; matches_out: number; yellow_cards: number; existing?: any }> = {};
-  const seasonStatsAccum: Record<string, { matches_played: number; total_rating: number; goals: number; yellow_cards: number; red_cards: number }> = {};
+  const statusUpdates: Record<string, { playerId: string; playerName: string; status: string; matches_out: number; yellow_cards: number; existing?: any }> = {};
+  const seasonStatsAccum: Record<string, { playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; yellow_cards: number; red_cards: number }> = {};
 
   const getDelta = (clubId: string) => {
     if (!standingsDeltas[clubId]) standingsDeltas[clubId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
@@ -86,8 +93,8 @@ export async function POST(req: Request) {
   for (const fix of fixtures) {
     const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
     const awayUnavailable = unavailableByClub[fix.away_club] ?? new Set();
-    const homeAvailable = (playersByClub[fix.home_club] ?? []).filter((p: any) => !homeUnavailable.has(p.name));
-    const awayAvailable = (playersByClub[fix.away_club] ?? []).filter((p: any) => !awayUnavailable.has(p.name));
+    const homeAvailable = (playersByClub[fix.home_club] ?? []).filter((p: any) => !homeUnavailable.has(keyOf(p)));
+    const awayAvailable = (playersByClub[fix.away_club] ?? []).filter((p: any) => !awayUnavailable.has(keyOf(p)));
 
     const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
     let homeGoals: number, awayGoals: number;
@@ -101,7 +108,7 @@ export async function POST(req: Request) {
       const userTac = userTactic || "Balanced";
       const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
       const userUnavail = userIsHome ? homeUnavailable : awayUnavailable;
-      const cleanLineup = userLineup.filter((p: any) => !userUnavail.has(p.name));
+      const cleanLineup = userLineup.filter((p: any) => !userUnavail.has(keyOf(p)));
 
       const result = userIsHome
         ? simulateMatch(cleanLineup, oppXI, userTac, oppTac)
@@ -115,10 +122,10 @@ export async function POST(req: Request) {
     }
 
     const homeStarters = (fix.home_club === userClubId && userLineup?.length)
-      ? userLineup.filter((p: any) => !homeUnavailable.has(p.name))
+      ? userLineup.filter((p: any) => !homeUnavailable.has(keyOf(p)))
       : getStartingXI(homeAvailable);
     const awayStarters = (fix.away_club === userClubId && userLineup?.length)
-      ? userLineup.filter((p: any) => !awayUnavailable.has(p.name))
+      ? userLineup.filter((p: any) => !awayUnavailable.has(keyOf(p)))
       : getStartingXI(awayAvailable);
 
     const homeStartIds = new Set(homeStarters.map((p: any) => p.id ?? p.name));
@@ -147,19 +154,21 @@ export async function POST(req: Request) {
       else { d.lost += 1; }
     }
 
-    // Карточки/травмы — копим в памяти на конкретного игрока
+    // Карточки/травмы — копим в памяти на конкретного игрока, ключ — id
+    // (совпадающие имена в одном клубе больше не путают друг другу карточки/травмы)
     const applySide = (side: "home" | "away", clubId: string) => {
       const yellowsThisMatch: Record<string, number> = {};
       for (const e of events) {
-        if (e.team !== side) continue;
-        const key = `${clubId}::${e.player}`;
-        const existingRow = statusRows.find((r: any) => r.club_id === clubId && r.player_name === e.player);
+        if (e.team !== side || !e.player) continue;
+        const pid = e.playerId ?? e.player;
+        const key = `${clubId}::${pid}`;
+        const existingRow = statusRows.find((r: any) => r.club_id === clubId && rowKeyOf(r) === pid);
 
-        if (e.type === "yellow" && e.player) {
-          yellowsThisMatch[e.player] = (yellowsThisMatch[e.player] ?? 0) + 1;
-          if (yellowsThisMatch[e.player] === 2) {
+        if (e.type === "yellow") {
+          yellowsThisMatch[pid] = (yellowsThisMatch[pid] ?? 0) + 1;
+          if (yellowsThisMatch[pid] === 2) {
             const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-            statusUpdates[key] = { status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+            statusUpdates[key] = { playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
             continue;
           }
           const prevYellow = statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0;
@@ -167,6 +176,7 @@ export async function POST(req: Request) {
           const crossed = YELLOW_THRESHOLDS.find(t => newTotal === t.count);
           const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
           statusUpdates[key] = {
+            playerId: pid, playerName: e.player,
             status: crossed ? "suspended" : (statusUpdates[key]?.status ?? existingRow?.status ?? "none"),
             matches_out: crossed ? Math.max(prevOut, crossed.ban) : prevOut,
             yellow_cards: newTotal, existing: existingRow,
@@ -174,28 +184,30 @@ export async function POST(req: Request) {
         }
         if (e.type === "red") {
           const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-          statusUpdates[key] = { status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+          statusUpdates[key] = { playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
         }
         if (e.type === "injury") {
           const weeks = Math.floor(Math.random() * 3) + 1;
           const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-          statusUpdates[key] = { status: "injured", matches_out: Math.max(prevOut, weeks), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+          statusUpdates[key] = { playerId: pid, playerName: e.player, status: "injured", matches_out: Math.max(prevOut, weeks), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
         }
       }
     };
     applySide("home", fix.home_club);
     applySide("away", fix.away_club);
 
-    // Сезонная статистика — копим в памяти
+    // Сезонная статистика — копим в памяти, ключ — id
     const accumulateStats = (clubId: string, side: "home" | "away", playerRatings: any[]) => {
       for (const pr of playerRatings) {
-        const key = `${clubId}::${pr.name}`;
-        const goals = events.filter((e: any) => e.team === side && e.type === "goal" && e.player === pr.name).length;
-        const yellow = events.some((e: any) => e.team === side && e.type === "yellow" && e.player === pr.name) ? 1 : 0;
-        const red = events.some((e: any) => e.team === side && e.type === "red" && e.player === pr.name) ? 1 : 0;
+        const pid = pr.playerId ?? pr.name;
+        const key = `${clubId}::${pid}`;
+        const goals = events.filter((e: any) => e.team === side && e.type === "goal" && (e.playerId ?? e.player) === pid).length;
+        const yellow = events.some((e: any) => e.team === side && e.type === "yellow" && (e.playerId ?? e.player) === pid) ? 1 : 0;
+        const red = events.some((e: any) => e.team === side && e.type === "red" && (e.playerId ?? e.player) === pid) ? 1 : 0;
 
-        const prev = seasonStatsAccum[key] ?? { matches_played: 0, total_rating: 0, goals: 0, yellow_cards: 0, red_cards: 0 };
+        const prev = seasonStatsAccum[key] ?? { playerId: pid, playerName: pr.name, matches_played: 0, total_rating: 0, goals: 0, yellow_cards: 0, red_cards: 0 };
         seasonStatsAccum[key] = {
+          playerId: pid, playerName: pr.name,
           matches_played: prev.matches_played + 1,
           total_rating: prev.total_rating + pr.rating,
           goals: prev.goals + goals,
@@ -212,10 +224,10 @@ export async function POST(req: Request) {
   const { data: existingStats } = await supabase.from("player_season_stats")
     .select("*").eq("season_id", seasonId).in("club_id", allClubs);
   const existingStatsMap: Record<string, any> = {};
-  for (const row of existingStats ?? []) existingStatsMap[`${row.club_id}::${row.player_name}`] = row;
+  for (const row of existingStats ?? []) existingStatsMap[`${row.club_id}::${rowKeyOf(row)}`] = row;
 
   // ── Шаг 4: пишем всё пачками, параллельно ──
-  const writes: Promise<any>[] = [];
+  const writes: any[] = [];
 
   for (const u of fixtureUpdates) {
     writes.push(supabase.from("fixtures").update({
@@ -239,14 +251,14 @@ export async function POST(req: Request) {
   }
 
   for (const [key, upd] of Object.entries(statusUpdates)) {
-    const [clubId, playerName] = key.split("::");
+    const clubId = key.split("::")[0];
     if (upd.existing) {
       writes.push(supabase.from("player_status").update({
-        status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
+        player_id: upd.playerId, status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
       }).eq("id", upd.existing.id));
     } else {
       writes.push(supabase.from("player_status").insert({
-        season_id: seasonId, club_id: clubId, player_name: playerName,
+        season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
         status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
       }));
     }
@@ -254,7 +266,7 @@ export async function POST(req: Request) {
 
   // Тикаем вниз счётчики у игроков НЕ затронутых новыми событиями в этом туре
   for (const row of statusRows) {
-    const key = `${row.club_id}::${row.player_name}`;
+    const key = `${row.club_id}::${rowKeyOf(row)}`;
     if (statusUpdates[key]) continue;
     if (row.matches_out > 0) {
       const newOut = row.matches_out - 1;
@@ -267,10 +279,11 @@ export async function POST(req: Request) {
   }
 
   for (const [key, upd] of Object.entries(seasonStatsAccum)) {
-    const [clubId, playerName] = key.split("::");
+    const clubId = key.split("::")[0];
     const existing = existingStatsMap[key];
     if (existing) {
       writes.push(supabase.from("player_season_stats").update({
+        player_id: upd.playerId,
         matches_played: (existing.matches_played ?? 0) + upd.matches_played,
         total_rating: (existing.total_rating ?? 0) + upd.total_rating,
         goals: (existing.goals ?? 0) + upd.goals,
@@ -279,7 +292,7 @@ export async function POST(req: Request) {
       }).eq("id", existing.id));
     } else {
       writes.push(supabase.from("player_season_stats").insert({
-        season_id: seasonId, club_id: clubId, player_name: playerName,
+        season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
         matches_played: upd.matches_played, total_rating: upd.total_rating,
         goals: upd.goals, yellow_cards: upd.yellow_cards, red_cards: upd.red_cards,
       }));
@@ -296,6 +309,10 @@ export async function POST(req: Request) {
   const newStatus = (count ?? 0) === 0 ? "finished" : "active";
 
   await supabase.from("seasons").update({ matchday: nextMatchday, status: newStatus }).eq("id", seasonId);
+
+  if (newStatus === "finished") {
+    await awardLeaguePositionPrizes(seasonId);
+  }
 
   const userResult = results.find(r => r.home === userClubId || r.away === userClubId) || null;
   return Response.json({ matchday, nextMatchday, finished: newStatus === "finished", results, userResult });

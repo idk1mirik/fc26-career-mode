@@ -6,6 +6,8 @@ export interface MatchEvent {
   team: "home" | "away";
   player?: string;
   player2?: string;
+  playerId?: string;   // стабильный id — используется для трекинга травм/дисквалификаций/статистики
+  player2Id?: string;
 }
 
 function pick<T>(arr: T[]): T | undefined {
@@ -53,20 +55,22 @@ export function generateMatchEvents(
     return m;
   };
 
-  // Голы — ВСЕ полевые позиции имеют шанс, штрафуем повторные голы того же игрока
+  // Голы — ВСЕ полевые позиции имеют шанс, штрафуем повторные голы того же игрока.
+  // Ключ дедупликации — id, а не имя: у тёзок в одном клубе иначе путается счёт голов.
+  const keyOf = (p: any) => p.id ?? p.name;
   const homeGoalCount: Record<string, number> = {};
   for (let i = 0; i < homeGoals; i++) {
-    const weighted = homeStarters.map((p: any) => ({ ...p, _penalty: Math.pow(0.45, homeGoalCount[p.name] ?? 0) }));
+    const weighted = homeStarters.map((p: any) => ({ ...p, _penalty: Math.pow(0.45, homeGoalCount[keyOf(p)] ?? 0) }));
     const scorer = pickWeightedScorer(weighted.filter((p: any) => p._penalty > 0.1)) ?? pick(homeStarters);
-    if (scorer) homeGoalCount[scorer.name] = (homeGoalCount[scorer.name] ?? 0) + 1;
-    events.push({ minute: randomMinute(), type: "goal", team: "home", player: scorer?.name ?? "Unknown" });
+    if (scorer) homeGoalCount[keyOf(scorer)] = (homeGoalCount[keyOf(scorer)] ?? 0) + 1;
+    events.push({ minute: randomMinute(), type: "goal", team: "home", player: scorer?.name ?? "Unknown", playerId: scorer?.id });
   }
   const awayGoalCount: Record<string, number> = {};
   for (let i = 0; i < awayGoals; i++) {
-    const weighted = awayStarters.map((p: any) => ({ ...p, _penalty: Math.pow(0.45, awayGoalCount[p.name] ?? 0) }));
+    const weighted = awayStarters.map((p: any) => ({ ...p, _penalty: Math.pow(0.45, awayGoalCount[keyOf(p)] ?? 0) }));
     const scorer = pickWeightedScorer(weighted.filter((p: any) => p._penalty > 0.1)) ?? pick(awayStarters);
-    if (scorer) awayGoalCount[scorer.name] = (awayGoalCount[scorer.name] ?? 0) + 1;
-    events.push({ minute: randomMinute(), type: "goal", team: "away", player: scorer?.name ?? "Unknown" });
+    if (scorer) awayGoalCount[keyOf(scorer)] = (awayGoalCount[keyOf(scorer)] ?? 0) + 1;
+    events.push({ minute: randomMinute(), type: "goal", team: "away", player: scorer?.name ?? "Unknown", playerId: scorer?.id });
   }
 
   // Жёлтые карточки — защитники/полузащитники получают чаще (по реальной статистике)
@@ -85,7 +89,7 @@ export function generateMatchEvents(
     let r = Math.random() * total;
     let player = pool[0];
     for (const p of weighted) { r -= p._w; if (r <= 0) { player = p; break; } }
-    if (player) events.push({ minute: randomMinute(), type: "yellow", team, player: player.name });
+    if (player) events.push({ minute: randomMinute(), type: "yellow", team, player: player.name, playerId: player.id });
   }
 
   // Красная карточка (8% шанс) — может быть прямая или вторая жёлтая (обрабатывается на сервере отдельно)
@@ -93,7 +97,7 @@ export function generateMatchEvents(
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
     const pool = team === "home" ? homeStarters : awayStarters;
     const player = pick(pool);
-    if (player) events.push({ minute: randomMinute(), type: "red", team, player: player.name });
+    if (player) events.push({ minute: randomMinute(), type: "red", team, player: player.name, playerId: player.id });
   }
 
   // Замены
@@ -108,19 +112,19 @@ export function generateMatchEvents(
     const usedOut = team === "home" ? homeUsedOut : awayUsedOut;
     const usedIn  = team === "home" ? homeUsedIn  : awayUsedIn;
 
-    const availOut = startPool.filter(p => p.position !== "GK" && !usedOut.has(p.name));
+    const availOut = startPool.filter(p => p.position !== "GK" && !usedOut.has(keyOf(p)));
     const out = pick(availOut);
     if (!out) continue;
 
     const inPool = (benchPool.length ? benchPool : startPool).filter(p => p.position !== "GK");
-    const availIn = inPool.filter(p => !usedIn.has(p.name) && !usedOut.has(p.name) && p.name !== out.name);
+    const availIn = inPool.filter(p => !usedIn.has(keyOf(p)) && !usedOut.has(keyOf(p)) && keyOf(p) !== keyOf(out));
     const inP = pick(availIn);
 
     if (out && inP) {
-      usedOut.add(out.name);
-      usedIn.add(inP.name);
+      usedOut.add(keyOf(out));
+      usedIn.add(keyOf(inP));
       const minute = Math.floor(Math.random() * 35) + 55;
-      events.push({ minute, type: "substitution", team, player: out.name, player2: inP.name });
+      events.push({ minute, type: "substitution", team, player: out.name, player2: inP.name, playerId: out.id, player2Id: inP.id });
     }
   }
 
@@ -129,7 +133,7 @@ export function generateMatchEvents(
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
     const pool = team === "home" ? homeStarters : awayStarters;
     const player = pick(pool);
-    if (player) events.push({ minute: randomMinute(), type: "injury", team, player: player.name });
+    if (player) events.push({ minute: randomMinute(), type: "injury", team, player: player.name, playerId: player.id });
   }
 
   return events.sort((a, b) => a.minute - b.minute);

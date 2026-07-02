@@ -19,6 +19,7 @@ export interface PlayerMatchStats {
 
 export interface PlayerRating {
   name: string;
+  playerId?: string;
   rating: number; // 1.0–10.0
   subbedIn?: boolean;
   stats?: {
@@ -81,20 +82,25 @@ export function generateMatchRatings(
   homeBench: any[] = [], awayBench: any[] = []
 ): { home: PlayerRating[]; away: PlayerRating[] } {
   const buildStats = (players: any[], side: "home" | "away", goalDiff: number, bench: any[]): PlayerRating[] => {
+    const keyOf = (p: any) => p.id ?? p.name;
+    const eventKey = (e: any, field: "player" | "player2") =>
+      (field === "player" ? e.playerId : e.player2Id) ?? (field === "player" ? e.player : e.player2);
+
     const sideSubEvents = events.filter((e: any) => e.team === side && e.type === "substitution");
-    const subbedInNames = new Set(sideSubEvents.map((e: any) => e.player2));
+    const subbedInKeys = new Set(sideSubEvents.map((e: any) => eventKey(e, "player2")));
 
     // Игроки которые вышли на замену (находим их в бенче)
-    const subbedInPlayers = bench.filter((p: any) => subbedInNames.has(p.name));
+    const subbedInPlayers = bench.filter((p: any) => subbedInKeys.has(keyOf(p)));
     const allPlayers = [...players, ...subbedInPlayers];
 
     return allPlayers.map(p => {
-      const sideEvents = events.filter((e: any) => e.team === side && (e.player === p.name || e.player2 === p.name));
-      const goals = sideEvents.filter((e: any) => e.type === "goal" && e.player === p.name).length;
-      const yellow = sideEvents.some((e: any) => e.type === "yellow" && e.player === p.name);
-      const red = sideEvents.some((e: any) => e.type === "red" && e.player === p.name);
-      const subbedOut = sideEvents.some((e: any) => e.type === "substitution" && e.player === p.name);
-      const subbedIn = subbedInNames.has(p.name);
+      const pKey = keyOf(p);
+      const sideEvents = events.filter((e: any) => e.team === side && (eventKey(e, "player") === pKey || eventKey(e, "player2") === pKey));
+      const goals = sideEvents.filter((e: any) => e.type === "goal" && eventKey(e, "player") === pKey).length;
+      const yellow = sideEvents.some((e: any) => e.type === "yellow" && eventKey(e, "player") === pKey);
+      const red = sideEvents.some((e: any) => e.type === "red" && eventKey(e, "player") === pKey);
+      const subbedOut = sideEvents.some((e: any) => e.type === "substitution" && eventKey(e, "player") === pKey);
+      const subbedIn = subbedInKeys.has(pKey);
 
       const isAttacker = ["ST", "CF", "LW", "RW"].includes(p.position);
       const isMid = ["CM", "CDM", "CAM", "LM", "RM"].includes(p.position);
@@ -126,7 +132,7 @@ export function generateMatchRatings(
       const rating = calculatePlayerRating(stats, goalDiff);
 
       return {
-        name: p.name, rating, subbedIn,
+        name: p.name, playerId: p.id, rating, subbedIn,
         stats: {
           goals: stats.goals, assists: stats.assists, keyPasses: stats.keyPasses,
           saves: stats.saves, tackles: stats.tackles, interceptions: stats.interceptions,

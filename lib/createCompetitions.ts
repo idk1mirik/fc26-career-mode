@@ -8,7 +8,10 @@ import {
 } from "@/lib/competitions";
 import { getEuroCupRoundDate, getDomesticCupRoundDate, getSuperCupDate, getSuperCupRoundDate } from "@/lib/seasonCalendar";
 
-export async function createSeasonCompetitions(seasonId: string, leagueName: string) {
+export async function createSeasonCompetitions(
+  seasonId: string, leagueName: string,
+  prevSeasonFinalists?: { leagueChampion?: string; leagueRunnerUp?: string; cupWinner?: string; cupRunnerUp?: string }
+) {
   const created: any[] = [];
 
   // ── 1. Внутренний кубок ──
@@ -72,14 +75,25 @@ export async function createSeasonCompetitions(seasonId: string, leagueName: str
     const clubs: string[] = league?.clubs?.map((c: any) => c.id) ?? [];
 
     if (superDef.format === "semis_final" && clubs.length >= 4) {
-      // Испанский формат: 4 команды, 2 полуфинала + финал
+      // Испанский формат: 4 команды, 2 полуфинала + финал.
+      // Реальная расстановка: чемпион и вице-чемпион лиги + победитель и финалист кубка
+      // прошлого сезона. В 1-м сезоне карьеры этих данных ещё нет — берём первые 4
+      // клуба лиги как единственно возможный плейсхолдер.
+      const seeded = [
+        prevSeasonFinalists?.leagueChampion,
+        prevSeasonFinalists?.leagueRunnerUp,
+        prevSeasonFinalists?.cupWinner,
+        prevSeasonFinalists?.cupRunnerUp,
+      ].filter((c): c is string => !!c && clubs.includes(c));
+      const fallback = clubs.filter(c => !seeded.includes(c));
+      const four = [...new Set([...seeded, ...fallback])].slice(0, 4);
+
       const { data: comp } = await supabase.from("competitions").insert({
         season_id: seasonId, type: superDef.type, name: superDef.name, format: superDef.format,
         prize_winner: superDef.prizeWinner, prize_runner: superDef.prizeRunner, prize_participation: superDef.prizeParticipation,
       }).select().single();
 
       if (comp) {
-        const four = clubs.slice(0, 4); // на 1-й сезон — топ-4 клуба плейсхолдер (далее — реальные финалисты прошлого сезона)
         const semiDate = getSuperCupRoundDate(1);
         await supabase.from("cup_fixtures").insert([
           { competition_id: comp.id, round: 1, round_name: "Semi-final", home_club: four[0], away_club: four[1], match_date: semiDate },
@@ -88,7 +102,13 @@ export async function createSeasonCompetitions(seasonId: string, leagueName: str
         created.push({ name: superDef.name, id: comp.id });
       }
     } else if (clubs.length >= 2) {
-      // Стандартный формат: 1 матч
+      // Стандартный формат: 1 матч — чемпион лиги против обладателя кубка
+      // прошлого сезона (а не первые 2 клуба списка лиги, как было раньше).
+      const home = prevSeasonFinalists?.leagueChampion && clubs.includes(prevSeasonFinalists.leagueChampion)
+        ? prevSeasonFinalists.leagueChampion : clubs[0];
+      const away = prevSeasonFinalists?.cupWinner && clubs.includes(prevSeasonFinalists.cupWinner) && prevSeasonFinalists.cupWinner !== home
+        ? prevSeasonFinalists.cupWinner : clubs.find(c => c !== home) ?? clubs[1];
+
       const { data: comp } = await supabase.from("competitions").insert({
         season_id: seasonId, type: superDef.type, name: superDef.name, format: superDef.format,
         prize_winner: superDef.prizeWinner, prize_runner: superDef.prizeRunner, prize_participation: 0,
@@ -97,7 +117,7 @@ export async function createSeasonCompetitions(seasonId: string, leagueName: str
       if (comp) {
         await supabase.from("cup_fixtures").insert({
           competition_id: comp.id, round: 1, round_name: "Final",
-          home_club: clubs[0], away_club: clubs[1], match_date: getSuperCupDate(leagueName),
+          home_club: home, away_club: away, match_date: getSuperCupDate(leagueName),
         });
         created.push({ name: superDef.name, id: comp.id });
       }

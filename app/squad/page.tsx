@@ -770,8 +770,8 @@ export default function SquadPage() {
                   .map(p => (
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                       onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
-                      status={playerStatuses.find(s => s.player_name === p.name)}
-                      avgRating={seasonStats.find(s => s.player_name === p.name)?.avg_rating} />
+                      status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
+                      avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} />
                   ))}
               </div>
             </div>
@@ -804,8 +804,8 @@ export default function SquadPage() {
                         onOpen={openModal}
                         isXI={startingIds.has(p.id ?? p.name)}
                         onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
-                        status={playerStatuses.find(s => s.player_name === p.name)}
-                        avgRating={seasonStats.find(s => s.player_name === p.name)?.avg_rating} />
+                        status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
+                        avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} />
                     ))}
                   </div>
                 </div>
