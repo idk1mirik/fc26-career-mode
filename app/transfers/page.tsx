@@ -144,6 +144,7 @@ export default function TransfersPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [recalibrating, setRecalibrating] = useState(false);
   const [toast, setToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [modalPlayer, setModalPlayer] = useState<any | null>(null);
   const [modalClosing, setModalClosing] = useState(false);
@@ -230,6 +231,19 @@ export default function TransfersPage() {
   const showToast = (text: string, kind: "ok" | "err") => {
     setToast({ text, kind });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleRecalibrate = async () => {
+    if (!seasonId) return;
+    setRecalibrating(true);
+    try {
+      const res = await fetch("/api/season/recalibrate-budget", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId }),
+      });
+      if (res.ok) { showToast("Budgets recalculated for all clubs", "ok"); await loadAll(); }
+      else showToast("Recalculation failed", "err");
+    } catch (e) { showToast("Recalculation failed", "err"); }
+    setRecalibrating(false);
   };
 
   const handleBuy = async (p: any) => {
@@ -319,11 +333,18 @@ export default function TransfersPage() {
             <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Transfers</div>
             <h1 className="text-2xl font-black">{windowLabel}</h1>
           </div>
-          <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl ${ui.pill}`}>
-            <Wallet size={14} />
-            <span className="text-xs font-black uppercase tracking-widest">
-              {budget === null ? "…" : fmtMoney(budget)}
-            </span>
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl ${ui.pill}`}>
+              <Wallet size={14} />
+              <span className="text-xs font-black uppercase tracking-widest">
+                {budget === null ? "…" : fmtMoney(budget)}
+              </span>
+            </div>
+            <button onClick={handleRecalibrate} disabled={recalibrating}
+              title="Пересчитать бюджет по текущей формуле цен"
+              className={`px-3 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 ${ui.tabIdle}`}>
+              {recalibrating ? "…" : "Recalculate"}
+            </button>
           </div>
         </div>
 

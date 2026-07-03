@@ -199,6 +199,13 @@ export const PosBadge = memo(function PosBadge({ pos, theme }: { pos: string; th
 });
 
 // ─── PLAYER CARD ──────────────────────────────────────────────────────────────
+export function fmtValue(v: number): string {
+  if (!v) return "";
+  if (v >= 1_000_000) return `€${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `€${(v / 1_000).toFixed(0)}K`;
+  return `€${v}`;
+}
+
 export const PlayerCard = memo(function PlayerCard({
   player, clubName, clubColor, theme, onOpen,
 }: {
@@ -298,6 +305,12 @@ export const PlayerCard = memo(function PlayerCard({
               <span className="text-[9px] text-white/25 font-mono uppercase tracking-widest">{player.nationality || ""}</span>
               <span className="text-[9px] text-white/30 font-mono">{player.age ? `${player.age} yrs` : ""}</span>
             </div>
+            {player.market_value ? (
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-white/25 font-mono uppercase tracking-widest">Value</span>
+                <span className="text-[10px] font-mono font-black" style={{ color: "#fbbf24" }}>{fmtValue(player.market_value)}</span>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between">
               <span className="text-[9px] font-mono font-black uppercase tracking-widest" style={{ color: potColor }}>POT {pot}</span>
               {player.wage ? (
@@ -379,6 +392,12 @@ export const PlayerCard = memo(function PlayerCard({
               <span className="text-[9px] text-pink-800/30 uppercase tracking-widest font-bold">{player.nationality || ""}</span>
               <span className="text-[9px] text-pink-700/40 font-bold">{player.age ? `${player.age} yrs` : ""}</span>
             </div>
+            {player.market_value ? (
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-pink-800/30 uppercase tracking-widest font-bold">Value</span>
+                <span className="text-[10px] font-black" style={{ fontFamily: "'Fraunces',serif", color: "#d97706" }}>{fmtValue(player.market_value)}</span>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between">
               <span className="text-[9px] font-black" style={{ fontFamily: "'Fraunces',serif", color: potColor }}>POT {pot}</span>
               {player.wage ? (
@@ -462,6 +481,12 @@ export const PlayerCard = memo(function PlayerCard({
             <span className="text-[8px] font-mono text-purple-700/40 uppercase tracking-widest">{player.nationality || ""}</span>
             <span className="text-[8px] font-mono text-purple-600/40">{player.age ? `${player.age}Y` : ""}</span>
           </div>
+          {player.market_value ? (
+            <div className="flex items-center justify-between">
+              <span className="text-[8px] font-mono text-purple-700/40 uppercase tracking-widest">Value</span>
+              <span className="text-[9px] font-mono font-black" style={{ color: "#facc15" }}>{fmtValue(player.market_value)}</span>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between">
             <span className="text-[8px] font-mono font-black uppercase tracking-widest" style={{ color: potColor }}>POT {pot}</span>
             {player.wage ? (
@@ -758,6 +783,7 @@ export function PlayerModal({
               {player.preferredFoot > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>{player.preferredFoot === 1 ? "Right" : "Left"} foot</span>}
               {player.skillMoves > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>★ {player.skillMoves}</span>}
               {player.weakFootAbility > 0 && <span style={{ fontSize: 11, color: cfg.labelColor }}>WF {player.weakFootAbility}</span>}
+              {player.market_value > 0 && <span style={{ fontSize: 12, fontWeight: 900, color: "#fbbf24" }}>{fmtValue(player.market_value)}</span>}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {[{ label: "OVR", value: ovr, color: ovrColor }, { label: "POT", value: pot, color: potColor }].map(({ label, value, color }) => (
@@ -804,6 +830,7 @@ export function PlayerModal({
               {player.preferredFoot > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>{player.preferredFoot === 1 ? "Right" : "Left"} foot</span>}
               {player.skillMoves > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>★ {player.skillMoves}</span>}
               {player.weakFootAbility > 0 && <span style={{ fontSize: 12, color: cfg.labelColor }}>WF {player.weakFootAbility}</span>}
+              {player.market_value > 0 && <span style={{ fontSize: 13, fontWeight: 900, color: "#fbbf24" }}>{fmtValue(player.market_value)}</span>}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               {[{ label: "OVR", value: ovr, color: ovrColor }, { label: "POT", value: pot, color: potColor }].map(({ label, value, color }) => (

@@ -8,15 +8,23 @@ import { getLeaguePositionPrize } from "./competitions";
 // ── Стартовый бюджет клуба (сезон 1) — пропорционально силе состава ──
 // Перенесено из app/league/[id]/page.tsx, где раньше пересчитывалось
 // заново при каждом рендере вместо того чтобы один раз сохраниться.
+//
+// ВАЖНО: коэффициенты пересчитаны под подорожавший computeMarketValue()
+// (там появился множитель за позицию и возраст, из-за чего squadValue
+// вырос в 2-3 раза). Старые коэффициенты (0.22-0.47) с новыми ценами
+// давали бюджеты вида 600-800M у топ-клубов — сильно перебор. Проверено
+// на реальных клубах из датасета: Real Madrid/Arsenal ~270-340M,
+// Man City/Liverpool ~200-260M, крепкий середняк (Everton) ~70M,
+// нижние лиги (Cardiff, Degerfors) ~5-10M.
 export function computeInitialBudget(squadValue: number, avgOverall: number): number {
   let ratio: number;
-  if (avgOverall >= 85) ratio = 0.47;
-  else if (avgOverall >= 78) ratio = 0.40;
-  else if (avgOverall >= 70) ratio = 0.30;
-  else ratio = 0.22;
+  if (avgOverall >= 80) ratio = 0.17;
+  else if (avgOverall >= 74) ratio = 0.13;
+  else if (avgOverall >= 68) ratio = 0.09;
+  else ratio = 0.06;
 
   const raw = squadValue * ratio;
-  return Math.max(Math.round(raw / 500_000) * 500_000, 2_000_000);
+  return Math.max(Math.round(raw / 500_000) * 500_000, 1_500_000);
 }
 
 // ── Запись в бухгалтерскую книгу + немедленное применение к балансу ──

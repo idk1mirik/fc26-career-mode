@@ -11,7 +11,7 @@ import LogoCard from "@/components/LogoCard";
 import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
-import { PlayerModal, PlayerCard } from "@/app/lib/playerComponents";
+import { PlayerModal, PlayerCard, fmtValue } from "@/app/lib/playerComponents";
 
 // ─── GLOBAL UI ────────────────────────────────────────────────────────────────
 const GLOBAL_UI = {
@@ -177,6 +177,22 @@ export default function SelectClubPage() {
       );
   }, [club?.players, search, posFilter, sortBy]);
 
+  // Оценка стартового бюджета — та же формула, что и computeInitialBudget()
+  // в lib/finance.ts (сервер посчитает и сохранит то же самое при старте карьеры),
+  // просто продублирована здесь как чистый расчёт, чтобы показать до старта карьеры.
+  const estimatedBudget = useMemo(() => {
+    const list = club?.players ?? [];
+    if (!list.length) return 0;
+    const squadValue = list.reduce((s: number, p: any) => s + (p.market_value ?? 0), 0);
+    const avgOverall = list.reduce((s: number, p: any) => s + (p.overall ?? 70), 0) / list.length;
+    let ratio: number;
+    if (avgOverall >= 80) ratio = 0.17;
+    else if (avgOverall >= 74) ratio = 0.13;
+    else if (avgOverall >= 68) ratio = 0.09;
+    else ratio = 0.06;
+    return Math.max(Math.round((squadValue * ratio) / 500_000) * 500_000, 1_500_000);
+  }, [club?.players]);
+
   // ─── FETCH CLUB DATA ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!params.id) return;
@@ -247,6 +263,11 @@ export default function SelectClubPage() {
               <div className={`flex items-center gap-2 mb-2 ${ui.pageLabel}`}>{ui.pageLabelText}</div>
               <h1 className={ui.headerClass} style={ui.headerFont}>{club.name}</h1>
               <p className="text-xs opacity-60 mt-1 uppercase tracking-widest">{club.league}</p>
+              {estimatedBudget > 0 && (
+                <p className="text-sm font-black mt-1.5" style={{ color: leagueTheme.rawColor }}>
+                  💰 {fmtValue(estimatedBudget)} transfer budget
+                </p>
+              )}
             </div>
           </div>
 
