@@ -62,6 +62,10 @@ export async function POST(req: Request) {
 
   if (sErr) return Response.json({ error: sErr.message }, { status: 500 });
 
+  // career_id — корень цепочки сезонов этой карьеры (season/new будет копировать
+  // его вперёд). Для новой карьеры сезон ссылается сам на себя.
+  await supabase.from("seasons").update({ career_id: season.id }).eq("id", season.id);
+
   // Создаём расписание
   const fixtures = buildFixtures(clubs, season.id);
   const { error: fErr } = await supabase.from("fixtures").insert(fixtures);

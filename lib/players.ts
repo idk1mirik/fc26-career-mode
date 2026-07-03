@@ -185,26 +185,73 @@ export function invalidateOverridesCache(seasonId: string) {
   delete overridesCache[seasonId];
 }
 
+// ── Прогресс/старение: у игрока может быть накопленный оверолл, отличный от
+// того, что зашит в CSV — если он рос/деградировал по ходу карьеры. career_id
+// связывает все сезоны ОДНОЙ карьеры клуба (season/new копирует его вперёд),
+// player_progression хранит текущий оверолл для (career_id, player_id).
+let careerIdCache: Record<string, string> = {};
+let progressionCache: Record<string, Map<string, number>> = {};
+
+async function getCareerIdForSeason(seasonId: string): Promise<string> {
+  if (careerIdCache[seasonId]) return careerIdCache[seasonId];
+  const { supabase } = await import("./supabase");
+  const { data } = await supabase.from("seasons").select("career_id").eq("id", seasonId).maybeSingle();
+  const careerId = data?.career_id ?? seasonId; // фолбэк для сезонов до миграции — каждый сам себе карьера
+  careerIdCache[seasonId] = careerId;
+  return careerId;
+}
+
+async function getProgressionForCareer(careerId: string): Promise<Map<string, number>> {
+  if (progressionCache[careerId]) return progressionCache[careerId];
+  const { supabase } = await import("./supabase");
+  const { data } = await supabase.from("player_progression").select("player_id, overall").eq("career_id", careerId);
+  const map = new Map<string, number>((data ?? []).map((r: any) => [r.player_id, r.overall]));
+  progressionCache[careerId] = map;
+  return map;
+}
+
+// Вызывать после записи в player_progression (прогресс на новый сезон),
+// иначе следующий getPlayersByClub в этом же процессе отдаст старые overall.
+export function invalidateProgressionCache(careerId: string) {
+  delete progressionCache[careerId];
+}
+
+function applyProgression(p: Player, progressedOverall: number): Player {
+  if (progressedOverall === p.overall) return p;
+  return { ...p, overall: progressedOverall, market_value: computeMarketValue(progressedOverall, p.age, p.potential, p.position) };
+}
+
 export async function getPlayersByClub(clubName: string, seasonId?: string): Promise<Player[]> {
   const all = await loadAllPlayers();
   const base = all.filter(p => p.team.toLowerCase() === clubName.toLowerCase());
   if (!seasonId) return base;
 
-  const overrides = await getOverridesForSeason(seasonId);
-  if (overrides.size === 0) return base;
+  const [overrides, careerId] = await Promise.all([getOverridesForSeason(seasonId), getCareerIdForSeason(seasonId)]);
+  const progression = await getProgressionForCareer(careerId);
 
-  // Игроки клуба "по CSV", которых увели трансфером в другой клуб — убираем
-  const stayed = base.filter(p => {
-    const movedTo = overrides.get(p.id);
-    return !movedTo || movedTo.toLowerCase() === clubName.toLowerCase();
+  let squad: Player[];
+  if (overrides.size === 0) {
+    squad = base;
+  } else {
+    // Игроки клуба "по CSV", которых увели трансфером в другой клуб — убираем
+    const stayed = base.filter(p => {
+      const movedTo = overrides.get(p.id);
+      return !movedTo || movedTo.toLowerCase() === clubName.toLowerCase();
+    });
+
+    // Игроки, которых КУПИЛИ в этот клуб (их изначальный team — другой) — добавляем
+    const incomingIds = [...overrides.entries()].filter(([, toClub]) => toClub.toLowerCase() === clubName.toLowerCase());
+    const stayedIds = new Set(stayed.map(p => p.id));
+    const incoming = incomingIds
+      .map(([playerId]) => all.find(p => p.id === playerId))
+      .filter((p): p is Player => !!p && !stayedIds.has(p.id));
+
+    squad = [...stayed, ...incoming];
+  }
+
+  if (progression.size === 0) return squad;
+  return squad.map(p => {
+    const progressedOverall = progression.get(p.id);
+    return progressedOverall !== undefined ? applyProgression(p, progressedOverall) : p;
   });
-
-  // Игроки, которых КУПИЛИ в этот клуб (их изначальный team — другой) — добавляем
-  const incomingIds = [...overrides.entries()].filter(([, toClub]) => toClub.toLowerCase() === clubName.toLowerCase());
-  const stayedIds = new Set(stayed.map(p => p.id));
-  const incoming = incomingIds
-    .map(([playerId]) => all.find(p => p.id === playerId))
-    .filter((p): p is Player => !!p && !stayedIds.has(p.id));
-
-  return [...stayed, ...incoming];
 }

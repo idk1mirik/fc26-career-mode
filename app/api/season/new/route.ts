@@ -6,6 +6,7 @@ import { createSeasonCompetitions } from "@/lib/createCompetitions";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { getPlayersByClub } from "@/lib/players";
 import { computeInitialBudget } from "@/lib/finance";
+import { progressLeaguePlayers } from "@/lib/progression";
 
 function buildFixtures(clubs: string[], seasonId: string) {
   const rows: any[] = [];
@@ -58,6 +59,19 @@ export async function POST(req: Request) {
     .select().single();
 
   if (sErr) return Response.json({ error: sErr.message }, { status: 500 });
+
+  // career_id связывает все сезоны одной карьеры клуба — нужен, чтобы прогресс
+  // игроков (рост/старение) переживал переход на новый сезон, а не сбрасывался.
+  // Фолбэк на oldSeasonId — для карьер, начатых до этой миграции.
+  const careerId: string = oldSeason.career_id ?? oldSeasonId;
+  await supabase.from("seasons").update({ career_id: careerId }).eq("id", newSeason.id);
+
+  // Развитие игроков лиги — молодые растут к потенциалу, ветераны угасают.
+  // Делаем ДО расчёта бюджетов ниже, чтобы стоимость состава уже учитывала
+  // новые overall (иначе бюджет считался бы по вчерашним, ещё не выросшим игрокам).
+  try {
+    await progressLeaguePlayers(clubs, oldSeasonId, careerId);
+  } catch (e) { console.error("Player progression failed", e); }
 
   const fixtures = buildFixtures(clubs, newSeason.id);
   await supabase.from("fixtures").insert(fixtures);
