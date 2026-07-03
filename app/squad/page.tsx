@@ -456,7 +456,7 @@ export default function SquadPage() {
     // Загружаем сохранённую тактику
     if (savedFormation) setFormation(savedFormation);
 
-    fetch(`/api/players?club=${encodeURIComponent(selectedClub.name)}`)
+    fetch(`/api/players?club=${encodeURIComponent(selectedClub.name)}${seasonId ? `&seasonId=${seasonId}` : ""}`)
       .then(r => r.json()).then(data => {
         setPlayers(data);
         const formToLoad = savedFormation || "4-3-3";
@@ -529,7 +529,16 @@ export default function SquadPage() {
     setCustomPositions({ GK: "GK" });
     const savedForF = lineupsByFormation?.[f];
     if (savedForF && Object.keys(savedForF).length > 0) {
-      setLineup(savedForF);
+      // Сверяем с актуальным составом — проданных игроков не восстанавливаем,
+      // даже если они всё ещё лежат в сохранённой схеме (careerStore не знает
+      // о трансферах, он просто хранит то, что туда положили в прошлый раз).
+      const byId: Record<string, any> = {};
+      players.forEach(p => { byId[p.id ?? p.name] = p; });
+      const restored: Record<string, any> = {};
+      for (const [slot, p] of Object.entries(savedForF)) {
+        if (p && byId[(p as any).id ?? (p as any).name]) restored[slot] = byId[(p as any).id ?? (p as any).name];
+      }
+      setLineup(restored);
     } else {
       autoFill(players, f);
     }

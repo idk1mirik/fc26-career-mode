@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award } from "lucide-react";
@@ -72,8 +72,27 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const matchday       = useCareerStore(s => s.matchday);
+  const seasonId       = useCareerStore(s => s.seasonId);
   const locale         = useCareerStore(s => s.locale) || "en";
   const copy = getThemeCopy(locale, theme);
+
+  // Бейдж на "Transfers" — сколько лотов от ДРУГИХ клубов появилось с прошлого
+  // визита на страницу трансферов. Простая замена полноценным уведомлениям —
+  // тут нет системы аккаунтов, поэтому "уведомление другому игроку" в смысле
+  // мультиплеера пока не завезено, это заготовка на будущее.
+  const [newListingsCount, setNewListingsCount] = useState(0);
+  useEffect(() => {
+    if (!seasonId || !selectedClub?.name) return;
+    fetch(`/api/transfers/listings?seasonId=${seasonId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const others = (data.listings ?? []).filter((l: any) => l.seller_club !== selectedClub.name);
+        const seenIds: string[] = JSON.parse(localStorage.getItem(`seen_listings_${seasonId}`) || "[]");
+        const unseen = others.filter((l: any) => !seenIds.includes(l.id));
+        setNewListingsCount(unseen.length);
+      }).catch(() => {});
+  }, [seasonId, selectedClub?.name, pathname]);
 
   return (
     <>
@@ -106,12 +125,18 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
           const Icon = item.icon;
           const active = pathname === item.href;
           const label = copy[item.key as keyof typeof copy];
+          const showBadge = item.key === "navTransfers" && newListingsCount > 0;
           return (
             <Link key={item.href} href={item.href} onClick={onNavigate}>
               <div className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all duration-200 relative ${active ? NAV_ACTIVE[theme] : NAV_IDLE[theme]}`}>
                 {active && <div className="absolute left-0 w-[3px] h-6 rounded-r-full" style={{ background: glowColor }} />}
                 <Icon size={15} />
                 <span className={`text-sm font-bold ${NAV_FONT[theme]}`}>{label}</span>
+                {showBadge && (
+                  <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center text-white" style={{ background: glowColor }}>
+                    {newListingsCount > 9 ? "9+" : newListingsCount}
+                  </span>
+                )}
               </div>
             </Link>
           );

@@ -39,6 +39,11 @@ export async function POST(req: Request) {
     from_club: currentClub, to_club: buyerClubId, fee, type: "transfer",
   });
 
+  // Если игрок в этот момент висел лотом на рынке (продавал его прошлый владелец) — снимаем
+  await supabase.from("transfer_listings")
+    .update({ status: "cancelled", resolved_at: new Date().toISOString() })
+    .eq("season_id", seasonId).eq("player_id", playerId).eq("status", "open");
+
   invalidateOverridesCache(seasonId);
 
   return Response.json({ success: true, player: { ...player, team: buyerClubId }, fee, fromClub: currentClub });

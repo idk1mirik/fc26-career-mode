@@ -4,8 +4,9 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { getPlayerPhoto } from "@/lib/images";
-import { getRatingColor, FlagImage } from "@/app/lib/playerComponents";
-import { TrendingUp, TrendingDown, Lock, Search, Wallet } from "lucide-react";
+import { getRatingColor, FlagImage, PlayerModal } from "@/app/lib/playerComponents";
+import { getLeagueTheme } from "@/constants/themes";
+import { TrendingUp, TrendingDown, Lock, Search, Wallet, Tag, X as XIcon } from "lucide-react";
 
 // ─── Тема — тот же паттерн THEME_UI, что и на странице состава/тактики ──────
 const THEME_UI = {
@@ -57,47 +58,67 @@ function fmtMoney(v: number) {
 }
 
 const TransferPlayerRow = memo(function TransferPlayerRow({
-  p, ui, mode, onAction, busy, disabled,
+  p, ui, actions, onOpen, priceLabel, subLabel,
 }: {
-  p: any; ui: typeof THEME_UI["classic"]; mode: "buy" | "sell";
-  onAction: (p: any) => void; busy: boolean; disabled?: boolean;
+  p: any; ui: typeof THEME_UI["classic"];
+  actions: { label: string; icon: any; onClick: () => void; busy?: boolean; disabled?: boolean; cls: string }[];
+  onOpen: (p: any) => void; priceLabel?: string; subLabel?: string;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const ovr = p.overall ?? 75;
-  const btnCls = mode === "buy" ? ui.buyBtn : ui.sellBtn;
-  const btnLabel = mode === "buy" ? "Buy" : "Sell";
-  const Icon = mode === "buy" ? TrendingUp : TrendingDown;
 
   return (
     <div className={`rounded-2xl transition-all ${ui.card} ${ui.cardHover}`}>
-      <div className="flex items-center gap-3 px-4 py-2.5">
-        <div className="w-10 h-10 shrink-0 relative">
-          {!imgErr
-            ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-10 h-10 object-contain" onError={() => setImgErr(true)} />
-            : <span className="text-2xl opacity-30">👤</span>}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className={`font-black text-sm truncate ${ui.nameColor}`}>{p.name}</div>
-          <div className={`text-[10px] ${ui.muted}`}>
-            {p.position} · {mode === "buy" ? p.team : p.age + " y.o."}
+      <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap">
+        <div className="flex items-center gap-3 flex-1 min-w-[160px] cursor-pointer" onClick={() => onOpen(p)}>
+          <div className="w-10 h-10 shrink-0 relative">
+            {!imgErr
+              ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-10 h-10 object-contain" onError={() => setImgErr(true)} />
+              : <span className="text-2xl opacity-30">👤</span>}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className={`font-black text-sm truncate ${ui.nameColor}`}>{p.name}</div>
+            <div className={`text-[10px] ${ui.muted}`}>{p.position} · {subLabel}</div>
           </div>
         </div>
         <FlagImage country={p.nationality || p.nation} size={14} />
         <div className="text-center w-10">
           <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
         </div>
-        <div className={`text-xs font-black w-20 text-right ${ui.muted}`}>{fmtMoney(p.market_value ?? 0)}</div>
-        <button
-          onClick={() => onAction(p)}
-          disabled={busy || disabled}
-          className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${btnCls}`}
-        >
-          <Icon size={12} />{btnLabel}
-        </button>
+        <div className={`text-xs font-black w-20 text-right ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
+        <div className="flex items-center gap-1.5">
+          {actions.map((a, i) => (
+            <button key={i} onClick={a.onClick} disabled={a.busy || a.disabled}
+              className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
+              <a.icon size={12} />{a.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 });
+
+function AskingPriceModal({ ui, player, onCancel, onConfirm }: {
+  ui: typeof THEME_UI["classic"]; player: any; onCancel: () => void; onConfirm: (price: number) => void;
+}) {
+  const [value, setValue] = useState(String(player.market_value ?? 1_000_000));
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+      <div className={`w-full max-w-sm rounded-2xl p-5 ${ui.card}`} style={{ background: "var(--modal-bg, #0b0d16)" }} onClick={e => e.stopPropagation()}>
+        <div className={`text-sm font-black mb-1 ${ui.nameColor}`}>List {player.name}</div>
+        <div className={`text-[11px] mb-4 ${ui.muted}`}>Market estimate: {fmtMoney(player.market_value ?? 0)}</div>
+        <input type="number" value={value} onChange={e => setValue(e.target.value)}
+          className={`w-full px-3 py-2.5 text-sm outline-none rounded-xl mb-4 ${ui.input}`} placeholder="Asking price, €" />
+        <div className="flex gap-2">
+          <button onClick={onCancel} className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest ${ui.tabIdle}`}>Cancel</button>
+          <button onClick={() => onConfirm(Number(value))} disabled={!Number(value) || Number(value) <= 0}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-40 ${ui.buyBtn}`}>List</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function TransfersPage() {
   const theme       = useThemeStore(s => s.theme) as keyof typeof THEME_UI;
@@ -114,25 +135,43 @@ export default function TransfersPage() {
   const windowLabel = summerOpen ? "Summer Window" : winterOpen ? "Winter Window" : "Transfer Window Closed";
   const nextOpen    = matchday < 20 ? "Opens again at Matchday 20 (January)" : "Opens next season";
 
-  const [tab, setTab] = useState<"market" | "squad">("market");
+  const [tab, setTab] = useState<"market" | "squad" | "listings">("market");
   const [budget, setBudget] = useState<number | null>(null);
   const [market, setMarket] = useState<any[]>([]);
   const [squad, setSquad] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
+  const [modalPlayer, setModalPlayer] = useState<any | null>(null);
+  const [modalClosing, setModalClosing] = useState(false);
+  const [listingTarget, setListingTarget] = useState<any | null>(null);
+
+  const openModal = useCallback((p: any) => { setModalClosing(false); setModalPlayer(p); }, []);
+  const closeModal = useCallback(() => {
+    setModalClosing(true);
+    setTimeout(() => { setModalPlayer(null); setModalClosing(false); }, 280);
+  }, []);
 
   const loadAll = useCallback(async () => {
     if (!seasonId || !userClub) return;
     setLoading(true);
     try {
-      const [standingsRes, marketRes, squadRes, historyRes] = await Promise.all([
+      // Карьеры, начатые до появления финансовой системы, застряли на budget=0 —
+      // тихо чиним один раз перед чтением баланса (безопасно, трогает только
+      // клубы, у которых budget=0 и ещё не было ни одной операции).
+      await fetch("/api/season/repair-budget", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId }),
+      }).catch(() => {});
+
+      const [standingsRes, marketRes, squadRes, historyRes, listingsRes] = await Promise.all([
         fetch(`/api/standings?seasonId=${seasonId}`),
         fetch(`/api/transfers/market?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
         fetch(`/api/players?club=${encodeURIComponent(userClub)}&seasonId=${seasonId}`),
         fetch(`/api/transfers/history?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
+        fetch(`/api/transfers/listings?seasonId=${seasonId}`),
       ]);
       if (standingsRes.ok) {
         const standings = await standingsRes.json();
@@ -142,6 +181,13 @@ export default function TransfersPage() {
       if (marketRes.ok) setMarket((await marketRes.json()).players ?? []);
       if (squadRes.ok) setSquad(await squadRes.json());
       if (historyRes.ok) setHistory((await historyRes.json()).transfers ?? []);
+      if (listingsRes.ok) {
+        const ls = (await listingsRes.json()).listings ?? [];
+        setListings(ls);
+        // Отмечаем все текущие лоты как просмотренные — снимает бейдж в сайдбаре
+        const ids = ls.map((l: any) => l.id);
+        localStorage.setItem(`seen_listings_${seasonId}`, JSON.stringify(ids));
+      }
     } catch (e) { console.error("Transfers load failed", e); }
     setLoading(false);
   }, [seasonId, userClub]);
@@ -159,6 +205,27 @@ export default function TransfersPage() {
     if (!q) return squad;
     return squad.filter((p: any) => p.name.toLowerCase().includes(q));
   }, [squad, search]);
+
+  const myListings = useMemo(() => listings.filter(l => l.seller_club === userClub), [listings, userClub]);
+  const otherListings = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let base = listings.filter(l => l.seller_club !== userClub);
+    if (q) base = base.filter(l => l.player_name.toLowerCase().includes(q) || l.seller_club.toLowerCase().includes(q));
+    return base;
+  }, [listings, userClub, search]);
+
+  // Лоты в БД хранят только player_id/player_name — остальные данные (оверолл,
+  // позиция, флаг) подтягиваем из уже загруженных market/squad, чтобы не дублировать
+  // в БД то, что и так есть в CSV.
+  const playersById = useMemo(() => {
+    const map: Record<string, any> = {};
+    [...market, ...squad].forEach(p => { map[p.id] = p; });
+    return map;
+  }, [market, squad]);
+  const enrichListing = (l: any) => ({
+    ...(playersById[l.player_id] ?? { id: l.player_id, name: l.player_name, overall: 0, position: "?" }),
+    id: l.player_id, name: l.player_name,
+  });
 
   const showToast = (text: string, kind: "ok" | "err") => {
     setToast({ text, kind });
@@ -180,7 +247,7 @@ export default function TransfersPage() {
     setBusyId(null);
   };
 
-  const handleSell = async (p: any) => {
+  const handleQuickSell = async (p: any) => {
     if (!seasonId) return;
     if (squad.length <= 15) { showToast("Squad too small to sell — need at least 15 players", "err"); return; }
     setBusyId(p.id);
@@ -191,8 +258,55 @@ export default function TransfersPage() {
       });
       const data = await res.json();
       if (!res.ok) { showToast(data.error ?? "Sale failed", "err"); }
-      else { showToast(`Sold ${p.name} for ${fmtMoney(data.fee)}`, "ok"); await loadAll(); }
+      else { showToast(`Quick-sold ${p.name} for ${fmtMoney(data.fee)} (-${data.discountApplied}%)`, "ok"); await loadAll(); }
     } catch (e) { showToast("Sale failed", "err"); }
+    setBusyId(null);
+  };
+
+  const handleConfirmListing = async (price: number) => {
+    if (!seasonId || !listingTarget) return;
+    const p = listingTarget;
+    setListingTarget(null);
+    setBusyId(p.id);
+    try {
+      const res = await fetch("/api/transfers/list", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, sellerClubId: userClub, playerId: p.id, askingPrice: price }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? "Listing failed", "err"); }
+      else { showToast(`${p.name} listed for ${fmtMoney(price)}`, "ok"); await loadAll(); }
+    } catch (e) { showToast("Listing failed", "err"); }
+    setBusyId(null);
+  };
+
+  const handleCancelListing = async (listing: any) => {
+    if (!seasonId) return;
+    setBusyId(listing.id);
+    try {
+      const res = await fetch("/api/transfers/cancel-listing", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, listingId: listing.id, clubId: userClub }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? "Failed to cancel", "err"); }
+      else { showToast(`Listing pulled from the market`, "ok"); await loadAll(); }
+    } catch (e) { showToast("Failed to cancel", "err"); }
+    setBusyId(null);
+  };
+
+  const handleBuyListing = async (listing: any) => {
+    if (!seasonId) return;
+    setBusyId(listing.id);
+    try {
+      const res = await fetch("/api/transfers/buy-listing", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, buyerClubId: userClub, listingId: listing.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? "Purchase failed", "err"); }
+      else { showToast(`Signed ${data.playerName} for ${fmtMoney(data.fee)}`, "ok"); await loadAll(); }
+    } catch (e) { showToast("Purchase failed", "err"); }
     setBusyId(null);
   };
 
@@ -222,7 +336,7 @@ export default function TransfersPage() {
         ) : (
           <>
             {/* ── Tabs ── */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 flex-wrap">
               <button onClick={() => setTab("market")}
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "market" ? ui.tabActive : ui.tabIdle}`}>
                 Market
@@ -231,13 +345,17 @@ export default function TransfersPage() {
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "squad" ? ui.tabActive : ui.tabIdle}`}>
                 My Squad ({squad.length})
               </button>
+              <button onClick={() => setTab("listings")}
+                className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "listings" ? ui.tabActive : ui.tabIdle}`}>
+                Listings ({otherListings.length})
+              </button>
             </div>
 
             {/* ── Search ── */}
             <div className="relative mb-4 max-w-sm">
               <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${ui.muted}`} />
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder={tab === "market" ? "Search players or clubs..." : "Search your squad..."}
+                placeholder={tab === "squad" ? "Search your squad..." : "Search players or clubs..."}
                 className={`w-full pl-9 pr-4 py-2.5 text-sm outline-none rounded-xl ${ui.input}`} />
             </div>
 
@@ -249,20 +367,55 @@ export default function TransfersPage() {
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>No players found</div>
                 )}
                 {filteredMarket.map((p: any) => (
-                  <TransferPlayerRow key={p.id} p={p} ui={ui} mode="buy" busy={busyId === p.id}
-                    disabled={budget !== null && (p.market_value ?? 0) > budget}
-                    onAction={handleBuy} />
+                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team}
+                    actions={[{
+                      label: "Buy", icon: TrendingUp, cls: ui.buyBtn,
+                      busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
+                      onClick: () => handleBuy(p),
+                    }]} />
                 ))}
               </div>
-            ) : (
+            ) : tab === "squad" ? (
               <div className="space-y-1.5">
                 {filteredSquad.length === 0 && (
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>No players found</div>
                 )}
                 {filteredSquad.map((p: any) => (
-                  <TransferPlayerRow key={p.id} p={p} ui={ui} mode="sell" busy={busyId === p.id}
-                    onAction={handleSell} />
+                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`}
+                    actions={[
+                      { label: "Quick Sell", icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
+                      { label: "List", icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
+                    ]} />
                 ))}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {myListings.length > 0 && (
+                  <div>
+                    <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>My Listings</div>
+                    <div className="space-y-1.5">
+                      {myListings.map((l: any) => (
+                        <TransferPlayerRow key={l.id} p={enrichListing(l)}
+                          ui={ui} onOpen={openModal} subLabel="listed by you" priceLabel={fmtMoney(l.asking_price)}
+                          actions={[{ label: "Cancel", icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>Open Listings</div>
+                  {otherListings.length === 0 ? (
+                    <div className={`text-center py-10 text-sm ${ui.muted}`}>No listings from other clubs right now</div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {otherListings.map((l: any) => (
+                        <TransferPlayerRow key={l.id} p={enrichListing(l)}
+                          ui={ui} onOpen={openModal} subLabel={l.seller_club} priceLabel={fmtMoney(l.asking_price)}
+                          actions={[{ label: "Buy", icon: TrendingUp, cls: ui.buyBtn, busy: busyId === l.id, disabled: budget !== null && l.asking_price > budget, onClick: () => handleBuyListing(l) }]} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -277,6 +430,8 @@ export default function TransfersPage() {
                         <span className="font-black">{t.player_name}</span>{" "}
                         {t.to_club === userClub ? "signed from" : "sold to"}{" "}
                         {t.to_club === userClub ? (t.from_club ?? "free agent") : t.to_club}
+                        {t.type === "quick_sell" && <span className={ui.muted}> · quick sell</span>}
+                        {t.type === "listing" && <span className={ui.muted}> · market listing</span>}
                       </span>
                       <span className={`font-black ${ui.muted}`}>{fmtMoney(t.fee)}</span>
                     </div>
@@ -285,6 +440,23 @@ export default function TransfersPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* ── Player card modal ── */}
+        {modalPlayer && (
+          <PlayerModal
+            player={modalPlayer}
+            clubName={modalPlayer.team ?? userClub}
+            clubColor={getLeagueTheme(modalPlayer.league || selectedClub?.league || "Premier League", theme).rawColor}
+            theme={theme}
+            onClose={closeModal}
+            isClosing={modalClosing}
+          />
+        )}
+
+        {/* ── Asking price modal ── */}
+        {listingTarget && (
+          <AskingPriceModal ui={ui} player={listingTarget} onCancel={() => setListingTarget(null)} onConfirm={handleConfirmListing} />
         )}
 
         {/* ── Toast ── */}

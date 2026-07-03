@@ -31,10 +31,43 @@ export interface Player {
   wage: number; market_value: number;
 }
 
-function computeMarketValue(ovr: number): number {
+// Рыночная стоимость — учитывает overall, возраст (пик 24-29, дисконт после 30),
+// потенциал (премия за "вандеркинда") и ПОЗИЦИЮ: атакующие игроки стоят
+// заметно дороже защитников/вратарей при том же рейтинге — как и в реальном
+// трансферном рынке (форварды и плеймейкеры решают исходы матчей и трансферных
+// окон сильнее, чем центральные защитники того же уровня).
+const POSITION_VALUE_MULT: Record<string, number> = {
+  ST: 1.35, LW: 1.35, RW: 1.35,
+  CAM: 1.20,
+  CM: 1.05, LM: 1.05, RM: 1.05,
+  CDM: 0.95,
+  LB: 0.85, RB: 0.85,
+  CB: 0.75,
+  GK: 0.60,
+};
+
+function computeMarketValue(ovr: number, age: number, potential: number, position: string): number {
   if (ovr <= 0) return 0;
-  const value = 500_000 * Math.pow(2.1, (ovr - 60) / 5);
-  return Math.round(value / 100_000) * 100_000;
+
+  const base = 2_500_000 * Math.pow(2.0, (ovr - 60) / 5);
+
+  let ageMult: number;
+  if (age <= 20) ageMult = 1.55;
+  else if (age <= 23) ageMult = 1.35;
+  else if (age <= 26) ageMult = 1.15;
+  else if (age <= 29) ageMult = 1.0;
+  else if (age <= 31) ageMult = 0.65;
+  else if (age <= 33) ageMult = 0.4;
+  else ageMult = 0.22;
+
+  const posMult = POSITION_VALUE_MULT[position] ?? 1.0;
+
+  const potentialGap = Math.max(0, (potential || ovr) - ovr);
+  const wonderkidMult = age <= 23 ? 1 + potentialGap * 0.035 : 1;
+
+  const value = base * ageMult * posMult * wonderkidMult;
+  const capped = Math.min(300_000_000, value); // потолок — даже 99 OVR в расцвете сил не бесконечен
+  return Math.max(50_000, Math.round(capped / 50_000) * 50_000);
 }
 
 // Детерминированный псевдослучайный [0,1) на основе id игрока — раньше здесь
@@ -94,13 +127,14 @@ export function loadAllPlayers(): Promise<Player[]> {
         })();
 
         const ovr = Number(row.overallRating ?? 0);
+        const potential = computePotential(ovr, age, row.id ?? name);
         const altPos = row.alternatePositions
           ? row.alternatePositions.split(",").map((s: string) => s.trim()).filter(Boolean)
           : [];
 
         results.push({
           id: row.id ?? "", name,
-          overall: ovr, potential: computePotential(ovr, age, row.id ?? name),
+          overall: ovr, potential,
           position: row.position ?? "", alternatePositions: altPos, positionType: row.positionType ?? "",
           team: row.team ?? "", league: row.leagueName ?? "", nationality: row.nationality ?? "",
           age, height: Number(row.height ?? 0), weight: Number(row.weight ?? 0),
@@ -120,7 +154,7 @@ export function loadAllPlayers(): Promise<Player[]> {
           stamina: Number(row.stamina ?? 0), strength: Number(row.strength ?? 0),
           gk_diving: Number(row.gkDiving ?? 0), gk_handling: Number(row.gkHandling ?? 0), gk_kicking: Number(row.gkKicking ?? 0),
           gk_positioning: Number(row.gkPositioning ?? 0), gk_reflexes: Number(row.gkReflexes ?? 0),
-          wage: Number(row.wage ?? 0), market_value: computeMarketValue(ovr),
+          wage: Number(row.wage ?? 0), market_value: computeMarketValue(ovr, age, potential, row.position ?? ""),
         });
       })
       .on("end", () => { cache = results; cacheLoading = null; resolve(results); })
