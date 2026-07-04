@@ -621,9 +621,10 @@ export function ExpandableStats({ player, isGK, stats, cfg, br }: {
 // ─── PLAYER MODAL ─────────────────────────────────────────────────────────────
 
 export function PlayerModal({
-  player, clubName, clubColor, theme, onClose, isClosing,
+  player, clubName, clubColor, theme, onClose, isClosing, seasonStats,
 }: {
   player: any; clubName: string; clubColor: string; theme: string; onClose: () => void; isClosing?: boolean;
+  seasonStats?: { matches_played: number; goals: number; yellow_cards: number; red_cards: number; avg_rating: number } | null;
 }) {
   const [imgError, setImgError]         = useState(false);
   const [fullImgError, setFullImgError] = useState(false);
@@ -795,6 +796,28 @@ export function PlayerModal({
             </div>
             <div style={{ height: 1, background: cfg.accentLine }} />
             <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
+            {seasonStats && seasonStats.matches_played > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ height: 1, background: cfg.accentLine }} />
+                <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.35em", color: cfg.labelColor }}>
+                  This Season
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
+                  {[
+                    { label: "MP", value: seasonStats.matches_played },
+                    { label: "GOALS", value: seasonStats.goals },
+                    { label: "YEL", value: seasonStats.yellow_cards },
+                    { label: "RED", value: seasonStats.red_cards },
+                    { label: "AVG", value: seasonStats.avg_rating.toFixed(1) },
+                  ].map(s => (
+                    <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
+                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.label === "AVG" ? getRatingColor(Number(s.value) * 10) : cfg.metaColor }}>{s.value}</span>
+                      <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.25em", color: cfg.labelColor, marginTop: 3 }}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -842,6 +865,28 @@ export function PlayerModal({
             </div>
             <div style={{ height: 1, background: cfg.accentLine }} />
             <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
+            {seasonStats && seasonStats.matches_played > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ height: 1, background: cfg.accentLine }} />
+                <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.35em", color: cfg.labelColor }}>
+                  This Season
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
+                  {[
+                    { label: "MP", value: seasonStats.matches_played },
+                    { label: "GOALS", value: seasonStats.goals },
+                    { label: "YEL", value: seasonStats.yellow_cards },
+                    { label: "RED", value: seasonStats.red_cards },
+                    { label: "AVG", value: seasonStats.avg_rating.toFixed(1) },
+                  ].map(s => (
+                    <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
+                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.label === "AVG" ? getRatingColor(Number(s.value) * 10) : cfg.metaColor }}>{s.value}</span>
+                      <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.25em", color: cfg.labelColor, marginTop: 3 }}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

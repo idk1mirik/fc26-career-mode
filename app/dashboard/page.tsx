@@ -455,6 +455,42 @@ export default function DashboardPage() {
     setSimulating(false);
   };
 
+  // Промотка сезона целиком — тур за туром, каждый матч (включая матчи
+  // пользователя) играет ИИ по рейтингу состава, без ручного состава/тактики.
+  // Гоняем циклом с клиента, а не одним огромным запросом на сервере —
+  // так не упираемся в таймаут serverless-функции на Vercel, и заодно видно
+  // прогресс по ходу дела.
+  const [simulatingSeason, setSimulatingSeason] = useState(false);
+  const [seasonSimProgress, setSeasonSimProgress] = useState<{ done: number; matchday: number } | null>(null);
+
+  const simulateWholeSeason = async () => {
+    if (!seasonId || simulating || simulatingSeason) return;
+    setSimulatingSeason(true);
+    setApiError(null);
+    setSeasonSimProgress({ done: 0, matchday });
+    try {
+      let finished = false;
+      let iterations = 0;
+      const SAFETY_CAP = 80; // больше, чем матчей в самом длинном реалистичном календаре
+      while (!finished && iterations < SAFETY_CAP) {
+        const res = await fetch("/api/season/advance", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seasonId, userClubId: userClub }), // без lineup/tactic — авто-пилот
+        });
+        const data = await res.json();
+        if (!res.ok) { setApiError(data.error || "Season sim stopped early."); break; }
+        iterations++;
+        finished = !!data.finished;
+        setSeasonSimProgress({ done: iterations, matchday: data.nextMatchday });
+        if (finished) setSeasonFinished(true);
+      }
+      await loadData(seasonId);
+      await loadCalendar(seasonId, userClub);
+    } catch (e) { console.error(e); setApiError("Network error during season simulation."); }
+    setSimulatingSeason(false);
+    setSeasonSimProgress(null);
+  };
+
   // Текущий и следующий тур
   const currentFixtures = useMemo(() => fixtures.filter(f => f.matchday === matchday), [fixtures, matchday]);
   const lastPlayedDay   = useMemo(() => {
@@ -608,12 +644,25 @@ export default function DashboardPage() {
                       <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
                       <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
                     </div>
-                    <button onClick={advanceMatchday} disabled={simulating || currentFixtures.every(f => f.played) || !lineupValid}
-                      className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
-                      <Zap size={16} />
-                      {simulating ? "Simulating…" : "Simulate Matchday"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={advanceMatchday} disabled={simulating || simulatingSeason || currentFixtures.every(f => f.played) || !lineupValid}
+                        className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
+                        <Zap size={16} />
+                        {simulating ? "Simulating…" : "Simulate Matchday"}
+                      </button>
+                      <button onClick={simulateWholeSeason} disabled={simulating || simulatingSeason || seasonFinished}
+                        title="AI plays every remaining match this season, including yours"
+                        className={`px-4 py-3 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl`}
+                        style={{ background: "rgba(255,255,255,0.06)", color: ui.text.includes("white") ? "#fff" : undefined }}>
+                        ⏩ {simulatingSeason ? `Simulating… (${seasonSimProgress?.done ?? 0})` : "Sim Season"}
+                      </button>
+                    </div>
                   </div>
+                  {simulatingSeason && (
+                    <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold" style={{ background: "rgba(59,130,246,0.10)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.25)" }}>
+                      ⏳ Auto-simulating the rest of the season — AI is playing every match, including yours. Matchday {seasonSimProgress?.matchday ?? matchday}… this can take a bit, don't close the tab.
+                    </div>
+                  )}
                   {!lineupValid && (
                     <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
                       ⚠️ You need {MIN_LINEUP_SIZE} available players to play ({lineupCount}/{MIN_LINEUP_SIZE} available).

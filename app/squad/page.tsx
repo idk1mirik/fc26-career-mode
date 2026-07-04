@@ -473,7 +473,18 @@ export default function SquadPage() {
           autoFill(data, formToLoad);
         }
       }).catch(() => {});
-  }, [hydrated, selectedClub]);
+
+    // Статусы (травмы/дисквалификации) и статистика за сезон (матчи/голы/средняя
+    // оценка) — раньше эти состояния объявлялись, но НИЧЕМ не заполнялись, из-за
+    // чего бейджи оценки и статусов на карточках игроков никогда не появлялись.
+    if (seasonId) {
+      fetch(`/api/player-status?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setPlayerStatuses(data.statuses ?? []); }).catch(() => {});
+
+      fetch(`/api/season-stats?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setSeasonStats(data.stats ?? []); }).catch(() => {});
+    }
+  }, [hydrated, selectedClub, seasonId]);
 
   function autoFill(data: any[], form: string) {
     const slots = FORMATIONS[form] ?? FORMATIONS["4-3-3"];
@@ -832,6 +843,7 @@ export default function SquadPage() {
           theme={theme}
           onClose={closeModal}
           isClosing={modalClosing}
+          seasonStats={seasonStats.find(s => (s.player_id || s.player_name) === (modalPlayer.id ?? modalPlayer.name)) ?? null}
         />
       )}
 
