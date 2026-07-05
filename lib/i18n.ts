@@ -34,7 +34,7 @@ export interface ThemeCopy {
 
   // Tactics
   tacticsTitle: string; tacticsRecommended: string; tacticsSelectTactic: string;
-  tacticsCurrent: string; tacticsImpact: string;
+  tacticsCurrent: string; tacticsImpact: string; tacticsActive: string;
   tacticsDefensiveLine: string; tacticsPressing: string; tacticsWidth: string; tacticsTempo: string;
   tacticsPassingRisk: string; tacticsBuildUp: string; tacticsAttackingWidth: string;
 
@@ -42,14 +42,26 @@ export interface ThemeCopy {
   cupsTitle: string; cupsLockedUntil: string; cupsSimulateRound: string; cupsSimulating: string;
   cupsNoCompetitions: string; cupsNoSeason: string; cupsWinnerLabel: string; cupsRunnerLabel: string;
   cupsWonTitle: string; cupsLineupWarning: string;
+  cupsHeaderLabel: string; cupsWinnerPrefix: string; cupsRoundPrefix: string; cupsYoureIn: string;
 
   // Fixtures
   fixturesTitle: string; fixturesAll: string; fixturesLeague: string; fixturesCup: string;
   fixturesEurope: string; fixturesSuperCup: string; fixturesNoMatches: string; fixturesDateTBD: string;
+  fixturesHeaderLabel: string;
 
   // Table
   tableTitle: string; tableNoStandings: string; tableChampionsLeague: string; tableRelegation: string;
   tableP: string; tableW: string; tableD: string; tableL: string; tableGD: string; tablePts: string;
+
+  // Transfers
+  transfersHeaderLabel: string; transfersPreseasonWindow: string; transfersWinterWindow: string; transfersClosed: string;
+  transfersNextOpenWinter: string; transfersNextOpenPreseason: string;
+  transfersMarketTab: string; transfersSquadTab: string; transfersListingsTab: string;
+  transfersSearchMarket: string; transfersSearchSquad: string; transfersNoPlayers: string;
+  transfersMyListings: string; transfersOpenListings: string; transfersNoListings: string;
+  transfersBuy: string; transfersQuickSell: string; transfersList: string; transfersCancel: string;
+  transfersRecalculate: string; transfersRecentActivity: string;
+  transfersListModalMarketEstimate: string; transfersListModalPlaceholder: string; transfersListModalConfirm: string;
 
   // Common
   commonCancel: string; commonSave: string; commonDelete: string; commonSearch: string; commonLoading: string;
@@ -85,20 +97,28 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       tacticsTitle: "Team Tactics", tacticsRecommended: "Recommended for your squad", tacticsSelectTactic: "Select Tactic",
       tacticsCurrent: "Current", tacticsImpact: "Impact on matches",
       tacticsDefensiveLine: "Defensive Line", tacticsPressing: "Pressing", tacticsWidth: "Width", tacticsTempo: "Tempo",
-      tacticsPassingRisk: "Passing Risk", tacticsBuildUp: "Build Up Speed", tacticsAttackingWidth: "Attacking Width",
+      tacticsPassingRisk: "Passing Risk", tacticsBuildUp: "Build Up Speed", tacticsAttackingWidth: "Attacking Width", tacticsActive: "Active",
 
       cupsTitle: "Cups, Super Cups & Continental", cupsLockedUntil: "Locked until", cupsSimulateRound: "Simulate Round", cupsSimulating: "Simulating…",
       cupsNoCompetitions: "No competitions yet for this season", cupsNoSeason: "No active season",
       cupsWinnerLabel: "Winner", cupsRunnerLabel: "Runner-up", cupsWonTitle: "won the title!",
-      cupsLineupWarning: "players in your lineup to play matches",
+      cupsLineupWarning: "players in your lineup to play matches", cupsHeaderLabel: "Cups & Trophies", cupsWinnerPrefix: "Winner:", cupsRoundPrefix: "Round", cupsYoureIn: "You\'re in!",
 
       fixturesTitle: "Season Calendar — All Competitions", fixturesAll: "All", fixturesLeague: "League", fixturesCup: "Cup",
-      fixturesEurope: "Europe", fixturesSuperCup: "Super Cup", fixturesNoMatches: "No matches found", fixturesDateTBD: "Date TBD",
+      fixturesEurope: "Europe", fixturesSuperCup: "Super Cup", fixturesNoMatches: "No matches found", fixturesDateTBD: "Date TBD", fixturesHeaderLabel: "Calendar",
 
       tableTitle: "League Table", tableNoStandings: "No standings yet — simulate a matchday first",
       tableChampionsLeague: "Champions League", tableRelegation: "Relegation",
       tableP: "P", tableW: "W", tableD: "D", tableL: "L", tableGD: "GD", tablePts: "Pts",
 
+      transfersHeaderLabel: "Transfers", transfersPreseasonWindow: "Preseason Window", transfersWinterWindow: "Winter Window", transfersClosed: "Transfer Window Closed",
+      transfersNextOpenWinter: "Opens again at Matchday 20 (January)", transfersNextOpenPreseason: "Opens next preseason",
+      transfersMarketTab: "Market", transfersSquadTab: "My Squad", transfersListingsTab: "Listings",
+      transfersSearchMarket: "Search players or clubs...", transfersSearchSquad: "Search your squad...", transfersNoPlayers: "No players found",
+      transfersMyListings: "My Listings", transfersOpenListings: "Open Listings", transfersNoListings: "No listings from other clubs right now",
+      transfersBuy: "Buy", transfersQuickSell: "Quick Sell", transfersList: "List", transfersCancel: "Cancel",
+      transfersRecalculate: "Recalculate", transfersRecentActivity: "Recent Activity",
+      transfersListModalMarketEstimate: "Market estimate:", transfersListModalPlaceholder: "Asking price, €", transfersListModalConfirm: "List",
       commonCancel: "Cancel", commonSave: "Save", commonDelete: "Delete", commonSearch: "Search...", commonLoading: "Loading...",
     },
     aurora: {
@@ -129,20 +149,28 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       tacticsTitle: "How We Play ✦", tacticsRecommended: "Perfect for your squad's strengths", tacticsSelectTactic: "Choose Your Style",
       tacticsCurrent: "Right Now We Play", tacticsImpact: "What this means for matches",
       tacticsDefensiveLine: "How Deep We Sit", tacticsPressing: "How Hard We Chase", tacticsWidth: "How Wide We Spread", tacticsTempo: "How Fast We Play",
-      tacticsPassingRisk: "How Bold Our Passes", tacticsBuildUp: "How Quick We Build", tacticsAttackingWidth: "How Wide We Attack",
+      tacticsPassingRisk: "How Bold Our Passes", tacticsBuildUp: "How Quick We Build", tacticsAttackingWidth: "How Wide We Attack", tacticsActive: "Chosen ✦",
 
       cupsTitle: "Trophies & Dreams ✦", cupsLockedUntil: "Not yet, sweetie — comes around", cupsSimulateRound: "Play This Round ✦", cupsSimulating: "Playing it out…",
       cupsNoCompetitions: "No trophies to chase yet this season", cupsNoSeason: "No story started yet",
       cupsWinnerLabel: "Champion ✦", cupsRunnerLabel: "So Close", cupsWonTitle: "won it all! ✦",
-      cupsLineupWarning: "players needed in your lineup before playing",
+      cupsLineupWarning: "players needed in your lineup before playing", cupsHeaderLabel: "Trophies & Dreams", cupsWinnerPrefix: "Champion:", cupsRoundPrefix: "Chapter", cupsYoureIn: "You\'re part of the story!",
 
       fixturesTitle: "Our Season Journey ✦", fixturesAll: "Everything", fixturesLeague: "League Days", fixturesCup: "Cup Days",
-      fixturesEurope: "European Nights", fixturesSuperCup: "Super Cup", fixturesNoMatches: "Nothing here yet", fixturesDateTBD: "Soon ✦",
+      fixturesEurope: "European Nights", fixturesSuperCup: "Super Cup", fixturesNoMatches: "Nothing here yet", fixturesDateTBD: "Soon ✦", fixturesHeaderLabel: "Story Timeline",
 
       tableTitle: "How Everyone's Doing", tableNoStandings: "Nothing yet — let's play our first match!",
       tableChampionsLeague: "Champions League Spot", tableRelegation: "Danger Zone",
       tableP: "Played", tableW: "Won", tableD: "Drawn", tableL: "Lost", tableGD: "GD", tablePts: "Pts",
 
+      transfersHeaderLabel: "Wishlist", transfersPreseasonWindow: "Dream Market Open", transfersWinterWindow: "Winter Wishes", transfersClosed: "Wishlist Closed For Now",
+      transfersNextOpenWinter: "Reopens at Matchday 20 (our January) ✦", transfersNextOpenPreseason: "Opens again next preseason ✦",
+      transfersMarketTab: "Dream Market", transfersSquadTab: "My Team", transfersListingsTab: "Trade Board",
+      transfersSearchMarket: "Looking for someone special? ✦", transfersSearchSquad: "Search your team...", transfersNoPlayers: "No one found here ✦",
+      transfersMyListings: "My Trades", transfersOpenListings: "Others' Trades", transfersNoListings: "No trades from others yet ✦",
+      transfersBuy: "Sign", transfersQuickSell: "Quick Farewell", transfersList: "Offer", transfersCancel: "Take Back",
+      transfersRecalculate: "Refresh Budget ✦", transfersRecentActivity: "Our Story So Far",
+      transfersListModalMarketEstimate: "Dream value:", transfersListModalPlaceholder: "Your price, €", transfersListModalConfirm: "Offer ✦",
       commonCancel: "Never mind", commonSave: "Keep it ✦", commonDelete: "Let it go", commonSearch: "Looking for someone? ✦", commonLoading: "One sec ✦",
     },
     maleficent: {
@@ -173,20 +201,28 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       tacticsTitle: "BATTLE_PROTOCOL", tacticsRecommended: "Optimal config detected", tacticsSelectTactic: "SELECT_PROTOCOL",
       tacticsCurrent: "ACTIVE_PROTOCOL", tacticsImpact: "PROTOCOL_EFFECTS",
       tacticsDefensiveLine: "DEFENSE_LINE", tacticsPressing: "PRESSURE_LVL", tacticsWidth: "FORMATION_WIDTH", tacticsTempo: "EXEC_SPEED",
-      tacticsPassingRisk: "RISK_TOLERANCE", tacticsBuildUp: "BUILDUP_RATE", tacticsAttackingWidth: "ATK_SPREAD",
+      tacticsPassingRisk: "RISK_TOLERANCE", tacticsBuildUp: "BUILDUP_RATE", tacticsAttackingWidth: "ATK_SPREAD", tacticsActive: "ACTIVE",
 
       cupsTitle: "CONQUEST_LOG", cupsLockedUntil: "LOCKED // available at", cupsSimulateRound: "EXECUTE_ROUND", cupsSimulating: "EXECUTING…",
       cupsNoCompetitions: "// NO ACTIVE CAMPAIGNS THIS CYCLE", cupsNoSeason: "NO_ACTIVE_CYCLE",
       cupsWinnerLabel: "VICTOR", cupsRunnerLabel: "DEFEATED_FINALIST", cupsWonTitle: "CLAIMED THE TITLE! //",
-      cupsLineupWarning: "units required in deployment before engaging",
+      cupsLineupWarning: "units required in deployment before engaging", cupsHeaderLabel: "TROPHY_PROTOCOLS", cupsWinnerPrefix: "VICTOR:", cupsRoundPrefix: "ROUND", cupsYoureIn: "YOU ARE ENGAGED",
 
       fixturesTitle: "FULL_TIMELINE.log", fixturesAll: "ALL", fixturesLeague: "LEAGUE", fixturesCup: "CUP",
-      fixturesEurope: "EURO_OPS", fixturesSuperCup: "SUPER_CUP", fixturesNoMatches: "// NO DATA", fixturesDateTBD: "PENDING",
+      fixturesEurope: "EURO_OPS", fixturesSuperCup: "SUPER_CUP", fixturesNoMatches: "// NO DATA", fixturesDateTBD: "PENDING", fixturesHeaderLabel: "CHRONO_LOG",
 
       tableTitle: "POWER_RANKINGS", tableNoStandings: "// NO DATA — EXECUTE FIRST MATCHDAY",
       tableChampionsLeague: "ELITE_TIER", tableRelegation: "ELIMINATION_ZONE",
       tableP: "P", tableW: "W", tableD: "D", tableL: "L", tableGD: "GD", tablePts: "PTS",
 
+      transfersHeaderLabel: "MARKET", transfersPreseasonWindow: "PRE-SEASON WINDOW OPEN", transfersWinterWindow: "WINTER WINDOW OPEN", transfersClosed: "MARKET_SEALED",
+      transfersNextOpenWinter: "REOPENS // MATCHDAY 20", transfersNextOpenPreseason: "REOPENS // NEXT CYCLE",
+      transfersMarketTab: "ACQUIRE", transfersSquadTab: "MY_UNITS", transfersListingsTab: "BLACK_MARKET",
+      transfersSearchMarket: "QUERY UNITS/FACTIONS...", transfersSearchSquad: "QUERY MY UNITS...", transfersNoPlayers: "// NO TARGETS FOUND",
+      transfersMyListings: "MY_OFFERS", transfersOpenListings: "HOSTILE_OFFERS", transfersNoListings: "// NO OFFERS FROM RIVALS",
+      transfersBuy: "ACQUIRE", transfersQuickSell: "LIQUIDATE", transfersList: "OFFER_UNIT", transfersCancel: "RETRACT",
+      transfersRecalculate: "RECALIBRATE", transfersRecentActivity: "TRANSACTION_LOG",
+      transfersListModalMarketEstimate: "EST. VALUE:", transfersListModalPlaceholder: "DEMANDED SUM, €", transfersListModalConfirm: "DEPLOY_OFFER",
       commonCancel: "ABORT", commonSave: "COMMIT", commonDelete: "PURGE", commonSearch: "QUERY...", commonLoading: "PROCESSING...",
     },
   },
@@ -219,20 +255,28 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       tacticsTitle: "Тактика команды", tacticsRecommended: "Рекомендовано для вашего состава", tacticsSelectTactic: "Выбрать тактику",
       tacticsCurrent: "Текущая", tacticsImpact: "Влияние на матчи",
       tacticsDefensiveLine: "Линия защиты", tacticsPressing: "Прессинг", tacticsWidth: "Ширина", tacticsTempo: "Темп",
-      tacticsPassingRisk: "Риск передач", tacticsBuildUp: "Скорость атак", tacticsAttackingWidth: "Ширина атаки",
+      tacticsPassingRisk: "Риск передач", tacticsBuildUp: "Скорость атак", tacticsAttackingWidth: "Ширина атаки", tacticsActive: "Активна",
 
       cupsTitle: "Кубки, Суперкубки и Евротурниры", cupsLockedUntil: "Закрыто до", cupsSimulateRound: "Сыграть раунд", cupsSimulating: "Симуляция…",
       cupsNoCompetitions: "В этом сезоне пока нет турниров", cupsNoSeason: "Нет активного сезона",
       cupsWinnerLabel: "Победитель", cupsRunnerLabel: "Финалист", cupsWonTitle: "выиграл турнир!",
-      cupsLineupWarning: "игроков в составе чтобы играть матчи",
+      cupsLineupWarning: "игроков в составе чтобы играть матчи", cupsHeaderLabel: "Кубки и трофеи", cupsWinnerPrefix: "Победитель:", cupsRoundPrefix: "Раунд", cupsYoureIn: "Ты участвуешь!",
 
       fixturesTitle: "Календарь сезона — все турниры", fixturesAll: "Все", fixturesLeague: "Лига", fixturesCup: "Кубок",
-      fixturesEurope: "Европа", fixturesSuperCup: "Суперкубок", fixturesNoMatches: "Матчи не найдены", fixturesDateTBD: "Дата уточняется",
+      fixturesEurope: "Европа", fixturesSuperCup: "Суперкубок", fixturesNoMatches: "Матчи не найдены", fixturesDateTBD: "Дата уточняется", fixturesHeaderLabel: "Календарь",
 
       tableTitle: "Таблица лиги", tableNoStandings: "Пока нет данных — сыграй первый тур",
       tableChampionsLeague: "Лига чемпионов", tableRelegation: "Зона вылета",
       tableP: "И", tableW: "В", tableD: "Н", tableL: "П", tableGD: "РМ", tablePts: "О",
 
+      transfersHeaderLabel: "Трансферы", transfersPreseasonWindow: "Предсезонное окно", transfersWinterWindow: "Зимнее окно", transfersClosed: "Трансферное окно закрыто",
+      transfersNextOpenWinter: "Откроется на 20 туре (январь)", transfersNextOpenPreseason: "Откроется в следующую предсезонку",
+      transfersMarketTab: "Рынок", transfersSquadTab: "Мой состав", transfersListingsTab: "Лоты",
+      transfersSearchMarket: "Поиск игроков или клубов...", transfersSearchSquad: "Поиск по составу...", transfersNoPlayers: "Игроки не найдены",
+      transfersMyListings: "Мои лоты", transfersOpenListings: "Лоты других клубов", transfersNoListings: "Пока нет лотов от других клубов",
+      transfersBuy: "Купить", transfersQuickSell: "Быстро продать", transfersList: "Выставить", transfersCancel: "Отменить",
+      transfersRecalculate: "Пересчитать", transfersRecentActivity: "Недавние сделки",
+      transfersListModalMarketEstimate: "Рыночная оценка:", transfersListModalPlaceholder: "Цена продажи, €", transfersListModalConfirm: "Выставить",
       commonCancel: "Отмена", commonSave: "Сохранить", commonDelete: "Удалить", commonSearch: "Поиск...", commonLoading: "Загрузка...",
     },
     aurora: {
@@ -263,20 +307,28 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       tacticsTitle: "Как мы играем ✦", tacticsRecommended: "Идеально для сильных сторон команды", tacticsSelectTactic: "Выбери свой стиль",
       tacticsCurrent: "Сейчас мы играем", tacticsImpact: "Что это значит для матчей",
       tacticsDefensiveLine: "Как глубоко мы стоим", tacticsPressing: "Как сильно мы прессингуем", tacticsWidth: "Как широко мы играем", tacticsTempo: "Как быстро мы играем",
-      tacticsPassingRisk: "Насколько смелые передачи", tacticsBuildUp: "Как быстро строим атаки", tacticsAttackingWidth: "Как широко атакуем",
+      tacticsPassingRisk: "Насколько смелые передачи", tacticsBuildUp: "Как быстро строим атаки", tacticsAttackingWidth: "Как широко атакуем", tacticsActive: "Выбрана ✦",
 
       cupsTitle: "Трофеи и мечты ✦", cupsLockedUntil: "Пока нет, милый — придёт время", cupsSimulateRound: "Сыграть раунд ✦", cupsSimulating: "Разыгрываем…",
       cupsNoCompetitions: "В этом сезоне пока нет трофеев для нас", cupsNoSeason: "История ещё не началась",
       cupsWinnerLabel: "Чемпион ✦", cupsRunnerLabel: "Так близко", cupsWonTitle: "выиграл всё! ✦",
-      cupsLineupWarning: "игроков нужно в составе перед игрой",
+      cupsLineupWarning: "игроков нужно в составе перед игрой", cupsHeaderLabel: "Трофеи и мечты", cupsWinnerPrefix: "Чемпион:", cupsRoundPrefix: "Глава", cupsYoureIn: "Ты часть этой истории!",
 
       fixturesTitle: "Наш путь в сезоне ✦", fixturesAll: "Всё", fixturesLeague: "Лиговые дни", fixturesCup: "Кубковые дни",
-      fixturesEurope: "Европейские вечера", fixturesSuperCup: "Суперкубок", fixturesNoMatches: "Здесь пока пусто", fixturesDateTBD: "Скоро ✦",
+      fixturesEurope: "Европейские вечера", fixturesSuperCup: "Суперкубок", fixturesNoMatches: "Здесь пока пусто", fixturesDateTBD: "Скоро ✦", fixturesHeaderLabel: "Линия истории",
 
       tableTitle: "Как у всех дела", tableNoStandings: "Пока нет данных — сыграем первый матч!",
       tableChampionsLeague: "Место в Лиге чемпионов", tableRelegation: "Зона опасности",
       tableP: "Игр", tableW: "Побед", tableD: "Ничьих", tableL: "Поражений", tableGD: "РМ", tablePts: "Очки",
 
+      transfersHeaderLabel: "Список желаний", transfersPreseasonWindow: "Рынок мечты открыт", transfersWinterWindow: "Зимние желания", transfersClosed: "Список желаний пока закрыт",
+      transfersNextOpenWinter: "Откроется на 20 туре (наш январь) ✦", transfersNextOpenPreseason: "Откроется в следующую предсезонку ✦",
+      transfersMarketTab: "Рынок мечты", transfersSquadTab: "Моя команда", transfersListingsTab: "Доска обмена",
+      transfersSearchMarket: "Ищешь кого-то особенного? ✦", transfersSearchSquad: "Поиск по команде...", transfersNoPlayers: "Здесь никого не нашлось ✦",
+      transfersMyListings: "Мои предложения", transfersOpenListings: "Предложения других", transfersNoListings: "Пока нет предложений от других ✦",
+      transfersBuy: "Подписать", transfersQuickSell: "Быстро попрощаться", transfersList: "Предложить", transfersCancel: "Забрать обратно",
+      transfersRecalculate: "Обновить бюджет ✦", transfersRecentActivity: "Наша история пока что",
+      transfersListModalMarketEstimate: "Оценка мечты:", transfersListModalPlaceholder: "Твоя цена, €", transfersListModalConfirm: "Предложить ✦",
       commonCancel: "Не важно", commonSave: "Сохранить ✦", commonDelete: "Отпустить", commonSearch: "Кого-то ищешь? ✦", commonLoading: "Секундочку ✦",
     },
     maleficent: {
@@ -307,20 +359,28 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       tacticsTitle: "БОЕВОЙ_ПРОТОКОЛ", tacticsRecommended: "Оптимальная конфигурация", tacticsSelectTactic: "ВЫБРАТЬ_ПРОТОКОЛ",
       tacticsCurrent: "АКТИВНЫЙ_ПРОТОКОЛ", tacticsImpact: "ЭФФЕКТЫ_ПРОТОКОЛА",
       tacticsDefensiveLine: "ЛИНИЯ_ЗАЩИТЫ", tacticsPressing: "УРОВЕНЬ_ДАВЛЕНИЯ", tacticsWidth: "ШИРИНА_СХЕМЫ", tacticsTempo: "СКОРОСТЬ_ВЫПОЛНЕНИЯ",
-      tacticsPassingRisk: "ТОЛЕРАНТНОСТЬ_К_РИСКУ", tacticsBuildUp: "СКОРОСТЬ_АТАКИ", tacticsAttackingWidth: "ШИРИНА_АТАКИ",
+      tacticsPassingRisk: "ТОЛЕРАНТНОСТЬ_К_РИСКУ", tacticsBuildUp: "СКОРОСТЬ_АТАКИ", tacticsAttackingWidth: "ШИРИНА_АТАКИ", tacticsActive: "АКТИВНА",
 
       cupsTitle: "ЖУРНАЛ_ЗАВОЕВАНИЙ", cupsLockedUntil: "ЗАБЛОКИРОВАНО // доступно с", cupsSimulateRound: "ЗАПУСТИТЬ_РАУНД", cupsSimulating: "ВЫПОЛНЕНИЕ…",
       cupsNoCompetitions: "// НЕТ АКТИВНЫХ КАМПАНИЙ В ЭТОМ ЦИКЛЕ", cupsNoSeason: "НЕТ_АКТИВНОГО_ЦИКЛА",
       cupsWinnerLabel: "ПОБЕДИТЕЛЬ", cupsRunnerLabel: "ПОБЕЖДЁННЫЙ_ФИНАЛИСТ", cupsWonTitle: "ЗАХВАТИЛ ТИТУЛ! //",
-      cupsLineupWarning: "единиц нужно в развёртывании перед атакой",
+      cupsLineupWarning: "единиц нужно в развёртывании перед атакой", cupsHeaderLabel: "ПРОТОКОЛЫ_ТРОФЕЕВ", cupsWinnerPrefix: "ПОБЕДИТЕЛЬ:", cupsRoundPrefix: "РАУНД", cupsYoureIn: "ВЫ ВОВЛЕЧЕНЫ",
 
       fixturesTitle: "ПОЛНАЯ_ХРОНОЛОГИЯ.log", fixturesAll: "ВСЕ", fixturesLeague: "ЛИГА", fixturesCup: "КУБОК",
-      fixturesEurope: "ЕВРО_ОПЕРАЦИИ", fixturesSuperCup: "СУПЕРКУБОК", fixturesNoMatches: "// НЕТ ДАННЫХ", fixturesDateTBD: "ОЖИДАНИЕ",
+      fixturesEurope: "ЕВРО_ОПЕРАЦИИ", fixturesSuperCup: "СУПЕРКУБОК", fixturesNoMatches: "// НЕТ ДАННЫХ", fixturesDateTBD: "ОЖИДАНИЕ", fixturesHeaderLabel: "ХРОНО_ЖУРНАЛ",
 
       tableTitle: "РЕЙТИНГ_СИЛЫ", tableNoStandings: "// НЕТ ДАННЫХ — ЗАПУСТИ ПЕРВЫЙ ТУР",
       tableChampionsLeague: "ЭЛИТНЫЙ_ДИВИЗИОН", tableRelegation: "ЗОНА_УНИЧТОЖЕНИЯ",
       tableP: "И", tableW: "В", tableD: "Н", tableL: "П", tableGD: "РМ", tablePts: "ОЧК",
 
+      transfersHeaderLabel: "РЫНОК", transfersPreseasonWindow: "ОКНО ПРЕДСЕЗОНКИ ОТКРЫТО", transfersWinterWindow: "ЗИМНЕЕ ОКНО ОТКРЫТО", transfersClosed: "РЫНОК_ОПЕЧАТАН",
+      transfersNextOpenWinter: "ОТКРОЕТСЯ // ТУР 20", transfersNextOpenPreseason: "ОТКРОЕТСЯ // СЛЕД. ЦИКЛ",
+      transfersMarketTab: "ЗАХВАТИТЬ", transfersSquadTab: "МОИ_ЮНИТЫ", transfersListingsTab: "ЧЁРНЫЙ_РЫНОК",
+      transfersSearchMarket: "ЗАПРОС ЮНИТЫ/ФРАКЦИИ...", transfersSearchSquad: "ЗАПРОС МОИ ЮНИТЫ...", transfersNoPlayers: "// ЦЕЛИ НЕ НАЙДЕНЫ",
+      transfersMyListings: "МОИ_ПРЕДЛОЖЕНИЯ", transfersOpenListings: "ВРАЖДЕБНЫЕ_ПРЕДЛОЖЕНИЯ", transfersNoListings: "// НЕТ ПРЕДЛОЖЕНИЙ ОТ СОПЕРНИКОВ",
+      transfersBuy: "ЗАХВАТИТЬ", transfersQuickSell: "ЛИКВИДИРОВАТЬ", transfersList: "ПРЕДЛОЖИТЬ_ЮНИТ", transfersCancel: "ОТОЗВАТЬ",
+      transfersRecalculate: "ПЕРЕКАЛИБРОВАТЬ", transfersRecentActivity: "ЖУРНАЛ_ТРАНЗАКЦИЙ",
+      transfersListModalMarketEstimate: "ОЦЕНКА:", transfersListModalPlaceholder: "ТРЕБУЕМАЯ СУММА, €", transfersListModalConfirm: "ОТПРАВИТЬ_ПРЕДЛОЖЕНИЕ",
       commonCancel: "ОТМЕНИТЬ", commonSave: "ЗАФИКСИРОВАТЬ", commonDelete: "СТЕРЕТЬ", commonSearch: "ЗАПРОС...", commonLoading: "ОБРАБОТКА...",
     },
   },

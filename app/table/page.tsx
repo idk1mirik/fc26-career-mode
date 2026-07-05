@@ -6,6 +6,7 @@ import { useThemeStore } from "@/app/store/themeStore";
 import { getClubLogo } from "@/data/clublogos";
 import { getLeagueLogo } from "@/data/leagueLogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
+import { getThemeCopy } from "@/lib/i18n";
 
 const THEME_UI = {
   classic: {
@@ -57,6 +58,8 @@ export default function TablePage() {
 
   const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
   const ui    = THEME_UI[theme] ?? THEME_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const copy = getThemeCopy(locale, theme);
 
   useEffect(() => {
     if (!hydrated || !seasonId) return;
@@ -75,8 +78,8 @@ export default function TablePage() {
           <img src={getLeagueLogo(selectedLeague?.name || "")} alt="" className="w-8 h-8 object-contain"
             onError={e => (e.currentTarget.style.display = "none")} />
           <div>
-            <div className={`text-[10px] uppercase tracking-widest mb-0.5 ${ui.muted}`}>League Table</div>
-            <h1 className="text-2xl font-black">{selectedLeague?.name || "League"} 2025/26</h1>
+            <div className={`text-[10px] uppercase tracking-widest mb-0.5 ${ui.muted}`}>{copy.tableTitle}</div>
+            <h1 className="text-2xl font-black">{selectedLeague?.name || (locale === "ru" ? "Лига" : "League")} 2025/26</h1>
           </div>
         </div>
 
@@ -84,18 +87,18 @@ export default function TablePage() {
           {/* Header */}
           <div className={`grid text-[9px] uppercase tracking-widest ${ui.muted} px-4 py-3 border-b ${ui.divider}`}
             style={{ gridTemplateColumns: "32px 1fr 40px 40px 40px 40px 50px 48px" }}>
-            <span>#</span><span>Club</span>
-            <span className="text-center">P</span>
-            <span className="text-center">W</span>
-            <span className="text-center">D</span>
-            <span className="text-center">L</span>
-            <span className="text-center">GD</span>
-            <span className="text-center font-black">Pts</span>
+            <span>#</span><span>{locale === "ru" ? "Клуб" : "Club"}</span>
+            <span className="text-center">{copy.tableP}</span>
+            <span className="text-center">{copy.tableW}</span>
+            <span className="text-center">{copy.tableD}</span>
+            <span className="text-center">{copy.tableL}</span>
+            <span className="text-center">{copy.tableGD}</span>
+            <span className="text-center font-black">{copy.tablePts}</span>
           </div>
 
           {standings.length === 0 && (
             <div className={`text-center py-10 ${ui.muted} text-sm`}>
-              No standings yet — simulate a matchday first
+              {copy.tableNoStandings}
             </div>
           )}
 
@@ -143,11 +146,11 @@ export default function TablePage() {
         <div className={`flex gap-4 mt-4 text-[10px] ${ui.muted}`}>
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-            Champions League
+            {copy.tableChampionsLeague}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-            Relegation
+            {copy.tableRelegation}
           </span>
         </div>
       </div>

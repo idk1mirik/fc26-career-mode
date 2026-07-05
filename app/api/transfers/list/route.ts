@@ -3,6 +3,7 @@
 // без скидки, но и без гарантии, что кто-то купит именно сейчас).
 import { supabase } from "@/lib/supabase";
 import { loadAllPlayers } from "@/lib/players";
+import { checkTransferWindow } from "@/lib/transferWindow";
 
 export async function POST(req: Request) {
   const { seasonId, sellerClubId, playerId, askingPrice } = await req.json();
@@ -10,6 +11,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "seasonId, sellerClubId, playerId and askingPrice required" }, { status: 400 });
   }
   if (askingPrice <= 0) return Response.json({ error: "Asking price must be positive" }, { status: 400 });
+
+  const window = await checkTransferWindow(seasonId);
+  if (!window.open) return Response.json({ error: "Transfer window is closed" }, { status: 403 });
 
   const all = await loadAllPlayers();
   const player = all.find(p => p.id === playerId);

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
 import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { applyClubEarning } from "@/lib/finance";
+import { checkTransferWindow } from "@/lib/transferWindow";
 
 function quickSellMultiplier(ovr: number): number {
   const base = 0.65;
@@ -20,6 +21,9 @@ export async function POST(req: Request) {
   if (!seasonId || !sellerClubId || !playerId) {
     return Response.json({ error: "seasonId, sellerClubId and playerId required" }, { status: 400 });
   }
+
+  const window = await checkTransferWindow(seasonId);
+  if (!window.open) return Response.json({ error: "Transfer window is closed" }, { status: 403 });
 
   const all = await loadAllPlayers();
   const player = all.find(p => p.id === playerId);

@@ -7,6 +7,7 @@ import { getPlayerPhoto } from "@/lib/images";
 import { getRatingColor, FlagImage, PlayerModal } from "@/app/lib/playerComponents";
 import { getLeagueTheme } from "@/constants/themes";
 import { TrendingUp, TrendingDown, Lock, Search, Wallet, Tag, X as XIcon } from "lucide-react";
+import { getThemeCopy } from "@/lib/i18n";
 
 // ─── Тема — тот же паттерн THEME_UI, что и на странице состава/тактики ──────
 const THEME_UI = {
@@ -99,21 +100,21 @@ const TransferPlayerRow = memo(function TransferPlayerRow({
   );
 });
 
-function AskingPriceModal({ ui, player, onCancel, onConfirm }: {
-  ui: typeof THEME_UI["classic"]; player: any; onCancel: () => void; onConfirm: (price: number) => void;
+function AskingPriceModal({ ui, player, onCancel, onConfirm, copy }: {
+  ui: typeof THEME_UI["classic"]; player: any; onCancel: () => void; onConfirm: (price: number) => void; copy: any;
 }) {
   const [value, setValue] = useState(String(player.market_value ?? 1_000_000));
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
       <div className={`w-full max-w-sm rounded-2xl p-5 ${ui.card}`} style={{ background: "var(--modal-bg, #0b0d16)" }} onClick={e => e.stopPropagation()}>
-        <div className={`text-sm font-black mb-1 ${ui.nameColor}`}>List {player.name}</div>
-        <div className={`text-[11px] mb-4 ${ui.muted}`}>Market estimate: {fmtMoney(player.market_value ?? 0)}</div>
+        <div className={`text-sm font-black mb-1 ${ui.nameColor}`}>{copy.transfersList} {player.name}</div>
+        <div className={`text-[11px] mb-4 ${ui.muted}`}>{copy.transfersListModalMarketEstimate} {fmtMoney(player.market_value ?? 0)}</div>
         <input type="number" value={value} onChange={e => setValue(e.target.value)}
-          className={`w-full px-3 py-2.5 text-sm outline-none rounded-xl mb-4 ${ui.input}`} placeholder="Asking price, €" />
+          className={`w-full px-3 py-2.5 text-sm outline-none rounded-xl mb-4 ${ui.input}`} placeholder={copy.transfersListModalPlaceholder} />
         <div className="flex gap-2">
-          <button onClick={onCancel} className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest ${ui.tabIdle}`}>Cancel</button>
+          <button onClick={onCancel} className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest ${ui.tabIdle}`}>{copy.transfersCancel}</button>
           <button onClick={() => onConfirm(Number(value))} disabled={!Number(value) || Number(value) <= 0}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-40 ${ui.buyBtn}`}>List</button>
+            className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-40 ${ui.buyBtn}`}>{copy.transfersListModalConfirm}</button>
         </div>
       </div>
     </div>
@@ -123,17 +124,23 @@ function AskingPriceModal({ ui, player, onCancel, onConfirm }: {
 export default function TransfersPage() {
   const theme       = useThemeStore(s => s.theme) as keyof typeof THEME_UI;
   const ui          = THEME_UI[theme] ?? THEME_UI.classic;
+  const locale      = useCareerStore(s => s.locale) || "en";
+  const copy        = getThemeCopy(locale, theme);
   const matchday    = useCareerStore(s => s.matchday);
   const seasonId    = useCareerStore(s => s.seasonId);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const userClub    = selectedClub?.name || "";
 
-  // ТО открывается на туре 1-8 (лето) и 20-24 (зима) — сохранена существующая логика окна
-  const summerOpen = matchday >= 1 && matchday <= 8;
-  const winterOpen = matchday >= 20 && matchday <= 24;
-  const isOpen     = summerOpen || winterOpen;
-  const windowLabel = summerOpen ? "Summer Window" : winterOpen ? "Winter Window" : "Transfer Window Closed";
-  const nextOpen    = matchday < 20 ? "Opens again at Matchday 20 (January)" : "Opens next season";
+  // Окно трансферов: до старта сезона (никто ещё не сыграл ни одного тура —
+  // matchday счётчик остаётся на 1, пока тур не сыгран) и зимнее окно
+  // 20-25 тур. Раньше окно ошибочно было открыто турами 1-8, то есть уже
+  // ПОСЛЕ старта сезона — трансферы в разгар чемпионата были доступны,
+  // хотя в реальном футболе так не делается.
+  const preseasonOpen = matchday === 1;
+  const winterOpen = matchday >= 20 && matchday <= 25;
+  const isOpen     = preseasonOpen || winterOpen;
+  const windowLabel = preseasonOpen ? copy.transfersPreseasonWindow : winterOpen ? copy.transfersWinterWindow : copy.transfersClosed;
+  const nextOpen    = matchday < 20 ? copy.transfersNextOpenWinter : copy.transfersNextOpenPreseason;
 
   const [tab, setTab] = useState<"market" | "squad" | "listings">("market");
   const [budget, setBudget] = useState<number | null>(null);
@@ -330,7 +337,7 @@ export default function TransfersPage() {
         {/* ── Header ── */}
         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
           <div>
-            <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Transfers</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.transfersHeaderLabel}</div>
             <h1 className="text-2xl font-black">{windowLabel}</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -343,7 +350,7 @@ export default function TransfersPage() {
             <button onClick={handleRecalibrate} disabled={recalibrating}
               title="Пересчитать бюджет по текущей формуле цен"
               className={`px-3 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 ${ui.tabIdle}`}>
-              {recalibrating ? "…" : "Recalculate"}
+              {recalibrating ? "…" : copy.transfersRecalculate}
             </button>
           </div>
         </div>
@@ -351,7 +358,7 @@ export default function TransfersPage() {
         {!isOpen ? (
           <div className={`rounded-2xl p-10 text-center ${ui.card}`}>
             <Lock size={40} className={`mx-auto mb-4 ${ui.muted}`} />
-            <div className="text-lg font-black mb-2">Transfer Window Closed</div>
+            <div className="text-lg font-black mb-2">{copy.transfersClosed}</div>
             <div className={`text-sm ${ui.muted}`}>{nextOpen}</div>
           </div>
         ) : (
@@ -360,15 +367,15 @@ export default function TransfersPage() {
             <div className="flex gap-2 mb-4 flex-wrap">
               <button onClick={() => setTab("market")}
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "market" ? ui.tabActive : ui.tabIdle}`}>
-                Market
+                {copy.transfersMarketTab}
               </button>
               <button onClick={() => setTab("squad")}
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "squad" ? ui.tabActive : ui.tabIdle}`}>
-                My Squad ({squad.length})
+                {copy.transfersSquadTab} ({squad.length})
               </button>
               <button onClick={() => setTab("listings")}
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "listings" ? ui.tabActive : ui.tabIdle}`}>
-                Listings ({otherListings.length})
+                {copy.transfersListingsTab} ({otherListings.length})
               </button>
             </div>
 
@@ -376,21 +383,21 @@ export default function TransfersPage() {
             <div className="relative mb-4 max-w-sm">
               <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${ui.muted}`} />
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder={tab === "squad" ? "Search your squad..." : "Search players or clubs..."}
+                placeholder={tab === "squad" ? copy.transfersSearchSquad : copy.transfersSearchMarket}
                 className={`w-full pl-9 pr-4 py-2.5 text-sm outline-none rounded-xl ${ui.input}`} />
             </div>
 
             {loading ? (
-              <div className={`text-center py-16 text-sm ${ui.muted}`}>Loading...</div>
+              <div className={`text-center py-16 text-sm ${ui.muted}`}>{copy.commonLoading}</div>
             ) : tab === "market" ? (
               <div className="space-y-1.5">
                 {filteredMarket.length === 0 && (
-                  <div className={`text-center py-10 text-sm ${ui.muted}`}>No players found</div>
+                  <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredMarket.map((p: any) => (
                   <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team}
                     actions={[{
-                      label: "Buy", icon: TrendingUp, cls: ui.buyBtn,
+                      label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
                       busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
                       onClick: () => handleBuy(p),
                     }]} />
@@ -399,13 +406,13 @@ export default function TransfersPage() {
             ) : tab === "squad" ? (
               <div className="space-y-1.5">
                 {filteredSquad.length === 0 && (
-                  <div className={`text-center py-10 text-sm ${ui.muted}`}>No players found</div>
+                  <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredSquad.map((p: any) => (
                   <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`}
                     actions={[
-                      { label: "Quick Sell", icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
-                      { label: "List", icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
+                      { label: copy.transfersQuickSell, icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
+                      { label: copy.transfersList, icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
                     ]} />
                 ))}
               </div>
@@ -413,26 +420,26 @@ export default function TransfersPage() {
               <div className="space-y-6">
                 {myListings.length > 0 && (
                   <div>
-                    <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>My Listings</div>
+                    <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.transfersMyListings}</div>
                     <div className="space-y-1.5">
                       {myListings.map((l: any) => (
                         <TransferPlayerRow key={l.id} p={enrichListing(l)}
                           ui={ui} onOpen={openModal} subLabel="listed by you" priceLabel={fmtMoney(l.asking_price)}
-                          actions={[{ label: "Cancel", icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
+                          actions={[{ label: copy.transfersCancel, icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
                       ))}
                     </div>
                   </div>
                 )}
                 <div>
-                  <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>Open Listings</div>
+                  <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.transfersOpenListings}</div>
                   {otherListings.length === 0 ? (
-                    <div className={`text-center py-10 text-sm ${ui.muted}`}>No listings from other clubs right now</div>
+                    <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoListings}</div>
                   ) : (
                     <div className="space-y-1.5">
                       {otherListings.map((l: any) => (
                         <TransferPlayerRow key={l.id} p={enrichListing(l)}
                           ui={ui} onOpen={openModal} subLabel={l.seller_club} priceLabel={fmtMoney(l.asking_price)}
-                          actions={[{ label: "Buy", icon: TrendingUp, cls: ui.buyBtn, busy: busyId === l.id, disabled: budget !== null && l.asking_price > budget, onClick: () => handleBuyListing(l) }]} />
+                          actions={[{ label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn, busy: busyId === l.id, disabled: budget !== null && l.asking_price > budget, onClick: () => handleBuyListing(l) }]} />
                       ))}
                     </div>
                   )}
@@ -443,13 +450,13 @@ export default function TransfersPage() {
             {/* ── Recent activity ── */}
             {history.length > 0 && (
               <div className="mt-8">
-                <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>Recent Activity</div>
+                <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.transfersRecentActivity}</div>
                 <div className={`rounded-2xl divide-y ${ui.card} ${theme === "aurora" ? "divide-pink-100" : "divide-white/[0.06]"}`}>
                   {history.slice(0, 8).map((t: any) => (
                     <div key={t.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
                       <span className={ui.nameColor}>
                         <span className="font-black">{t.player_name}</span>{" "}
-                        {t.to_club === userClub ? "signed from" : "sold to"}{" "}
+                        {t.to_club === userClub ? (locale === "ru" ? "подписан из" : "signed from") : (locale === "ru" ? "продан в" : "sold to")}{" "}
                         {t.to_club === userClub ? (t.from_club ?? "free agent") : t.to_club}
                         {t.type === "quick_sell" && <span className={ui.muted}> · quick sell</span>}
                         {t.type === "listing" && <span className={ui.muted}> · market listing</span>}
@@ -477,7 +484,7 @@ export default function TransfersPage() {
 
         {/* ── Asking price modal ── */}
         {listingTarget && (
-          <AskingPriceModal ui={ui} player={listingTarget} onCancel={() => setListingTarget(null)} onConfirm={handleConfirmListing} />
+          <AskingPriceModal ui={ui} player={listingTarget} onCancel={() => setListingTarget(null)} onConfirm={handleConfirmListing} copy={copy} />
         )}
 
         {/* ── Toast ── */}

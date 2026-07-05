@@ -5,6 +5,7 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
+import { getThemeCopy } from "@/lib/i18n";
 
 const THEME_UI = {
   classic: {
@@ -46,13 +47,6 @@ const COMP_ICON: Record<string, string> = {
   league: "⚽", domestic_cup: "🏆", super_cup: "⚡", continental: "🌍",
 };
 
-const COMP_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "league", label: "League" },
-  { key: "domestic_cup", label: "Cup" },
-  { key: "continental", label: "Europe" },
-  { key: "super_cup", label: "Super Cup" },
-];
 
 export default function FixturesPage() {
   const router = useRouter();
@@ -71,7 +65,16 @@ export default function FixturesPage() {
 
   const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
   const ui    = THEME_UI[theme] ?? THEME_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const copy = getThemeCopy(locale, theme);
   const userClub = selectedClub?.name || "";
+  const COMP_FILTERS = [
+    { key: "all", label: copy.fixturesAll },
+    { key: "league", label: copy.fixturesLeague },
+    { key: "domestic_cup", label: copy.fixturesCup },
+    { key: "continental", label: copy.fixturesEurope },
+    { key: "super_cup", label: copy.fixturesSuperCup },
+  ];
 
   useEffect(() => {
     if (!hydrated || !seasonId || !userClub) return;
@@ -102,8 +105,8 @@ export default function FixturesPage() {
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Calendar</div>
-          <h1 className="text-2xl font-black">Season 2025/26 — All Competitions</h1>
+          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.fixturesHeaderLabel}</div>
+          <h1 className="text-2xl font-black">{copy.fixturesTitle}</h1>
         </div>
 
         {/* Competition filter */}
@@ -117,20 +120,20 @@ export default function FixturesPage() {
         </div>
 
         {Object.keys(grouped).length === 0 && (
-          <div className={`text-center py-10 ${ui.muted} text-sm`}>No matches found</div>
+          <div className={`text-center py-10 ${ui.muted} text-sm`}>{copy.fixturesNoMatches}</div>
         )}
 
         {Object.entries(grouped).map(([month, monthMatches]) => (
           <div key={month} className="mb-6">
             <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>
-              {month === "TBD" ? "Date TBD" : new Date(month + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+              {month === "TBD" ? copy.fixturesDateTBD : new Date(month + "-01").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { month: "long", year: "numeric" })}
             </div>
             <div className={`rounded-2xl overflow-hidden ${ui.card}`}>
               {monthMatches.map((f, i) => {
                 const isUser = f.home_club === userClub || f.away_club === userClub;
                 const played = f.played;
                 const dateStr = f.match_date
-                  ? new Date(f.match_date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })
+                  ? new Date(f.match_date + "T00:00:00").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { weekday: "short", day: "numeric" })
                   : "TBD";
                 return (
                   <div key={f.id}

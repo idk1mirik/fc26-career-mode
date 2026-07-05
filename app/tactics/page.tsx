@@ -4,6 +4,7 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { TACTICS, recommendTactics } from "@/lib/tactics";
+import { getThemeCopy } from "@/lib/i18n";
 
 const THEME_UI = {
   classic: {
@@ -38,15 +39,7 @@ const THEME_UI = {
   },
 };
 
-const PARAM_LABELS: Record<string, string> = {
-  defensiveLine: "Defensive Line",
-  pressing: "Pressing",
-  width: "Width",
-  tempo: "Tempo",
-  passingRisk: "Passing Risk",
-  buildUpSpeed: "Build Up Speed",
-  attackingWidth: "Attacking Width",
-};
+const PARAM_KEYS = ["defensiveLine", "pressing", "width", "tempo", "passingRisk", "buildUpSpeed", "attackingWidth"] as const;
 
 export default function TacticsPage() {
   const themeRaw = useThemeStore(s => s.theme);
@@ -66,6 +59,13 @@ export default function TacticsPage() {
 
   const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
   const ui    = THEME_UI[theme] ?? THEME_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const copy = getThemeCopy(locale, theme);
+  const PARAM_LABELS: Record<string, string> = {
+    defensiveLine: copy.tacticsDefensiveLine, pressing: copy.tacticsPressing, width: copy.tacticsWidth,
+    tempo: copy.tacticsTempo, passingRisk: copy.tacticsPassingRisk, buildUpSpeed: copy.tacticsBuildUp,
+    attackingWidth: copy.tacticsAttackingWidth,
+  };
 
   useEffect(() => {
     if (!hydrated || !selectedClub) return;
@@ -87,14 +87,14 @@ export default function TacticsPage() {
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Tactics</div>
-          <h1 className="text-2xl font-black">Team Tactics</h1>
+          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.navTactics}</div>
+          <h1 className="text-2xl font-black">{copy.tacticsTitle}</h1>
         </div>
 
         {/* Recommendations */}
         {recs.length > 0 && (
           <div className="mb-6">
-            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>Recommended for your squad</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.tacticsRecommended}</div>
             <div className="flex gap-2 flex-wrap">
               {recs.map(r => (
                 <button key={r} onClick={() => setTactic(r)}
@@ -109,7 +109,7 @@ export default function TacticsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Tactic list */}
           <div>
-            <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>Select Tactic</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.tacticsSelectTactic}</div>
             <div className="space-y-2">
               {Object.entries(TACTICS).map(([key, t]) => (
                 <div key={key} onClick={() => setTactic(key)}
@@ -118,7 +118,7 @@ export default function TacticsPage() {
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <div className={`font-black text-sm ${tactic === key ? "" : ui.nameColor}`}>{t.name}</div>
-                    {tactic === key && <span className="text-[10px] font-black text-emerald-400 uppercase">Active</span>}
+                    {tactic === key && <span className="text-[10px] font-black text-emerald-400 uppercase">{copy.tacticsActive}</span>}
                   </div>
                   <div className={`text-[11px] ${ui.muted}`}>{t.description}</div>
                 </div>
@@ -128,7 +128,7 @@ export default function TacticsPage() {
 
           {/* Current tactic details */}
           <div>
-            <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>Current: {current.name}</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.tacticsCurrent}: {current.name}</div>
             <div className={`p-5 rounded-2xl ${ui.card}`}>
               <div className="space-y-4">
                 {Object.entries(PARAM_LABELS).map(([key, label]) => {
@@ -157,7 +157,7 @@ export default function TacticsPage() {
 
               {/* Impact description */}
               <div className={`mt-5 pt-4 border-t ${theme === "classic" ? "border-white/[0.06]" : theme === "aurora" ? "border-pink-100" : "border-purple-900/30"}`}>
-                <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>Impact on matches</div>
+                <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.tacticsImpact}</div>
                 <div className="space-y-1.5">
                   {current.pressing >= 8 && <div className={`text-xs ${ui.muted}`}>⚡ High pressing — more turnovers, tiring on stamina</div>}
                   {current.defensiveLine <= 3 && <div className={`text-xs ${ui.muted}`}>🛡️ Deep block — harder to score against</div>}

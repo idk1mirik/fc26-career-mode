@@ -16,8 +16,11 @@ function poisson(lambda: number): number {
 function calcXG(attack: number, midfield: number, oppDef: number, oppGK: number, tacticBonus: number): number {
   const off = attack * 0.6 + midfield * 0.4;
   const def = oppDef * 0.55 + oppGK * 0.45;
-  // Базовый xG снижен с 1.4 до 1.15 — более реалистичная средняя результативность (~2.3 гола за матч суммарно)
-  const raw = (off - def) / 12 + 1.15 + tacticBonus;
+  // Базовый xG 1.28 — было 1.15, чуть подняли: с 1.15 сильные нападающие иногда
+  // проваливались в статистически невезучий сезон (единичные голы за 38 туров),
+  // даже когда формула в среднем работала правильно. Средняя результативность
+  // теперь ~2.5-2.6 гола за матч суммарно — всё ещё реалистично для топ-лиги.
+  const raw = (off - def) / 12 + 1.28 + tacticBonus;
   return Math.max(0.25, Math.min(3.8, raw));
 }
 
@@ -78,8 +81,8 @@ export function simulateMatchByRating(
   const awayMod = getTacticModifiers(awayTactic, homeTactic);
   const diff = (homeRating - awayRating) / 10;
 
-  const homeXG = Math.max(0.25, 1.15 + diff * 0.35 + homeMod.homeAdvantage + homeMod.xGBonus);
-  const awayXG = Math.max(0.25, 1.15 - diff * 0.35 + awayMod.xGBonus) * awayMod.xGAllowed;
+  const homeXG = Math.max(0.25, 1.28 + diff * 0.35 + homeMod.homeAdvantage + homeMod.xGBonus);
+  const awayXG = Math.max(0.25, 1.28 - diff * 0.35 + awayMod.xGBonus) * awayMod.xGAllowed;
 
   return { homeGoals: poisson(homeXG), awayGoals: poisson(awayXG) };
 }

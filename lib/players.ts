@@ -190,7 +190,7 @@ export function invalidateOverridesCache(seasonId: string) {
 // связывает все сезоны ОДНОЙ карьеры клуба (season/new копирует его вперёд),
 // player_progression хранит текущий оверолл для (career_id, player_id).
 let careerIdCache: Record<string, string> = {};
-let progressionCache: Record<string, Map<string, number>> = {};
+let progressionCache: Record<string, Map<string, { overall: number; potential: number | null }>> = {};
 
 async function getCareerIdForSeason(seasonId: string): Promise<string> {
   if (careerIdCache[seasonId]) return careerIdCache[seasonId];
@@ -201,11 +201,11 @@ async function getCareerIdForSeason(seasonId: string): Promise<string> {
   return careerId;
 }
 
-async function getProgressionForCareer(careerId: string): Promise<Map<string, number>> {
+async function getProgressionForCareer(careerId: string): Promise<Map<string, { overall: number; potential: number | null }>> {
   if (progressionCache[careerId]) return progressionCache[careerId];
   const { supabase } = await import("./supabase");
-  const { data } = await supabase.from("player_progression").select("player_id, overall").eq("career_id", careerId);
-  const map = new Map<string, number>((data ?? []).map((r: any) => [r.player_id, r.overall]));
+  const { data } = await supabase.from("player_progression").select("player_id, overall, potential").eq("career_id", careerId);
+  const map = new Map((data ?? []).map((r: any) => [r.player_id, { overall: r.overall, potential: r.potential ?? null }]));
   progressionCache[careerId] = map;
   return map;
 }
@@ -216,9 +216,14 @@ export function invalidateProgressionCache(careerId: string) {
   delete progressionCache[careerId];
 }
 
-function applyProgression(p: Player, progressedOverall: number): Player {
-  if (progressedOverall === p.overall) return p;
-  return { ...p, overall: progressedOverall, market_value: computeMarketValue(progressedOverall, p.age, p.potential, p.position) };
+function applyProgression(p: Player, prog: { overall: number; potential: number | null }): Player {
+  const newOverall = prog.overall;
+  const newPotential = prog.potential ?? p.potential;
+  if (newOverall === p.overall && newPotential === p.potential) return p;
+  return {
+    ...p, overall: newOverall, potential: newPotential,
+    market_value: computeMarketValue(newOverall, p.age, newPotential, p.position),
+  };
 }
 
 export async function getPlayersByClub(clubName: string, seasonId?: string): Promise<Player[]> {
@@ -251,7 +256,7 @@ export async function getPlayersByClub(clubName: string, seasonId?: string): Pro
 
   if (progression.size === 0) return squad;
   return squad.map(p => {
-    const progressedOverall = progression.get(p.id);
-    return progressedOverall !== undefined ? applyProgression(p, progressedOverall) : p;
+    const prog = progression.get(p.id);
+    return prog !== undefined ? applyProgression(p, prog) : p;
   });
 }

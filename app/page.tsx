@@ -2,7 +2,90 @@
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useThemeStore } from "@/app/store/themeStore";
+import { useCareerStore } from "@/app/store/careerStore";
 import { useEffect, useRef, useState } from "react";
+
+// ─── Перевод текста лендинга — стили/цвета/href остаются в CONFIGS ниже,
+// тут только те строки, что реально меняются между EN/RU. Тон каждой темы
+// сохранён (Aurora — тепло-мечтательный, Maleficent — холодно-терминальный).
+type LandingTheme = "classic" | "aurora" | "maleficent";
+const LANDING_TEXT: Record<"en" | "ru", Record<LandingTheme, {
+  badge: string; title: string; pill: string; enterLabel: string; footer: string;
+  cards: { title: string; desc: string; tag: string }[];
+}>> = {
+  en: {
+    classic: {
+      badge: "🏆 REALTIME FOOTBALL CAREER", title: "FOOTBALL\nMANAGER", pill: "ENGINE ONLINE · 40+ LEAGUES", enterLabel: "Enter", footer: "v0.3.0-alpha · Realtime Football Career",
+      cards: [
+        { title: "Start Career", desc: "Manage clubs, transfer markets, and live tactical decisions across 40+ leagues.", tag: "SINGLEPLAYER" },
+        { title: "Tactical Room", desc: "Challenge other managers in real-time. Build tactics, scout rivals, dominate the table.", tag: "MULTIPLAYER" },
+        { title: "Continue Career", desc: "Pick up where you left off. Your club, your squad, your progress — all waiting.", tag: "RESUME" },
+      ],
+    },
+    aurora: {
+      badge: "✦ Realtime Football Career ✦", title: "Choose Your\nDream", pill: "Dream World Ready · All Leagues", enterLabel: "Enter", footer: "Every great manager started with a single dream.",
+      cards: [
+        { title: "Create Career", desc: "Begin your magical football journey. Build squads, craft formations, write your legend.", tag: "ADVENTURE" },
+        { title: "Join Room", desc: "Play with friends in harmony. Trade players, compete for glory, share the dream.", tag: "TOGETHER" },
+        { title: "Last Journey", desc: "Your dream isn't over. Return to your club and carry on your beautiful story.", tag: "RESUME" },
+      ],
+    },
+    maleficent: {
+      badge: "⛓ MALICIOUS FOOTBALL DOMINANCE", title: "CHOOSE\nDOMAIN", pill: "VOID PROTOCOL ACTIVE", enterLabel: "ENTER", footer: ">_ AWAITING COMMAND_",
+      cards: [
+        { title: "SEIZE POWER", desc: "Begin your ruthless conquest. Crush leagues, break transfer records, leave ruin in your wake.", tag: "CAMPAIGN" },
+        { title: "ENTER VOID", desc: "Summon opponents into your domain. Tactical warfare. No mercy. Only dominance remains.", tag: "DOMINATION" },
+        { title: "LAST SESSION", desc: "Your conquest was interrupted. Return. Reassert dominance. Finish what you started.", tag: "RESUME" },
+      ],
+    },
+  },
+  ru: {
+    classic: {
+      badge: "🏆 ФУТБОЛЬНАЯ КАРЬЕРА В РЕАЛЬНОМ ВРЕМЕНИ", title: "ФУТБОЛЬНЫЙ\nМЕНЕДЖЕР", pill: "ДВИЖОК ЗАПУЩЕН · 40+ ЛИГ", enterLabel: "Войти", footer: "v0.3.0-alpha · Футбольная карьера в реальном времени",
+      cards: [
+        { title: "Начать карьеру", desc: "Управляй клубами, трансферным рынком и тактикой матчей в 40+ лигах.", tag: "ОДИН ИГРОК" },
+        { title: "Тактическая комната", desc: "Бросай вызов другим менеджерам в реальном времени. Стройте тактику, изучайте соперников, доминируйте в таблице.", tag: "МУЛЬТИПЛЕЕР" },
+        { title: "Продолжить карьеру", desc: "Вернись туда, где остановился. Твой клуб, твой состав, твой прогресс — всё на месте.", tag: "ПРОДОЛЖИТЬ" },
+      ],
+    },
+    aurora: {
+      badge: "✦ Футбольная карьера в реальном времени ✦", title: "Выбери свою\nМечту", pill: "Мир мечты готов · Все лиги", enterLabel: "Войти", footer: "Каждый великий менеджер начинал с одной мечты.",
+      cards: [
+        { title: "Создать историю", desc: "Начни своё волшебное футбольное путешествие. Собирай состав, придумывай схемы, пиши свою легенду.", tag: "ПРИКЛЮЧЕНИЕ" },
+        { title: "Присоединиться", desc: "Играй с друзьями в гармонии. Обменивайся игроками, соревнуйся за славу, делись мечтой.", tag: "ВМЕСТЕ" },
+        { title: "Прошлое путешествие", desc: "Твоя мечта ещё не закончилась. Вернись в свой клуб и продолжи прекрасную историю.", tag: "ПРОДОЛЖИТЬ" },
+      ],
+    },
+    maleficent: {
+      badge: "⛓ БЕЗЖАЛОСТНОЕ ФУТБОЛЬНОЕ ГОСПОДСТВО", title: "ВЫБЕРИ\nВЛАДЕНИЕ", pill: "ПРОТОКОЛ ПУСТОТЫ АКТИВЕН", enterLabel: "ВОЙТИ", footer: ">_ ОЖИДАНИЕ КОМАНДЫ_",
+      cards: [
+        { title: "ЗАХВАТИТЬ ВЛАСТЬ", desc: "Начни своё безжалостное завоевание. Сокрушай лиги, бей трансферные рекорды, оставляй руины позади.", tag: "КАМПАНИЯ" },
+        { title: "ВОЙТИ В ПУСТОТУ", desc: "Призови соперников в свои владения. Тактическая война. Без пощады. Останется только господство.", tag: "ДОМИНИРОВАНИЕ" },
+        { title: "ПОСЛЕДНЯЯ СЕССИЯ", desc: "Твоё завоевание было прервано. Вернись. Утверди господство заново. Заверши начатое.", tag: "ПРОДОЛЖИТЬ" },
+      ],
+    },
+  },
+};
+
+function LangToggleLanding({ theme }: { theme: LandingTheme }) {
+  const locale = useCareerStore(s => s.locale) || "en";
+  const setLocale = useCareerStore(s => s.setLocale);
+  const isDark = theme !== "aurora";
+  return (
+    <div className="flex gap-1">
+      {(["en", "ru"] as const).map(l => (
+        <button key={l} onClick={() => setLocale(l)}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+            locale === l
+              ? (isDark ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700")
+              : (isDark ? "text-white/30 hover:text-white/60" : "text-pink-900/30 hover:text-pink-900/60")
+          }`}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ─── PARTICLES (Classic only) ─────────────────────────────────────────────────
 function Particles() {
@@ -302,7 +385,7 @@ const CONFIGS = {
 };
 
 // ─── CARD ─────────────────────────────────────────────────────────────────────
-function Card({ card, theme }: { card: typeof CONFIGS.classic.cards[0]; theme: string }) {
+function Card({ card, theme, enterLabel }: { card: typeof CONFIGS.classic.cards[0]; theme: string; enterLabel: string }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Link href={card.href} className="group block h-full">
@@ -333,7 +416,7 @@ function Card({ card, theme }: { card: typeof CONFIGS.classic.cards[0]; theme: s
         <p className={`card-desc-${theme} text-sm leading-relaxed`}>{card.desc}</p>
         <div className={`mt-6 flex items-center gap-2 text-sm font-bold tracking-wider uppercase ${card.arrowCls} transition-all duration-300`}
           style={{ transform: hovered ? "translateX(6px)" : "translateX(0)" }}>
-          <span>Enter</span>
+          <span>{enterLabel}</span>
           <span>→</span>
         </div>
       </div>
@@ -345,6 +428,14 @@ function Card({ card, theme }: { card: typeof CONFIGS.classic.cards[0]; theme: s
 export default function HomePage() {
   const theme = useThemeStore((s) => s.theme) as keyof typeof CONFIGS;
   const cfg = CONFIGS[theme] ?? CONFIGS.classic;
+  const locale = useCareerStore((s) => s.locale) || "en";
+  const text = LANDING_TEXT[locale][theme as LandingTheme] ?? LANDING_TEXT.en.classic;
+  const translatedCards = cfg.cards.map((card, i) => ({
+    ...card,
+    title: text.cards[i]?.title ?? card.title,
+    desc: text.cards[i]?.desc ?? card.desc,
+    tag: text.cards[i]?.tag ?? card.tag,
+  }));
   const [mounted, setMounted] = useState(false);
   const [hasCareer, setHasCareer] = useState(false);
   const initializeTheme = useThemeStore((s) => s.initializeTheme);
@@ -537,7 +628,10 @@ export default function HomePage() {
       )}
 
       {/* ── Theme toggle ── */}
-      <div className="absolute top-5 right-5 z-50"><ThemeToggle /></div>
+      <div className="absolute top-5 right-5 z-50 flex items-center gap-2">
+        <LangToggleLanding theme={theme} />
+        <ThemeToggle />
+      </div>
 
       {/* ── Content ── */}
       <div key={theme} className="relative z-10 max-w-5xl mx-auto px-6 py-20 min-h-screen flex flex-col justify-center">
@@ -545,7 +639,7 @@ export default function HomePage() {
         {/* Badge */}
         <div className="flex justify-center mb-6 anim-in anim-d1">
           <span className={cfg.badge.cls} style={(cfg.badge as any).style}>
-            {cfg.badge.text}
+            {text.badge}
           </span>
         </div>
 
@@ -555,7 +649,7 @@ export default function HomePage() {
             <div className="font-mono text-purple-500/30 text-xs tracking-[0.5em] mb-4 uppercase">// SYSTEM INITIALIZED //</div>
           )}
           <h1 className={cfg.title.cls} style={cfg.title.style}>
-            {cfg.title.text.split("\n").map((line, i) => (
+            {text.title.split("\n").map((line, i) => (
               <span key={i} className="block">{line}</span>
             ))}
           </h1>
@@ -570,27 +664,27 @@ export default function HomePage() {
         <div className="flex justify-center mb-16 anim-in anim-d3">
           <div className={`flex items-center gap-3 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] ${cfg.pill.cls}`}>
             <span className={`w-2 h-2 rounded-full ${cfg.pill.dot} animate-pulse`} />
-            {cfg.pill.text}
+            {text.pill}
           </div>
         </div>
 
         {/* Cards */}
         {/* ── Main cards ── */}
           <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto w-full anim-in anim-d4">
-            {cfg.cards
+            {translatedCards
               .filter(card => card.href !== "/dashboard")
               .map((card) => (
-                <Card key={card.href} card={card} theme={theme} />
+                <Card key={card.href} card={card} theme={theme} enterLabel={text.enterLabel} />
               ))}
           </div>
 
           {/* ── Continue (separate row) ── */}
           {hasCareer && (
             <div className="mt-6 max-w-md mx-auto w-full anim-in anim-d4">
-              {cfg.cards
+              {translatedCards
                 .filter(card => card.href === "/dashboard")
                 .map((card) => (
-                  <Card key={card.href} card={card} theme={theme} />
+                  <Card key={card.href} card={card} theme={theme} enterLabel={text.enterLabel} />
                 ))}
             </div>
           )}
@@ -599,17 +693,17 @@ export default function HomePage() {
         <div className="text-center mt-12 anim-in" style={{ animationDelay: "0.7s" }}>
           {theme === "classic" && (
             <p className="text-slate-600 text-xs font-mono tracking-widest uppercase">
-              v0.3.0-alpha · Realtime Football Career
+              {text.footer}
             </p>
           )}
           {theme === "aurora" && (
             <p className="text-violet-400/50 text-xs italic" style={{fontFamily:"'Cormorant Garamond',serif"}}>
-              Every great manager started with a single dream.
+              {text.footer}
             </p>
           )}
           {theme === "maleficent" && (
             <p className="text-purple-600/40 text-[10px] font-mono tracking-[0.3em] uppercase">
-              &gt;_ AWAITING COMMAND_
+              {text.footer}
             </p>
           )}
         </div>

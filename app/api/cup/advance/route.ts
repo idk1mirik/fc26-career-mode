@@ -9,6 +9,7 @@ import { getRoundName } from "@/lib/competitions";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { applyClubEarning } from "@/lib/finance";
+import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a,b)=>b.overall-a.overall)[0];
@@ -66,6 +67,8 @@ export async function POST(req: Request) {
   }
 
   const results: any[] = [];
+  const statusUpdates: Record<string, StatusUpdateAcc> = {};
+  const seasonStatsAccum: Record<string, SeasonStatAcc> = {};
 
   for (const fix of fixtures) {
     const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
@@ -130,7 +133,17 @@ export async function POST(req: Request) {
     }).eq("id", fix.id);
 
     results.push({ home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, winner, events, ratings, fixtureId: fix.id });
+
+    // Кубковые травмы/карточки/статистика — раньше эти данные генерировались
+    // (events/ratings), но никуда не сохранялись: сезонная статистика игрока
+    // видела только лигу. Теперь кубки считаются точно так же.
+    accumulateCardsAndInjuries(events, "home", fix.home_club, statusRows, statusUpdates);
+    accumulateCardsAndInjuries(events, "away", fix.away_club, statusRows, statusUpdates);
+    accumulateSeasonStats(events, "home", fix.home_club, ratings.home, seasonStatsAccum);
+    accumulateSeasonStats(events, "away", fix.away_club, ratings.away, seasonStatsAccum);
   }
+
+  await persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum);
 
   const isFinalRound = fixtures.length === 1;
 

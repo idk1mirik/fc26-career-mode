@@ -28,7 +28,10 @@ function pickWeightedScorer(players: any[]): any | undefined {
     const shoot = p.shooting ?? p.overall ?? 60;
     const posWeight = POSITION_GOAL_WEIGHT[p.position] ?? 0.2;
     const ageFactor = p.age && p.age > 32 ? Math.max(0.5, 1 - (p.age - 32) * 0.06) : 1;
-    return Math.pow(Math.max(shoot, 30), 1.8) * posWeight * ageFactor;
+    // Экспонента поднята с 1.8 до 2.2 — сильнее разводит топ-игрока и просто
+    // хорошего одноклубника, чтобы звёздный форвард реже проваливался в
+    // статистически невезучий сезон с единичными голами за 38 туров.
+    return Math.pow(Math.max(shoot, 30), 2.2) * posWeight * ageFactor;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   if (total <= 0) return pick(players);

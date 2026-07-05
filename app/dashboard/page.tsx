@@ -15,6 +15,7 @@ import { getClubLogo } from "@/data/clublogos";
 import { getLeagueLogo } from "@/data/leagueLogos";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
+import { getThemeCopy } from "@/lib/i18n";
 import React from "react";
 
 const NAV = [
@@ -176,7 +177,7 @@ const EVENT_ICON: Record<string, string> = {
   goal: "⚽", yellow: "🟨", red: "🟥", substitution: "🔁", injury: "🩹",
 };
 
-function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; theme: string; onClose: () => void }) {
+function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any; theme: string; onClose: () => void; copy: any }) {
   const events = fix.events ?? [];
   const ratings = fix.ratings ?? { home: [], away: [] };
   const [tab, setTab] = useState<"events" | "ratings">("events");
@@ -188,7 +189,7 @@ function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; them
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} onClick={onClose}>
       <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card}`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Match Report</div>
+          <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>{copy.dashMatchReport}</div>
           <button onClick={onClose} className={`text-lg ${ui.muted}`}>✕</button>
         </div>
         <div className="flex items-center justify-center gap-4 mb-5">
@@ -206,11 +207,11 @@ function MatchReportModal({ fix, ui, theme, onClose }: { fix: any; ui: any; them
         <div className="flex gap-2 mb-4">
           <button onClick={() => setTab("events")}
             className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${tab === "events" ? ui.tabActive : ui.tabIdle}`}>
-            Events
+            {copy.dashEvents}
           </button>
           <button onClick={() => setTab("ratings")}
             className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${tab === "ratings" ? ui.tabActive : ui.tabIdle}`}>
-            Player Ratings
+            {copy.dashPlayerRatings}
           </button>
         </div>
 
@@ -322,6 +323,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const theme = useThemeStore(s => s.theme) as keyof typeof GLOBAL_UI;
   const ui = GLOBAL_UI[theme] ?? GLOBAL_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const copy = getThemeCopy(locale, theme);
 
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
@@ -580,7 +583,7 @@ export default function DashboardPage() {
         {/* Top bar */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <div className={`${ui.subLabel} mb-1`}>Dashboard</div>
+            <div className={`${ui.subLabel} mb-1`}>{copy.dashTitle}</div>
             <h2 className="text-2xl font-black" style={theme === "classic" ? { fontFamily: "'Bebas Neue',sans-serif", fontSize: "2.2rem" } : theme === "maleficent" ? { fontFamily: "'Share Tech Mono',monospace" } : {}}>
               {selectedClub?.name} — Season 2025/26
             </h2>
@@ -614,7 +617,7 @@ export default function DashboardPage() {
                       <button onClick={advanceCupRound} disabled={simulatingCup || !lineupValid}
                         className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
                         <Zap size={16} />
-                        {simulatingCup ? "Simulating…" : "Play Match"}
+                        {simulatingCup ? copy.dashSimulating : copy.dashPlayMatch}
                       </button>
                     </div>
                     {!lineupValid && (
@@ -631,8 +634,8 @@ export default function DashboardPage() {
               if (!seasonId) {
                 return (
                   <div className={`p-6 ${ui.card} text-center`}>
-                    <p className={`${ui.muted} mb-4 text-sm`}>No active season. Start a career first.</p>
-                    <Link href="/leagues"><button className={`px-6 py-3 ${ui.btnPrimary}`}>Start Career</button></Link>
+                    <p className={`${ui.muted} mb-4 text-sm`}>{copy.dashNoSeason}</p>
+                    <Link href="/leagues"><button className={`px-6 py-3 ${ui.btnPrimary}`}>{copy.dashStartCareer}</button></Link>
                   </div>
                 );
               }
@@ -642,25 +645,25 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div>
                       <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
-                      <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} matches to play</div>
+                      <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={advanceMatchday} disabled={simulating || simulatingSeason || currentFixtures.every(f => f.played) || !lineupValid}
                         className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
                         <Zap size={16} />
-                        {simulating ? "Simulating…" : "Simulate Matchday"}
+                        {simulating ? copy.dashSimulating : copy.dashSimulate}
                       </button>
                       <button onClick={simulateWholeSeason} disabled={simulating || simulatingSeason || seasonFinished}
                         title="AI plays every remaining match this season, including yours"
                         className={`px-4 py-3 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl`}
                         style={{ background: "rgba(255,255,255,0.06)", color: ui.text.includes("white") ? "#fff" : undefined }}>
-                        ⏩ {simulatingSeason ? `Simulating… (${seasonSimProgress?.done ?? 0})` : "Sim Season"}
+                        ⏩ {simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season")}
                       </button>
                     </div>
                   </div>
                   {simulatingSeason && (
                     <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold" style={{ background: "rgba(59,130,246,0.10)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.25)" }}>
-                      ⏳ Auto-simulating the rest of the season — AI is playing every match, including yours. Matchday {seasonSimProgress?.matchday ?? matchday}… this can take a bit, don't close the tab.
+                      ⏳ {locale === "ru" ? `Автосимуляция остатка сезона — ИИ играет все матчи, включая твои. Тур ${seasonSimProgress?.matchday ?? matchday}… не закрывай вкладку.` : `Auto-simulating the rest of the season — AI is playing every match, including yours. Matchday ${seasonSimProgress?.matchday ?? matchday}… this can take a bit, don't close the tab.`}
                     </div>
                   )}
                   {!lineupValid && (
@@ -672,7 +675,7 @@ export default function DashboardPage() {
                   )}
                 {/* Choose lineup for this matchday */}
                 <div className="flex items-center gap-2 flex-wrap pt-3 border-t" style={{ borderColor: theme === "classic" ? "rgba(255,255,255,0.05)" : theme === "aurora" ? "#fce7f3" : "rgba(139,92,246,0.15)" }}>
-                  <span className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>Lineup:</span>
+                  <span className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>{copy.dashLineupLabel}</span>
                   {Object.keys(lineupsByFormation || {}).map(f => (
                     <button key={f} onClick={() => {
                         setFormation(f);
@@ -693,7 +696,7 @@ export default function DashboardPage() {
                       📐 {f}
                     </button>
                   ))}
-                  <Link href="/squad" className="text-[10px] underline opacity-50 hover:opacity-100">Manage in Squad →</Link>
+                  <Link href="/squad" className="text-[10px] underline opacity-50 hover:opacity-100">{copy.dashManageSquad}</Link>
                 </div>
               </div>
               );
@@ -702,7 +705,7 @@ export default function DashboardPage() {
             {/* Last results */}
             {showResults && lastResults.length > 0 && (
               <div className={`p-5 ${ui.card} fade-in`}>
-                <div className={`${ui.subLabel} mb-3`}>Matchday {matchday - 1} Results</div>
+                <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday - 1} — ${copy.dashMatchdayResults}` : `Matchday ${matchday - 1} ${copy.dashMatchdayResults}`}</div>
                 <div className="space-y-1">
                   {lastResults.map((r, i) => (
                     <MatchRow key={i} fix={{ ...r, home_club: r.home, away_club: r.away, played: true, home_goals: r.homeGoals, away_goals: r.awayGoals, events: r.events }} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
@@ -714,7 +717,7 @@ export default function DashboardPage() {
             {/* Current matchday fixtures */}
             {currentFixtures.length > 0 && (
               <div className={`p-5 ${ui.card}`}>
-                <div className={`${ui.subLabel} mb-3`}>Matchday {matchday} — Upcoming</div>
+                <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday} — ${copy.dashUpcoming}` : `Matchday ${matchday} — ${copy.dashUpcoming}`}</div>
                 <div className="space-y-1">
                   {currentFixtures.map((f, i) => (
                     <MatchRow key={i} fix={f} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
@@ -743,7 +746,7 @@ export default function DashboardPage() {
       </div>
 
       {reportFix && (
-        <MatchReportModal fix={reportFix} ui={ui} theme={theme} onClose={() => setReportFix(null)} />
+        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} onClose={() => setReportFix(null)} />
       )}
     </main>
     </DashboardLayout>

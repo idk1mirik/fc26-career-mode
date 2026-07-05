@@ -8,6 +8,7 @@ import DashboardLayout from "@/app/lib/DashboardLayout";
 import { Trophy, Zap, Lock } from "lucide-react";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
+import { getThemeCopy } from "@/lib/i18n";
 
 const THEME_UI = {
   classic: {
@@ -69,6 +70,8 @@ export default function CupsPage() {
 
   const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
   const ui    = THEME_UI[theme] ?? THEME_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const copy = getThemeCopy(locale, theme);
 
   const loadData = async () => {
     if (!seasonId) return;
@@ -104,23 +107,23 @@ export default function CupsPage() {
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Cups & Trophies</div>
-          <h1 className="text-2xl font-black">Cups, Super Cups & Continental</h1>
+          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.cupsHeaderLabel}</div>
+          <h1 className="text-2xl font-black">{copy.cupsTitle}</h1>
         </div>
 
         {!lineupValid && (
           <div className="mb-5 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-            ⚠️ You need {MIN_LINEUP_SIZE} players in your lineup to play matches ({lineupCount}/{MIN_LINEUP_SIZE} selected).
+            ⚠️ {locale === "ru" ? `Нужно ${MIN_LINEUP_SIZE} ${copy.cupsLineupWarning}` : `You need ${MIN_LINEUP_SIZE} ${copy.cupsLineupWarning}`} ({lineupCount}/{MIN_LINEUP_SIZE})
           </div>
         )}
 
         {!seasonId ? (
           <div className={`p-6 rounded-2xl text-center ${ui.card}`}>
-            <p className={ui.muted}>No active season</p>
+            <p className={ui.muted}>{copy.cupsNoSeason}</p>
           </div>
         ) : competitions.length === 0 ? (
           <div className={`p-6 rounded-2xl text-center ${ui.card}`}>
-            <p className={ui.muted}>No competitions yet for this season</p>
+            <p className={ui.muted}>{copy.cupsNoCompetitions}</p>
           </div>
         ) : (
           <div className="space-y-5">
@@ -139,8 +142,8 @@ export default function CupsPage() {
                         <div className="font-black text-sm">{comp.name}</div>
                         <div className={`text-[10px] ${ui.muted}`}>
                           {comp.status === "finished"
-                            ? `Winner: ${comp.winner_club}`
-                            : `Round ${comp.current_round}${isUserInComp ? " · You're in!" : ""}`}
+                            ? `${copy.cupsWinnerPrefix} ${comp.winner_club}`
+                            : `${copy.cupsRoundPrefix} ${comp.current_round}${isUserInComp ? ` · ${copy.cupsYoureIn}` : ""}`}
                         </div>
                       </div>
                     </div>
@@ -162,7 +165,7 @@ export default function CupsPage() {
                         <button onClick={() => advanceCup(comp.id)} disabled={simulating === comp.id || !lineupValid}
                           className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all disabled:opacity-50 ${ui.btnPrimary}`}>
                           <Zap size={13} />
-                          {simulating === comp.id ? "Simulating…" : "Simulate Round"}
+                          {simulating === comp.id ? copy.cupsSimulating : copy.cupsSimulateRound}
                         </button>
                       );
                     })()}
@@ -171,7 +174,7 @@ export default function CupsPage() {
 
                   <div className="px-5 py-3 space-y-1.5">
                     {currentRoundFixtures.length === 0 && comp.status === "finished" ? (
-                      <div className={`text-center py-3 text-sm ${ui.muted}`}>🏆 {comp.winner_club} won the title!</div>
+                      <div className={`text-center py-3 text-sm ${ui.muted}`}>🏆 {comp.winner_club} {copy.cupsWonTitle}</div>
                     ) : currentRoundFixtures.map((f: any) => {
                       const isUserMatch = f.home_club === userClub || f.away_club === userClub;
                       return (
@@ -193,8 +196,8 @@ export default function CupsPage() {
                   </div>
 
                   <div className={`px-5 py-2.5 flex gap-4 text-[10px] ${ui.muted} border-t ${ui.divider}`}>
-                    <span>🏆 Winner: {formatMoney(comp.prize_winner)}</span>
-                    <span>🥈 Runner-up: {formatMoney(comp.prize_runner)}</span>
+                    <span>🏆 {copy.cupsWinnerLabel}: {formatMoney(comp.prize_winner)}</span>
+                    <span>🥈 {copy.cupsRunnerLabel}: {formatMoney(comp.prize_runner)}</span>
                   </div>
                 </div>
               );

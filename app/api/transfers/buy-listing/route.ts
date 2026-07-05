@@ -2,12 +2,16 @@
 import { supabase } from "@/lib/supabase";
 import { invalidateOverridesCache } from "@/lib/players";
 import { chargeClub, applyClubEarning } from "@/lib/finance";
+import { checkTransferWindow } from "@/lib/transferWindow";
 
 export async function POST(req: Request) {
   const { seasonId, buyerClubId, listingId } = await req.json();
   if (!seasonId || !buyerClubId || !listingId) {
     return Response.json({ error: "seasonId, buyerClubId and listingId required" }, { status: 400 });
   }
+
+  const window = await checkTransferWindow(seasonId);
+  if (!window.open) return Response.json({ error: "Transfer window is closed" }, { status: 403 });
 
   const { data: listing } = await supabase.from("transfer_listings").select("*").eq("id", listingId).maybeSingle();
   if (!listing || listing.season_id !== seasonId) return Response.json({ error: "Listing not found" }, { status: 404 });
