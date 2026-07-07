@@ -5,7 +5,7 @@
 import { supabase } from "@/lib/supabase";
 import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/matchEngine";
 import { getPlayersByClub } from "@/lib/players";
-import { getRoundName } from "@/lib/competitions";
+import { getRoundName, generateKnockoutRound1, getClubLeague } from "@/lib/competitions";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { applyClubEarning } from "@/lib/finance";
@@ -29,10 +29,27 @@ export async function POST(req: Request) {
   const { data: fixtures } = await supabase.from("cup_fixtures")
     .select("*").eq("competition_id", competitionId).eq("round", comp.current_round).eq("played", false);
 
-  if (!fixtures?.length) return Response.json({ error: "No fixtures for current round" }, { status: 400 });
+  // Бай этого раунда (если был) уже "сыгран" мгновенно при создании раунда —
+  // его нужно учесть отдельно, иначе клуб с баем потеряется при подсчёте
+  // победителей раунда (раньше именно так терялись клубы при нечётном числе
+  // участников).
+  const { data: byeRows } = await supabase.from("cup_fixtures")
+    .select("*").eq("competition_id", competitionId).eq("round", comp.current_round).eq("is_bye", true);
+  const byeWinnerThisRound: string | null = byeRows?.[0]?.winner_club ?? null;
+
+  if (!fixtures?.length && !byeWinnerThisRound) return Response.json({ error: "No fixtures for current round" }, { status: 400 });
+
+  if (!fixtures?.length && byeWinnerThisRound) {
+    // Редкий случай: раунд состоял ТОЛЬКО из бая (например, полуфинал с
+    // нечётным остатком участников) — сразу финализируем турнир без матча.
+    await supabase.from("competitions").update({ status: "finished", winner_club: byeWinnerThisRound }).eq("id", competitionId);
+    await applyClubEarning(comp.season_id, byeWinnerThisRound, comp.prize_winner, `${comp.name}_winner`, competitionId);
+    return Response.json({ finished: true, winner: byeWinnerThisRound, results: [], walkover: true });
+  }
 
   // ── Батч: составы и статусы всех клубов раунда — одним параллельным заходом ──
-  const allClubs = [...new Set(fixtures.flatMap((f: any) => [f.home_club, f.away_club]))];
+  const safeFixtures = fixtures ?? [];
+  const allClubs = [...new Set(safeFixtures.flatMap((f: any) => [f.home_club, f.away_club]))];
   const [playersArr, statusRes] = await Promise.all([
     Promise.all(allClubs.map((c: string) => getPlayersByClub(c, comp.season_id))),
     supabase.from("player_status").select("*").eq("season_id", comp.season_id).in("club_id", allClubs).gt("matches_out", 0),
@@ -70,7 +87,7 @@ export async function POST(req: Request) {
   const statusUpdates: Record<string, StatusUpdateAcc> = {};
   const seasonStatsAccum: Record<string, SeasonStatAcc> = {};
 
-  for (const fix of fixtures) {
+  for (const fix of safeFixtures) {
     const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
     const awayUnavailable = unavailableByClub[fix.away_club] ?? new Set();
     const homeAvailable = (playersByClub[fix.home_club] ?? []).filter((p: any) => !homeUnavailable.has(keyOf(p)));
@@ -145,10 +162,13 @@ export async function POST(req: Request) {
 
   await persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum);
 
-  const isFinalRound = fixtures.length === 1;
+  // Победители раунда — очные встречи + бай этого раунда, если был (иначе он
+  // потеряется и клуб "исчезнет" из турнира, как было раньше).
+  const winners = [...results.map(r => r.winner), ...(byeWinnerThisRound ? [byeWinnerThisRound] : [])];
+  const isFinalRound = winners.length === 1;
 
   if (isFinalRound) {
-    const winner = results[0].winner;
+    const winner = winners[0];
     const runner = results[0].home === winner ? results[0].away : results[0].home;
 
     await supabase.from("competitions").update({
@@ -165,24 +185,31 @@ export async function POST(req: Request) {
     return Response.json({ finished: true, winner, results });
   }
 
-  const winners = results.map(r => r.winner);
   const nextRound = comp.current_round + 1;
-  const pairs: { home: string; away: string }[] = [];
-  for (let i = 0; i < winners.length; i += 2) {
-    if (winners[i + 1]) pairs.push({ home: winners[i], away: winners[i + 1] });
-  }
+  // Нечётное число победителей? Раньше последнего просто роняли без матча —
+  // теперь у него бай. Для еврокубков (type === "continental") вдобавок
+  // стараемся не сводить два клуба одной лиги/страны так рано, как в реальных
+  // жеребьёвках УЕФА.
+  const { pairs, byeTeam } = generateKnockoutRound1(winners, comp.type === "continental" ? getClubLeague : undefined);
 
-  if (pairs.length > 0) {
-    const roundName = getRoundName(pairs.length);
-    const rows = pairs.map(p => ({
+  if (pairs.length > 0 || byeTeam) {
+    const roundName = getRoundName(pairs.length + (byeTeam ? 1 : 0));
+    const rows: any[] = pairs.map(p => ({
       competition_id: competitionId, round: nextRound, round_name: roundName,
       home_club: p.home, away_club: p.away,
     }));
+    if (byeTeam) {
+      rows.push({
+        competition_id: competitionId, round: nextRound, round_name: roundName,
+        home_club: byeTeam, away_club: byeTeam, played: true, winner_club: byeTeam, is_bye: true,
+      });
+    }
     await supabase.from("cup_fixtures").insert(rows);
 
-    const participants = [...new Set([...results.map(r => r.home), ...results.map(r => r.away)])];
+    const participants = new Set([...results.map(r => r.home), ...results.map(r => r.away)]);
+    if (byeWinnerThisRound) participants.add(byeWinnerThisRound);
     if (comp.prize_participation > 0) {
-      await Promise.all(participants.map(clubId =>
+      await Promise.all([...participants].map(clubId =>
         applyClubEarning(comp.season_id, clubId, comp.prize_participation, `${comp.name}_round_${comp.current_round}`, competitionId)
       ));
     }

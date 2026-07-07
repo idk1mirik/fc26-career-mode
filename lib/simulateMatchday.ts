@@ -8,14 +8,13 @@ import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { getPlayersByClub } from "@/lib/players";
 import { awardLeaguePositionPrizes } from "@/lib/finance";
+import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
   const rest = players.filter(p => p.position !== "GK").sort((a, b) => b.overall - a.overall).slice(0, 10);
   return gk ? [gk, ...rest] : rest;
 }
-
-const YELLOW_THRESHOLDS = [{ count: 5, ban: 1 }, { count: 10, ban: 2 }, { count: 15, ban: 3 }];
 
 export interface SimulateMatchdayOptions {
   userClubId?: string;
@@ -90,8 +89,8 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   const results: any[] = [];
   const fixtureUpdates: any[] = [];
   const standingsDeltas: Record<string, { played: number; won: number; drawn: number; lost: number; gf: number; ga: number; points: number }> = {};
-  const statusUpdates: Record<string, { playerId: string; playerName: string; status: string; matches_out: number; yellow_cards: number; existing?: any }> = {};
-  const seasonStatsAccum: Record<string, { playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; yellow_cards: number; red_cards: number }> = {};
+  const statusUpdates: Record<string, StatusUpdateAcc> = {};
+  const seasonStatsAccum: Record<string, SeasonStatAcc> = {};
 
   const getDelta = (clubId: string) => {
     if (!standingsDeltas[clubId]) standingsDeltas[clubId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
@@ -161,73 +160,11 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
       else { d.lost += 1; }
     }
 
-    const applySide = (side: "home" | "away", clubId: string) => {
-      const yellowsThisMatch: Record<string, number> = {};
-      for (const e of events) {
-        if (e.team !== side || !e.player) continue;
-        const pid = e.playerId ?? e.player;
-        const key = `${clubId}::${pid}`;
-        const existingRow = statusRows.find((r: any) => r.club_id === clubId && rowKeyOf(r) === pid);
-
-        if (e.type === "yellow") {
-          yellowsThisMatch[pid] = (yellowsThisMatch[pid] ?? 0) + 1;
-          if (yellowsThisMatch[pid] === 2) {
-            const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-            statusUpdates[key] = { playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
-            continue;
-          }
-          const prevYellow = statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0;
-          const newTotal = prevYellow + 1;
-          const crossed = YELLOW_THRESHOLDS.find(t => newTotal === t.count);
-          const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-          statusUpdates[key] = {
-            playerId: pid, playerName: e.player,
-            status: crossed ? "suspended" : (statusUpdates[key]?.status ?? existingRow?.status ?? "none"),
-            matches_out: crossed ? Math.max(prevOut, crossed.ban) : prevOut,
-            yellow_cards: newTotal, existing: existingRow,
-          };
-        }
-        if (e.type === "red") {
-          const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-          statusUpdates[key] = { playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
-        }
-        if (e.type === "injury") {
-          const weeks = Math.floor(Math.random() * 3) + 1;
-          const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-          statusUpdates[key] = { playerId: pid, playerName: e.player, status: "injured", matches_out: Math.max(prevOut, weeks), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
-        }
-      }
-    };
-    applySide("home", fix.home_club);
-    applySide("away", fix.away_club);
-
-    const accumulateStats = (clubId: string, side: "home" | "away", playerRatings: any[]) => {
-      for (const pr of playerRatings) {
-        const pid = pr.playerId ?? pr.name;
-        const key = `${clubId}::${pid}`;
-        const goals = events.filter((e: any) => e.team === side && e.type === "goal" && (e.playerId ?? e.player) === pid).length;
-        const yellow = events.some((e: any) => e.team === side && e.type === "yellow" && (e.playerId ?? e.player) === pid) ? 1 : 0;
-        const red = events.some((e: any) => e.team === side && e.type === "red" && (e.playerId ?? e.player) === pid) ? 1 : 0;
-
-        const prev = seasonStatsAccum[key] ?? { playerId: pid, playerName: pr.name, matches_played: 0, total_rating: 0, goals: 0, yellow_cards: 0, red_cards: 0 };
-        seasonStatsAccum[key] = {
-          playerId: pid, playerName: pr.name,
-          matches_played: prev.matches_played + 1,
-          total_rating: prev.total_rating + pr.rating,
-          goals: prev.goals + goals,
-          yellow_cards: prev.yellow_cards + yellow,
-          red_cards: prev.red_cards + red,
-        };
-      }
-    };
-    accumulateStats(fix.home_club, "home", ratings.home);
-    accumulateStats(fix.away_club, "away", ratings.away);
+    accumulateCardsAndInjuries(events, "home", fix.home_club, statusRows, statusUpdates);
+    accumulateCardsAndInjuries(events, "away", fix.away_club, statusRows, statusUpdates);
+    accumulateSeasonStats(events, "home", fix.home_club, ratings.home, seasonStatsAccum);
+    accumulateSeasonStats(events, "away", fix.away_club, ratings.away, seasonStatsAccum);
   }
-
-  const { data: existingStats } = await supabase.from("player_season_stats")
-    .select("*").eq("season_id", seasonId).in("club_id", allClubs);
-  const existingStatsMap: Record<string, any> = {};
-  for (const row of existingStats ?? []) existingStatsMap[`${row.club_id}::${rowKeyOf(row)}`] = row;
 
   const writes: any[] = [];
 
@@ -252,20 +189,10 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     }
   }
 
-  for (const [key, upd] of Object.entries(statusUpdates)) {
-    const clubId = key.split("::")[0];
-    if (upd.existing) {
-      writes.push(supabase.from("player_status").update({
-        player_id: upd.playerId, status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
-      }).eq("id", upd.existing.id));
-    } else {
-      writes.push(supabase.from("player_status").insert({
-        season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
-        status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
-      }));
-    }
-  }
-
+  // Тик-даун травм/дисквалификаций, которые НЕ были задеты в этом туре —
+  // специфично для лиги (единственное место, где это происходит; кубки
+  // сознательно не тикают счётчик отдельно, чтобы не списывать пропуски вдвое
+  // за одну и ту же неделю, если у клуба в этот же период ещё и кубковый матч).
   for (const row of statusRows) {
     const key = `${row.club_id}::${rowKeyOf(row)}`;
     if (statusUpdates[key]) continue;
@@ -279,28 +206,8 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     }
   }
 
-  for (const [key, upd] of Object.entries(seasonStatsAccum)) {
-    const clubId = key.split("::")[0];
-    const existing = existingStatsMap[key];
-    if (existing) {
-      writes.push(supabase.from("player_season_stats").update({
-        player_id: upd.playerId,
-        matches_played: (existing.matches_played ?? 0) + upd.matches_played,
-        total_rating: (existing.total_rating ?? 0) + upd.total_rating,
-        goals: (existing.goals ?? 0) + upd.goals,
-        yellow_cards: (existing.yellow_cards ?? 0) + upd.yellow_cards,
-        red_cards: (existing.red_cards ?? 0) + upd.red_cards,
-      }).eq("id", existing.id));
-    } else {
-      writes.push(supabase.from("player_season_stats").insert({
-        season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
-        matches_played: upd.matches_played, total_rating: upd.total_rating,
-        goals: upd.goals, yellow_cards: upd.yellow_cards, red_cards: upd.red_cards,
-      }));
-    }
-  }
-
   await Promise.all(writes);
+  await persistStatusAndStats(seasonId, allClubs, statusUpdates, seasonStatsAccum);
 
   const { count } = await supabase.from("fixtures")
     .select("*", { count: "exact", head: true })

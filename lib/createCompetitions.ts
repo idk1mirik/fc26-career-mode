@@ -4,7 +4,7 @@ import leagues from "@/data/leagues.json";
 import {
   DOMESTIC_CUPS, SUPER_CUPS, CHAMPIONS_LEAGUE, EUROPA_LEAGUE, CONFERENCE_LEAGUE,
   CHAMPIONS_LEAGUE_CLUBS_2025, EUROPA_LEAGUE_CLUBS_2025, CONFERENCE_LEAGUE_CLUBS_2025,
-  TOP5_LEAGUES, generateKnockoutRound1,
+  TOP5_LEAGUES, generateKnockoutRound1, getClubLeague,
 } from "@/lib/competitions";
 import { getEuroCupRoundDate, getDomesticCupRoundDate, getSuperCupDate, getSuperCupRoundDate } from "@/lib/seasonCalendar";
 
@@ -26,12 +26,21 @@ export async function createSeasonCompetitions(
     }).select().single();
 
     if (comp && clubs.length >= 2) {
-      const pairs = generateKnockoutRound1(clubs);
+      const { pairs, byeTeam } = generateKnockoutRound1(clubs);
       const matchDate = getDomesticCupRoundDate(1);
-      const rows = pairs.map(p => ({
+      const rows: any[] = pairs.map(p => ({
         competition_id: comp.id, round: 1, round_name: "Round 1",
         home_club: p.home, away_club: p.away, match_date: matchDate,
       }));
+      if (byeTeam) {
+        // Нечётное число клубов в кубке страны — раньше один клуб просто
+        // "терялся" без матча. Теперь у него бай: он мгновенно проходит раунд.
+        rows.push({
+          competition_id: comp.id, round: 1, round_name: "Round 1",
+          home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
+          played: true, winner_club: byeTeam, is_bye: true,
+        });
+      }
       await supabase.from("cup_fixtures").insert(rows);
       created.push({ name: cupDef.name, id: comp.id });
     }
@@ -56,12 +65,21 @@ export async function createSeasonCompetitions(
       }).select().single();
 
       if (comp) {
-        const pairs = generateKnockoutRound1(clubList);
+        const { pairs, byeTeam } = generateKnockoutRound1(clubList, getClubLeague);
         const matchDate = getEuroCupRoundDate(calKey, 1);
-        const rows = pairs.map(p => ({
+        const rows: any[] = pairs.map(p => ({
           competition_id: comp.id, round: 1, round_name: "Round 1", is_two_legs: true,
           home_club: p.home, away_club: p.away, match_date: matchDate,
         }));
+        if (byeTeam) {
+          // Нечётное число клубов в списке еврокубка (реальные составы 2025/26
+          // не всегда чётные) — раньше один клуб просто пропадал без матча.
+          rows.push({
+            competition_id: comp.id, round: 1, round_name: "Round 1",
+            home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
+            played: true, winner_club: byeTeam, is_bye: true,
+          });
+        }
         await supabase.from("cup_fixtures").insert(rows);
         created.push({ name: def.name, id: comp.id });
       }

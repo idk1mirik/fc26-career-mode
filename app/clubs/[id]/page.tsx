@@ -8,6 +8,24 @@ import { getClubLogo } from "@/lib/images";
 import LogoCard from "@/components/LogoCard";
 import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useCareerStore } from "@/app/store/careerStore";
+
+const CLUB_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
+  pageLabel: string; loading: string; overallRating: string; searchRoster: string;
+  allPositions: string; sortOvr: string; sortWage: string; sortName: string; back: string;
+  playerCount: (n: number) => string; failedLoad: string; wage: string;
+}>> = {
+  en: {
+    classic: { pageLabel: "// CLUB PROFILE OVERVIEW", loading: "LOADING CLUB DATA...", overallRating: "Overall Rating", searchRoster: "Search roster…", allPositions: "All Positions", sortOvr: "Sort: OVR", sortWage: "Sort: Wage", sortName: "Sort: Name", back: "← Back", playerCount: n => `${n} player${n !== 1 ? "s" : ""}`, failedLoad: "Failed to retrieve squad roster.", wage: "Wage" },
+    aurora: { pageLabel: "✦ Club Squad", loading: "LOADING CLUB DATA...", overallRating: "Overall Vibe", searchRoster: "Search roster…", allPositions: "All Positions", sortOvr: "Sort: OVR", sortWage: "Sort: Wage", sortName: "Sort: Name", back: "← Back", playerCount: n => `${n} player${n !== 1 ? "s" : ""}`, failedLoad: "Failed to retrieve squad roster.", wage: "Wage" },
+    maleficent: { pageLabel: ">_ DETECTED_ROSTER.sys", loading: "// LOADING_CLUB_DATA...", overallRating: "OVR_RATING", searchRoster: "QUERY ROSTER...", allPositions: "ALL_POSITIONS", sortOvr: "Sort: OVR", sortWage: "Sort: Wage", sortName: "Sort: Name", back: "← BACK", playerCount: n => `${n} UNIT${n !== 1 ? "S" : ""}`, failedLoad: "// FAILED TO RETRIEVE ROSTER", wage: "WAGE" },
+  },
+  ru: {
+    classic: { pageLabel: "// ПРОФИЛЬ КЛУБА", loading: "ЗАГРУЗКА ДАННЫХ КЛУБА...", overallRating: "Общий рейтинг", searchRoster: "Поиск по составу…", allPositions: "Все позиции", sortOvr: "Сортировка: OVR", sortWage: "Сортировка: Зарплата", sortName: "Сортировка: Имя", back: "← Назад", playerCount: n => `${n} игроков`, failedLoad: "Не удалось загрузить состав.", wage: "Зарплата" },
+    aurora: { pageLabel: "✦ Состав клуба", loading: "ЗАГРУЗКА ДАННЫХ КЛУБА...", overallRating: "Общее настроение", searchRoster: "Поиск по составу…", allPositions: "Все позиции", sortOvr: "Сортировка: OVR", sortWage: "Сортировка: Зарплата", sortName: "Сортировка: Имя", back: "← Назад", playerCount: n => `${n} игроков`, failedLoad: "Не удалось загрузить состав.", wage: "Зарплата" },
+    maleficent: { pageLabel: ">_ ОБНАРУЖЕН_СОСТАВ.sys", loading: "// ЗАГРУЗКА_ДАННЫХ_КЛУБА...", overallRating: "ОБЩИЙ_РЕЙТИНГ", searchRoster: "ЗАПРОС СОСТАВ...", allPositions: "ВСЕ_ПОЗИЦИИ", sortOvr: "Сортировка: OVR", sortWage: "Сортировка: Зарплата", sortName: "Сортировка: Имя", back: "← НАЗАД", playerCount: n => `${n} ЮНИТОВ`, failedLoad: "// НЕ УДАЛОСЬ ЗАГРУЗИТЬ СОСТАВ", wage: "ЗАРПЛАТА" },
+  },
+};
 
 // ─── HIGHLY COMPATIBLE FLAG EMOTICON ENGINE ─────────────────────────────────
 function getFlagEmoji(country: string): string {
@@ -118,7 +136,7 @@ function PosBadge({ pos, theme }: { pos: string; theme: string }) {
   );
 }
 
-function PlayerCard({ player, clubColor, theme }: { player: any; clubColor: string; theme: string; index: number }) {
+function PlayerCard({ player, clubColor, theme, wageLabel }: { player: any; clubColor: string; theme: string; index: number; wageLabel: string }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -198,7 +216,7 @@ function PlayerCard({ player, clubColor, theme }: { player: any; clubColor: stri
             ))}
           </div>
           <div className="flex items-center justify-between">
-            <div className="text-[10px] text-white/20 font-mono uppercase tracking-widest">Wage</div>
+            <div className="text-[10px] text-white/20 font-mono uppercase tracking-widest">{wageLabel}</div>
             <div className="text-[11px] font-black font-mono text-emerald-400/80">€{((player.wage || 0) / 1000).toFixed(0)}K/wk</div>
           </div>
         </div>
@@ -284,6 +302,8 @@ export default function ClubProfilePage() {
   
   const theme = useThemeStore((s) => s.theme) as keyof typeof GLOBAL_UI;
   const ui = GLOBAL_UI[theme] ?? GLOBAL_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const text = CLUB_TEXT[locale][theme] ?? CLUB_TEXT.en.classic;
 
   const [club, setClub] = useState<any>(null);
   const [search, setSearch] = useState("");
@@ -303,14 +323,14 @@ export default function ClubProfilePage() {
         const league = players[0]?.league ?? "Unknown";
         setClub({ id: clubId, name: clubId, league, overall, players });
       })
-      .catch(() => setError("Failed to retrieve squad roster."));
+      .catch(() => setError(text.failedLoad));
   }, [id]);
 
   if (error) return <div className="min-h-screen flex items-center justify-center text-red-500 font-black">{error}</div>;
   if (!club) return (
     <div className={`min-h-screen ${ui.bg} flex items-center justify-center`}>
       <div className={`font-black text-4xl tracking-widest animate-pulse ${theme === "maleficent" ? "text-fuchsia-500 font-mono" : "text-white"}`}>
-        LOADING CLUB DATA...
+        {text.loading}
       </div>
     </div>
   );
@@ -339,41 +359,55 @@ export default function ClubProfilePage() {
         @keyframes pCardIn { from { opacity:0; transform:translateY(28px) scale(0.96); } to { opacity:1; transform:none; } }
       `}</style>
 
-      <div className="absolute top-6 right-6 z-50"><ThemeToggle /></div>
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-2">
+        <div className="flex gap-1">
+          {(["en", "ru"] as const).map(l => (
+            <button key={l} onClick={() => useCareerStore.getState().setLocale(l)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                locale === l
+                  ? (theme !== "aurora" ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700")
+                  : (theme !== "aurora" ? "text-white/30 hover:text-white/60" : "text-pink-900/30 hover:text-pink-900/60")
+              }`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <ThemeToggle />
+      </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 pt-10 pb-20">
         <div className={`flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-8 border-b ${ui.divider}`}>
           <div className="flex items-end gap-5">
             <LogoCard src={getClubLogo(club.name) || "/logo.png"} alt={club.name} size={80} imageSize={60} />
             <div>
-              <div className={`flex items-center gap-2 mb-2 ${ui.pageLabel}`}>{ui.pageLabelText}</div>
+              <div className={`flex items-center gap-2 mb-2 ${ui.pageLabel}`}>{text.pageLabel}</div>
               <h1 className={ui.headerClass} style={ui.headerFont}>{club.name}</h1>
-              <p className="text-xs opacity-60 mt-1 uppercase tracking-widest">{club.league} — Overall Rating: {club.overall}</p>
+              <p className="text-xs opacity-60 mt-1 uppercase tracking-widest">{club.league} — {text.overallRating}: {club.overall}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <input type="text" placeholder="Search roster…" value={search} onChange={e => setSearch(e.target.value)} className={ui.searchBg + " w-40"} />
+            <input type="text" placeholder={text.searchRoster} value={search} onChange={e => setSearch(e.target.value)} className={ui.searchBg + " w-40"} />
             <select value={posFilter} onChange={e => setPosFilter(e.target.value)} className={ui.selectBg}>
-              {positions.map(p => <option key={p} value={p}>{p === "ALL" ? "All Positions" : p}</option>)}
+              {positions.map(p => <option key={p} value={p}>{p === "ALL" ? text.allPositions : p}</option>)}
             </select>
             <select value={sortBy} onChange={e => setSortBy(e.target.value as "overall"|"name"|"wage")} className={ui.selectBg}>
-              <option value="overall">Sort: OVR</option>
-              <option value="wage">Sort: Wage</option>
-              <option value="name">Sort: Name</option>
+              <option value="overall">{text.sortOvr}</option>
+              <option value="wage">{text.sortWage}</option>
+              <option value="name">{text.sortName}</option>
             </select>
-            <button onClick={() => router.back()} className={ui.backBtn}>← Back</button>
+            <button onClick={() => router.back()} className={ui.backBtn}>{text.back}</button>
           </div>
         </div>
 
         <div className={`mb-5 ${ui.count}`}>
-          {filteredPlayers.length} player{filteredPlayers.length !== 1 ? "s" : ""}
+          {text.playerCount(filteredPlayers.length)}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {filteredPlayers.map((player: any, i: number) => (
             <div key={player.id ?? player.name} className="p-card-in" style={{ animationDelay: `${i * 0.03}s` }}>
-              <PlayerCard player={player} clubColor={leagueTheme.rawColor} theme={theme} index={i} />
+              <PlayerCard player={player} clubColor={leagueTheme.rawColor} theme={theme} index={i} wageLabel={text.wage} />
             </div>
           ))}
         </div>

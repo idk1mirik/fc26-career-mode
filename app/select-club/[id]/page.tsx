@@ -13,6 +13,25 @@ import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
 import { PlayerModal, PlayerCard, fmtValue } from "@/app/lib/playerComponents";
 
+const SELECT_CLUB_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
+  pageLabel: string; loading: string; searchPlayer: string; allPositions: string;
+  sortOvr: string; sortWage: string; sortName: string; startCareer: string; back: string;
+  transferBudget: string; playerCount: (n: number) => string;
+  confirmEyebrow: string; confirmTitle: string; confirmWarning: string;
+  confirmCancel: string; confirmStart: string;
+}>> = {
+  en: {
+    classic: { pageLabel: "// SQUAD SELECTION", loading: "LOADING...", searchPlayer: "Search player…", allPositions: "All Positions", sortOvr: "Sort: OVR", sortWage: "Sort: Wage", sortName: "Sort: Name", startCareer: "Start Career →", back: "← Back", transferBudget: "transfer budget", playerCount: n => `${n} player${n !== 1 ? "s" : ""}`, confirmEyebrow: "Career Mode", confirmTitle: "Start New Career?", confirmWarning: "⚠️ Your current career — squad, stats, standings, everything — will be permanently deleted. This cannot be undone.", confirmCancel: "Cancel", confirmStart: "Start New Career" },
+    aurora: { pageLabel: "✦ Your Squad", loading: "LOADING...", searchPlayer: "Search player…", allPositions: "All Positions", sortOvr: "Sort: OVR", sortWage: "Sort: Wage", sortName: "Sort: Name", startCareer: "Begin the Dream →", back: "← Back", transferBudget: "dream budget", playerCount: n => `${n} player${n !== 1 ? "s" : ""}`, confirmEyebrow: "Career Mode", confirmTitle: "Start a New Dream?", confirmWarning: "⚠️ Your current story — squad, stats, standings, everything — will fade away for good. This cannot be undone.", confirmCancel: "Never mind", confirmStart: "Start New Dream" },
+    maleficent: { pageLabel: ">_ INIT_SQUAD.exe", loading: "// LOADING_SQUAD...", searchPlayer: "QUERY UNIT...", allPositions: "ALL_POSITIONS", sortOvr: "Sort: OVR", sortWage: "Sort: Wage", sortName: "Sort: Name", startCareer: "DEPLOY →", back: "← BACK", transferBudget: "war chest", playerCount: n => `${n} UNIT${n !== 1 ? "S" : ""}`, confirmEyebrow: ">_ WARNING", confirmTitle: "INITIATE NEW CAMPAIGN?", confirmWarning: "⚠️ Current campaign — roster, stats, standings, everything — will be permanently purged. IRREVERSIBLE.", confirmCancel: "ABORT", confirmStart: "CONFIRM.exe" },
+  },
+  ru: {
+    classic: { pageLabel: "// ВЫБОР СОСТАВА", loading: "ЗАГРУЗКА...", searchPlayer: "Поиск игрока…", allPositions: "Все позиции", sortOvr: "Сортировка: OVR", sortWage: "Сортировка: Зарплата", sortName: "Сортировка: Имя", startCareer: "Начать карьеру →", back: "← Назад", transferBudget: "трансферный бюджет", playerCount: n => `${n} игроков`, confirmEyebrow: "Режим карьеры", confirmTitle: "Начать новую карьеру?", confirmWarning: "⚠️ Твоя текущая карьера — состав, статистика, турнирная таблица, всё — будет удалена навсегда. Отменить будет нельзя.", confirmCancel: "Отмена", confirmStart: "Начать новую карьеру" },
+    aurora: { pageLabel: "✦ Твоя команда", loading: "ЗАГРУЗКА...", searchPlayer: "Поиск игрока…", allPositions: "Все позиции", sortOvr: "Сортировка: OVR", sortWage: "Сортировка: Зарплата", sortName: "Сортировка: Имя", startCareer: "Начать мечту →", back: "← Назад", transferBudget: "бюджет мечты", playerCount: n => `${n} игроков`, confirmEyebrow: "Режим карьеры", confirmTitle: "Начать новую мечту?", confirmWarning: "⚠️ Твоя текущая история — состав, статистика, таблица, всё — исчезнет навсегда. Отменить будет нельзя.", confirmCancel: "Не важно", confirmStart: "Начать новую мечту" },
+    maleficent: { pageLabel: ">_ ИНИЦИАЛИЗАЦИЯ_СОСТАВА.exe", loading: "// ЗАГРУЗКА_СОСТАВА...", searchPlayer: "ЗАПРОС ЮНИТ...", allPositions: "ВСЕ_ПОЗИЦИИ", sortOvr: "Сортировка: OVR", sortWage: "Сортировка: Зарплата", sortName: "Сортировка: Имя", startCareer: "РАЗВЕРНУТЬ →", back: "← НАЗАД", transferBudget: "военная казна", playerCount: n => `${n} ЮНИТОВ`, confirmEyebrow: ">_ ПРЕДУПРЕЖДЕНИЕ", confirmTitle: "НАЧАТЬ НОВУЮ КАМПАНИЮ?", confirmWarning: "⚠️ Текущая кампания — состав, статистика, таблица, всё — будет уничтожена навсегда. НЕОБРАТИМО.", confirmCancel: "ОТМЕНИТЬ", confirmStart: "ПОДТВЕРДИТЬ.exe" },
+  },
+};
+
 // ─── GLOBAL UI ────────────────────────────────────────────────────────────────
 const GLOBAL_UI = {
   classic: {
@@ -54,8 +73,8 @@ const GLOBAL_UI = {
 };
 
 // ─── CONFIRM MODAL ────────────────────────────────────────────────────────────
-function ConfirmCareerModal({ theme, clubColor, onConfirm, onCancel }: {
-  theme: string; clubColor: string; onConfirm: () => void; onCancel: () => void;
+function ConfirmCareerModal({ theme, clubColor, onConfirm, onCancel, text }: {
+  theme: string; clubColor: string; onConfirm: () => void; onCancel: () => void; text: typeof SELECT_CLUB_TEXT.en.classic;
 }) {
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -88,13 +107,13 @@ function ConfirmCareerModal({ theme, clubColor, onConfirm, onCancel }: {
         onClick={e => e.stopPropagation()}
       >
         <div style={{ marginBottom: 8, fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: (subColor as any)[theme], fontFamily }}>
-          {theme === "maleficent" ? ">_ WARNING" : "Career Mode"}
+          {text.confirmEyebrow}
         </div>
         <h2 style={{ margin: "0 0 12px", fontSize: "1.6rem", fontWeight: 900, color: (textColor as any)[theme], fontFamily, lineHeight: 1.1 }}>
-          Start New Career?
+          {text.confirmTitle}
         </h2>
         <p style={{ margin: "0 0 28px", fontSize: 14, color: (subColor as any)[theme], lineHeight: 1.6 }}>
-          ⚠️ Your current career — squad, stats, standings, everything — will be permanently deleted. This cannot be undone.
+          {text.confirmWarning}
         </p>
         <div style={{ display: "flex", gap: 12 }}>
           <button
@@ -106,7 +125,7 @@ function ConfirmCareerModal({ theme, clubColor, onConfirm, onCancel }: {
               borderRadius: theme === "aurora" ? 20 : theme === "maleficent" ? 0 : 14,
             }}
           >
-            Cancel
+            {text.confirmCancel}
           </button>
           <button
             onClick={onConfirm}
@@ -117,7 +136,7 @@ function ConfirmCareerModal({ theme, clubColor, onConfirm, onCancel }: {
               borderRadius: theme === "aurora" ? 20 : theme === "maleficent" ? 0 : 14,
             }}
           >
-            {theme === "maleficent" ? "CONFIRM.exe" : "Start New Career"}
+            {text.confirmStart}
           </button>
         </div>
       </div>
@@ -139,6 +158,8 @@ export default function SelectClubPage() {
 
   const theme           = useThemeStore(s => s.theme) as keyof typeof GLOBAL_UI;
   const ui              = GLOBAL_UI[theme] ?? GLOBAL_UI.classic;
+  const locale           = useCareerStore(s => s.locale) || "en";
+  const text             = SELECT_CLUB_TEXT[locale][theme] ?? SELECT_CLUB_TEXT.en.classic;
   const selectedLeague  = useCareerStore(s => s.selectedLeague);
   const setSelectedClub = useCareerStore(s => s.setSelectedClub);
 
@@ -221,7 +242,7 @@ export default function SelectClubPage() {
           theme === "maleficent" ? "text-fuchsia-500 font-mono"
           : theme === "aurora"   ? "text-pink-400" : "text-white"
         }`}>
-          {theme === "maleficent" ? "// LOADING_SQUAD..." : "LOADING..."}
+          {text.loading}
         </div>
       </div>
     );
@@ -252,7 +273,21 @@ export default function SelectClubPage() {
         @keyframes pCardIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
       `}</style>
 
-      <div className="absolute top-6 right-6 z-50"><ThemeToggle /></div>
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-2">
+        <div className="flex gap-1">
+          {(["en", "ru"] as const).map(l => (
+            <button key={l} onClick={() => useCareerStore.getState().setLocale(l)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                locale === l
+                  ? (theme !== "aurora" ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700")
+                  : (theme !== "aurora" ? "text-white/30 hover:text-white/60" : "text-pink-900/30 hover:text-pink-900/60")
+              }`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <ThemeToggle />
+      </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 pt-10 pb-20">
         {/* Header */}
@@ -260,12 +295,12 @@ export default function SelectClubPage() {
           <div className="flex items-end gap-5">
             <LogoCard src={getClubLogo(club.name) || "/logo.png"} alt={club.name} size={72} imageSize={52} />
             <div>
-              <div className={`flex items-center gap-2 mb-2 ${ui.pageLabel}`}>{ui.pageLabelText}</div>
+              <div className={`flex items-center gap-2 mb-2 ${ui.pageLabel}`}>{text.pageLabel}</div>
               <h1 className={ui.headerClass} style={ui.headerFont}>{club.name}</h1>
               <p className="text-xs opacity-60 mt-1 uppercase tracking-widest">{club.league}</p>
               {estimatedBudget > 0 && (
                 <p className="text-sm font-black mt-1.5" style={{ color: leagueTheme.rawColor }}>
-                  💰 {fmtValue(estimatedBudget)} transfer budget
+                  💰 {fmtValue(estimatedBudget)} {text.transferBudget}
                 </p>
               )}
             </div>
@@ -274,18 +309,18 @@ export default function SelectClubPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <input
               type="text"
-              placeholder="Search player…"
+              placeholder={text.searchPlayer}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className={ui.searchBg + " w-40"}
             />
             <select value={posFilter} onChange={e => setPosFilter(e.target.value)} className={ui.selectBg}>
-              {positions.map(p => <option key={p} value={p}>{p === "ALL" ? "All Positions" : p}</option>)}
+              {positions.map(p => <option key={p} value={p}>{p === "ALL" ? text.allPositions : p}</option>)}
             </select>
             <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className={ui.selectBg}>
-              <option value="overall">Sort: OVR</option>
-              <option value="wage">Sort: Wage</option>
-              <option value="name">Sort: Name</option>
+              <option value="overall">{text.sortOvr}</option>
+              <option value="wage">{text.sortWage}</option>
+              <option value="name">{text.sortName}</option>
             </select>
             <button
               onClick={() => {
@@ -299,17 +334,17 @@ export default function SelectClubPage() {
               className="px-5 py-3 rounded-2xl font-black transition-colors duration-200 hover:opacity-90"
               style={{ background: leagueTheme.rawColor, color: "#fff" }}
             >
-              Start Career →
+              {text.startCareer}
             </button>
             <Link href={`/league/${encodeURIComponent(selectedLeague?.id ?? "")}`}>
-              <button className={ui.backBtn}>← Back</button>
+              <button className={ui.backBtn}>{text.back}</button>
             </Link>
           </div>
         </div>
 
         {/* Player count */}
         <div className={`mb-5 ${ui.count}`}>
-          {players.length} player{players.length !== 1 ? "s" : ""}
+          {text.playerCount(players.length)}
         </div>
 
         {/* Player grid */}
@@ -337,6 +372,7 @@ export default function SelectClubPage() {
           theme={theme}
           onClose={closeModal}
           isClosing={modalClosing}
+          locale={locale}
         />
       )}
 
@@ -344,6 +380,7 @@ export default function SelectClubPage() {
         <ConfirmCareerModal
           theme={theme}
           clubColor={leagueTheme.rawColor}
+          text={text}
           onCancel={() => setShowConfirm(false)}
           onConfirm={() => {
             // ВАЖНО: это и было причиной утечки составов между карьерами.

@@ -7,7 +7,24 @@ import LogoCard from "@/components/LogoCard";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useRouter } from "next/navigation";
 import { useThemeStore } from "@/app/store/themeStore";
+import { useCareerStore } from "@/app/store/careerStore";
 import Link from "next/link";
+
+const LEAGUES_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
+  eyebrow: string; title: string; loading: string; search: string; sortName: string; sortClubs: string;
+  home: string; league: string; clubs: string; noResults: (q: string) => string; noLeagues: string;
+}>> = {
+  en: {
+    classic: { eyebrow: "// SELECT LEAGUE", title: "SELECT\nLEAGUE", loading: "LOADING...", search: "Search leagues…", sortName: "Sort: A–Z", sortClubs: "Sort: Clubs", home: "← Home", league: "League", clubs: "clubs", noResults: q => `No leagues matching "${q}"`, noLeagues: "No leagues found" },
+    aurora: { eyebrow: "✦ Choose your league", title: "Pick a\nLeague", loading: "LOADING...", search: "Search leagues…", sortName: "Sort: A–Z", sortClubs: "Sort: Clubs", home: "← Home", league: "League", clubs: "clubs", noResults: q => `No leagues matching "${q}"`, noLeagues: "No leagues found" },
+    maleficent: { eyebrow: "// SELECT_LEAGUE.exe", title: "SELECT\nLEAGUE", loading: "// LOADING_LEAGUES...", search: "Search leagues…", sortName: "Sort: A–Z", sortClubs: "Sort: Clubs", home: "← Home", league: "League", clubs: "clubs", noResults: q => `No leagues matching "${q}"`, noLeagues: "No leagues found" },
+  },
+  ru: {
+    classic: { eyebrow: "// ВЫБОР ЛИГИ", title: "ВЫБОР\nЛИГИ", loading: "ЗАГРУЗКА...", search: "Поиск лиг…", sortName: "Сортировка: А-Я", sortClubs: "Сортировка: Клубы", home: "← Домой", league: "Лига", clubs: "клубов", noResults: q => `Лиги по запросу "${q}" не найдены`, noLeagues: "Лиги не найдены" },
+    aurora: { eyebrow: "✦ Выбери свою лигу", title: "Выбери\nЛигу", loading: "ЗАГРУЗКА...", search: "Поиск лиг…", sortName: "Сортировка: А-Я", sortClubs: "Сортировка: Клубы", home: "← Домой", league: "Лига", clubs: "клубов", noResults: q => `Лиги по запросу "${q}" не найдены`, noLeagues: "Лиги не найдены" },
+    maleficent: { eyebrow: "// ВЫБОР_ЛИГИ.exe", title: "ВЫБОР\nЛИГИ", loading: "// ЗАГРУЗКА_ЛИГ...", search: "Поиск лиг…", sortName: "Сортировка: А-Я", sortClubs: "Сортировка: Клубы", home: "← Домой", league: "Лига", clubs: "клубов", noResults: q => `Лиги по запросу "${q}" не найдены`, noLeagues: "Лиги не найдены" },
+  },
+};
 
 // ─── GLOBAL UI ────────────────────────────────────────────────────────────────
 const GLOBAL_UI = {
@@ -89,7 +106,7 @@ const GLOBAL_UI = {
 };
 
 // ─── LEAGUE CARD ──────────────────────────────────────────────────────────────
-function LeagueCard({ league, theme, ui }: { league: any; theme: string; ui: typeof GLOBAL_UI.classic }) {
+function LeagueCard({ league, theme, ui, leagueLabel, clubsLabel }: { league: any; theme: string; ui: typeof GLOBAL_UI.classic; leagueLabel: string; clubsLabel: string }) {
   const router = useRouter();
   const leagueTheme = getLeagueTheme(league.name, theme);
 
@@ -142,7 +159,7 @@ function LeagueCard({ league, theme, ui }: { league: any; theme: string; ui: typ
 
         {/* Text block */}
         <div className="min-w-0">
-          <div className={ui.card.sub}>League</div>
+          <div className={ui.card.sub}>{leagueLabel}</div>
           <div
             className={`mt-1 truncate ${ui.card.name}`}
             style={theme === "aurora" ? {
@@ -154,7 +171,7 @@ function LeagueCard({ league, theme, ui }: { league: any; theme: string; ui: typ
           >
             {league.name}
           </div>
-          <div className={`mt-2 ${ui.card.count}`}>⚽ {league.clubs?.length || 0} clubs</div>
+          <div className={`mt-2 ${ui.card.count}`}>⚽ {league.clubs?.length || 0} {clubsLabel}</div>
         </div>
 
         {/* Bottom accent line */}
@@ -175,6 +192,8 @@ export default function LeaguesPage() {
   const [sortBy, setSortBy] = useState<"name" | "clubs">("name");
   const theme = useThemeStore(s => s.theme) as keyof typeof GLOBAL_UI;
   const ui = GLOBAL_UI[theme] ?? GLOBAL_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const text = LEAGUES_TEXT[locale][theme] ?? LEAGUES_TEXT.en.classic;
 
   useEffect(() => {
     fetch("/api/leagues")
@@ -203,7 +222,7 @@ export default function LeaguesPage() {
           theme === "maleficent" ? "text-fuchsia-500 font-mono"
           : theme === "aurora" ? "text-pink-400" : "text-white"
         }`}>
-          {theme === "maleficent" ? "// LOADING_LEAGUES..." : "LOADING..."}
+          {text.loading}
         </div>
       </div>
     );
@@ -222,7 +241,21 @@ export default function LeaguesPage() {
         style={{ backgroundImage: "linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)", backgroundSize: "48px 48px" }} />
 
       {/* Theme toggle — top right */}
-      <div className="absolute top-6 right-6 z-50"><ThemeToggle /></div>
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-2">
+        <div className="flex gap-1">
+          {(["en", "ru"] as const).map(l => (
+            <button key={l} onClick={() => useCareerStore.getState().setLocale(l)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                locale === l
+                  ? (theme !== "aurora" ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700")
+                  : (theme !== "aurora" ? "text-white/30 hover:text-white/60" : "text-pink-900/30 hover:text-pink-900/60")
+              }`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <ThemeToggle />
+      </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 pt-10 pb-20">
 
@@ -231,7 +264,9 @@ export default function LeaguesPage() {
           <div>
             <div className={`mb-2 ${ui.eyebrow}`}>{ui.eyebrowText}</div>
             <h1 className={ui.titleClass} style={ui.title}>
-              {theme === "aurora" ? "Pick a\nLeague" : "SELECT\nLEAGUE"}
+              {text.title.split("\n").map((line, idx) => (
+                <span key={idx} style={{ display: "block" }}>{line}</span>
+              ))}
             </h1>
           </div>
 
@@ -240,7 +275,7 @@ export default function LeaguesPage() {
             {/* Search */}
             <input
               type="text"
-              placeholder="Search leagues…"
+              placeholder={text.search}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className={`px-4 py-3 text-sm outline-none w-48 ${ui.searchInput}`}
@@ -252,14 +287,14 @@ export default function LeaguesPage() {
               onChange={e => setSortBy(e.target.value as "name" | "clubs")}
               className={`px-3 py-3 ${ui.sortSelect}`}
             >
-              <option value="name">Sort: A–Z</option>
-              <option value="clubs">Sort: Clubs</option>
+              <option value="name">{text.sortName}</option>
+              <option value="clubs">{text.sortClubs}</option>
             </select>
 
             {/* Back to Home */}
             <Link href="/">
               <button className={`px-5 py-3 text-sm font-black ${ui.backBtn}`}>
-                ← Home
+                {text.home}
               </button>
             </Link>
           </div>
@@ -267,14 +302,14 @@ export default function LeaguesPage() {
 
         {/* ── Count ── */}
         <div className={`mb-6 text-xs ${ui.countText}`}>
-          {filtered.length} league{filtered.length !== 1 ? "s" : ""}
+          {filtered.length} {locale === "ru" ? "лиг" : `league${filtered.length !== 1 ? "s" : ""}`}
         </div>
 
         {/* ── Grid ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filtered.map((league, i) => (
             <div key={league.id} className="league-card-in" style={{ animationDelay: `${Math.min(i * 0.03, 0.5)}s` }}>
-              <LeagueCard league={league} theme={theme} ui={ui} />
+              <LeagueCard league={league} theme={theme} ui={ui} leagueLabel={text.league} clubsLabel={text.clubs} />
             </div>
           ))}
         </div>
@@ -282,7 +317,7 @@ export default function LeaguesPage() {
         {/* ── Empty state ── */}
         {filtered.length === 0 && (
           <div className={`text-center py-20 ${ui.emptyText}`}>
-            {search ? `No leagues matching "${search}"` : "No leagues found"}
+            {search ? text.noResults(search) : text.noLeagues}
           </div>
         )}
       </div>

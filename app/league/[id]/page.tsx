@@ -11,6 +11,23 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
 
+const LEAGUE_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
+  football_club: string; squad_status: string; ready: string; loading: string;
+  eyebrow: string; search: string; sortOvr: string; sortBudget: string; sortName: string;
+  backLeagues: string; clubError: string; noClubsSearch: (q: string) => string; noClubs: string;
+}>> = {
+  en: {
+    classic: { football_club: "Football Club", squad_status: "Squad Status", ready: "Ready", loading: "LOADING...", eyebrow: "Select Club", search: "Search clubs…", sortOvr: "Sort: OVR", sortBudget: "Sort: Budget", sortName: "Sort: Name", backLeagues: "← Leagues", clubError: "Could not load clubs — check your API", noClubsSearch: q => `No clubs matching "${q}"`, noClubs: "No clubs found for this league" },
+    aurora: { football_club: "Football Club", squad_status: "Squad Vibe", ready: "Ready ✦", loading: "LOADING...", eyebrow: "✦ Choose your club", search: "Search clubs…", sortOvr: "Sort: OVR", sortBudget: "Sort: Budget", sortName: "Sort: Name", backLeagues: "← Leagues", clubError: "Could not load clubs — check your API", noClubsSearch: q => `No clubs matching "${q}"`, noClubs: "No clubs found for this league" },
+    maleficent: { football_club: "UNIT_CLASS", squad_status: "ROSTER_STATUS", ready: "READY", loading: "// LOADING_CLUBS...", eyebrow: "// SELECT_CLUB", search: "Search clubs…", sortOvr: "Sort: OVR", sortBudget: "Sort: Budget", sortName: "Sort: Name", backLeagues: "← Leagues", clubError: "Could not load clubs — check your API", noClubsSearch: q => `No clubs matching "${q}"`, noClubs: "No clubs found for this league" },
+  },
+  ru: {
+    classic: { football_club: "Футбольный клуб", squad_status: "Статус состава", ready: "Готов", loading: "ЗАГРУЗКА...", eyebrow: "Выбор клуба", search: "Поиск клубов…", sortOvr: "Сортировка: OVR", sortBudget: "Сортировка: Бюджет", sortName: "Сортировка: Имя", backLeagues: "← Лиги", clubError: "Не удалось загрузить клубы — проверь API", noClubsSearch: q => `Клубы по запросу "${q}" не найдены`, noClubs: "Клубы для этой лиги не найдены" },
+    aurora: { football_club: "Футбольный клуб", squad_status: "Настроение команды", ready: "Готова ✦", loading: "ЗАГРУЗКА...", eyebrow: "✦ Выбери свой клуб", search: "Поиск клубов…", sortOvr: "Сортировка: OVR", sortBudget: "Сортировка: Бюджет", sortName: "Сортировка: Имя", backLeagues: "← Лиги", clubError: "Не удалось загрузить клубы — проверь API", noClubsSearch: q => `Клубы по запросу "${q}" не найдены`, noClubs: "Клубы для этой лиги не найдены" },
+    maleficent: { football_club: "КЛАСС_ЮНИТА", squad_status: "СТАТУС_СОСТАВА", ready: "ГОТОВ", loading: "// ЗАГРУЗКА_КЛУБОВ...", eyebrow: "// ВЫБОР_КЛУБА", search: "Поиск клубов…", sortOvr: "Сортировка: OVR", sortBudget: "Сортировка: Бюджет", sortName: "Сортировка: Имя", backLeagues: "← Лиги", clubError: "Не удалось загрузить клубы — проверь API", noClubsSearch: q => `Клубы по запросу "${q}" не найдены`, noClubs: "Клубы для этой лиги не найдены" },
+  },
+};
+
 const GLOBAL_UI = {
   classic: {
     bg: "bg-[#04060f]", text: "text-white",
@@ -62,9 +79,9 @@ const GLOBAL_UI = {
 // PERF: memo stops ClubCard re-rendering when parent search state changes
 // but this card's own props haven't changed.
 const ClubCard = memo(function ClubCard({
-  club, league, theme, ui,
+  club, league, theme, ui, text,
 }: {
-  club: any; league: any; theme: string; ui: typeof GLOBAL_UI.classic;
+  club: any; league: any; theme: string; ui: typeof GLOBAL_UI.classic; text: typeof LEAGUE_TEXT.en.classic;
 }) {
   const router = useRouter();
   const setSelectedClub = useCareerStore(s => s.setSelectedClub);
@@ -108,7 +125,7 @@ const ClubCard = memo(function ClubCard({
             <LogoCard src={getClubLogo(club.name) || "/logo.png"} alt={club.name} size={72} imageSize={52} />
           </div>
           <div className="flex flex-col justify-center min-h-[60px] min-w-0">
-            <div className={ui.card.subLabel}>Football Club</div>
+            <div className={ui.card.subLabel}>{text.football_club}</div>
             <h2
               className={`text-xl md:text-2xl leading-tight mt-1 truncate ${ui.card.name}`}
               style={theme === "aurora" ? {
@@ -136,12 +153,12 @@ const ClubCard = memo(function ClubCard({
         theme === "classic" ? "border-white/5" : theme === "aurora" ? "border-pink-100" : "border-purple-900/30"
       }`}>
         <div>
-          <div className={ui.card.subLabel}>Squad Status</div>
+          <div className={ui.card.subLabel}>{text.squad_status}</div>
           <div className="flex items-center gap-2 mt-1">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className={`text-[11px] font-bold ${
               theme === "classic" ? "text-white/50" : theme === "aurora" ? "text-pink-600/60" : "text-purple-500/60"
-            }`}>Ready</span>
+            }`}>{text.ready}</span>
           </div>
         </div>
         <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors duration-200 ${ui.card.arrow} ${ui.card.arrowHover}`}>
@@ -158,6 +175,8 @@ export default function LeaguePage() {
   const [sortBy, setSortBy] = useState<"name" | "overall" | "budget">("overall");
   const theme = useThemeStore(s => s.theme) as keyof typeof GLOBAL_UI;
   const ui = GLOBAL_UI[theme] ?? GLOBAL_UI.classic;
+  const locale = useCareerStore(s => s.locale) || "en";
+  const text = LEAGUE_TEXT[locale][theme] ?? LEAGUE_TEXT.en.classic;
   const leagueId = decodeURIComponent(params.id as string);
   const [league, setLeague] = useState<any>(null);
   const [clubs, setClubs] = useState<any[]>([]);
@@ -291,7 +310,7 @@ export default function LeaguePage() {
           theme === "maleficent" ? "text-fuchsia-500 font-mono"
           : theme === "aurora" ? "text-pink-400" : "text-white"
         }`}>
-          LOADING...
+          {text.loading}
         </div>
       </div>
     );
@@ -317,7 +336,21 @@ export default function LeaguePage() {
           style={{ background: `radial-gradient(circle,${leagueTheme.rawColor}25,transparent)`, filter: "blur(60px)", opacity: 0.5 }} />
       )}
 
-      <div className="absolute top-6 right-6 z-50"><ThemeToggle /></div>
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-2">
+        <div className="flex gap-1">
+          {(["en", "ru"] as const).map(l => (
+            <button key={l} onClick={() => useCareerStore.getState().setLocale(l)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                locale === l
+                  ? (theme !== "aurora" ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700")
+                  : (theme !== "aurora" ? "text-white/30 hover:text-white/60" : "text-pink-900/30 hover:text-pink-900/60")
+              }`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <ThemeToggle />
+      </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 pt-10 pb-20">
         {/* Header */}
@@ -332,7 +365,7 @@ export default function LeaguePage() {
                 : theme === "aurora" ? "text-violet-500"
                 : "text-fuchsia-500/60 font-mono"
               }`}>
-                {theme === "maleficent" ? "// SELECT_CLUB" : theme === "aurora" ? "✦ Choose your club" : "Select Club"}
+                {text.eyebrow}
               </div>
               <h1
                 className={`font-black leading-none ${
@@ -350,7 +383,7 @@ export default function LeaguePage() {
           <div className="flex items-center gap-3 flex-wrap">
             <input
               type="text"
-              placeholder="Search clubs…"
+              placeholder={text.search}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className={`px-4 py-3 text-sm outline-none w-44 ${ui.searchBg}`}
@@ -360,13 +393,13 @@ export default function LeaguePage() {
               onChange={e => setSortBy(e.target.value as any)}
               className={`px-3 py-3 text-sm outline-none cursor-pointer ${ui.searchBg}`}
             >
-              <option value="overall">Sort: OVR</option>
-              <option value="budget">Sort: Budget</option>
-              <option value="name">Sort: Name</option>
+              <option value="overall">{text.sortOvr}</option>
+              <option value="budget">{text.sortBudget}</option>
+              <option value="name">{text.sortName}</option>
             </select>
             <Link href="/leagues">
               <button className={`px-5 py-3 text-sm font-black transition-colors duration-200 ${ui.backBtn}`}>
-                ← Leagues
+                {text.backLeagues}
               </button>
             </Link>
           </div>
@@ -379,15 +412,15 @@ export default function LeaguePage() {
           : "text-slate-700 font-mono"
         }`}>
           {error
-            ? "Could not load clubs — check your API"
-            : `${filteredClubs.length} club${filteredClubs.length !== 1 ? "s" : ""}`}
+            ? text.clubError
+            : (locale === "ru" ? `${filteredClubs.length} клубов` : `${filteredClubs.length} club${filteredClubs.length !== 1 ? "s" : ""}`)}
         </div>
 
         {/* Cards grid */}
         <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
           {filteredClubs.map((club, i) => (
             <div key={club.id} className="card-in" style={{ animationDelay: `${Math.min(i * 0.03, 0.5)}s` }}>
-              <ClubCard club={club} league={league} theme={theme} ui={ui} />
+              <ClubCard club={club} league={league} theme={theme} ui={ui} text={text} />
             </div>
           ))}
         </div>
@@ -399,7 +432,7 @@ export default function LeaguePage() {
             : theme === "aurora" ? "text-pink-400/50 italic"
             : "text-slate-700 font-mono"
           }`}>
-            {search ? `No clubs matching "${search}"` : "No clubs found for this league"}
+            {search ? text.noClubsSearch(search) : text.noClubs}
           </div>
         )}
       </div>

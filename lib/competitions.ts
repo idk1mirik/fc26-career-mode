@@ -1,5 +1,18 @@
 // lib/competitions.ts — определения турниров с реальными форматами под каждую страну
 
+import leagues from "@/data/leagues.json";
+
+let clubLeagueMap: Map<string, string> | null = null;
+export function getClubLeague(clubId: string): string | undefined {
+  if (!clubLeagueMap) {
+    clubLeagueMap = new Map();
+    for (const l of leagues as any[]) {
+      for (const c of l.clubs ?? []) clubLeagueMap.set(c.id, l.name);
+    }
+  }
+  return clubLeagueMap.get(clubId);
+}
+
 export interface CompetitionDef {
   name: string;
   type: "domestic_cup" | "super_cup" | "continental";
@@ -94,11 +107,39 @@ export function getRoundName(matchesInRound: number): string {
   return `Round of ${matchesInRound * 2}`;
 }
 
-export function generateKnockoutRound1(clubs: string[]): { home: string; away: string }[] {
-  const shuffled = [...clubs].sort(() => Math.random() - 0.5);
-  const pairs: { home: string; away: string }[] = [];
-  for (let i = 0; i < shuffled.length; i += 2) {
-    if (shuffled[i + 1]) pairs.push({ home: shuffled[i], away: shuffled[i + 1] });
+// Жеребьёвка раунда: раньше при нечётном числе участников последний просто
+// "терялся" без матча (silent drop) — теперь у него бай (walkover), он
+// проходит раунд автоматически и участвует в следующей паровке.
+//
+// avoidSameGroup — для еврокубков: реальная Лига Чемпионов не сводит два
+// клуба одной ассоциации/страны в первом раунде. Пытаемся до 200 раз
+// перетасовать так, чтобы ни одна пара не была из одной и той же лиги;
+// если это математически невозможно (слишком много клубов одной лиги
+// относительно размера пула) — просто отдаём лучшую найденную попытку,
+// не зависаем в бесконечном цикле.
+export function generateKnockoutRound1(
+  clubs: string[], avoidSameGroup?: (clubId: string) => string | undefined
+): { pairs: { home: string; away: string }[]; byeTeam: string | null } {
+  let best: { home: string; away: string }[] | null = null;
+  let bestConflicts = Infinity;
+
+  const attempts = avoidSameGroup ? 200 : 1;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const shuffled = [...clubs].sort(() => Math.random() - 0.5);
+    const pairs: { home: string; away: string }[] = [];
+    for (let i = 0; i + 1 < shuffled.length - (shuffled.length % 2 === 1 ? 1 : 0); i += 2) {
+      pairs.push({ home: shuffled[i], away: shuffled[i + 1] });
+    }
+    if (!avoidSameGroup) { best = pairs; break; }
+
+    const conflicts = pairs.filter(p => avoidSameGroup(p.home) && avoidSameGroup(p.home) === avoidSameGroup(p.away)).length;
+    if (conflicts < bestConflicts) { best = pairs; bestConflicts = conflicts; }
+    if (conflicts === 0) break;
   }
-  return pairs;
+
+  const pairs = best ?? [];
+  const usedClubs = new Set(pairs.flatMap(p => [p.home, p.away]));
+  const byeTeam = clubs.find(c => !usedClubs.has(c)) ?? null;
+
+  return { pairs, byeTeam };
 }

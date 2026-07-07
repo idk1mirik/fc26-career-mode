@@ -13,7 +13,7 @@ export interface StatusUpdateAcc {
   playerId: string; playerName: string; status: string; matches_out: number; yellow_cards: number; existing?: any;
 }
 export interface SeasonStatAcc {
-  playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; yellow_cards: number; red_cards: number;
+  playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; assists: number; yellow_cards: number; red_cards: number;
 }
 
 export function accumulateCardsAndInjuries(
@@ -68,12 +68,13 @@ export function accumulateSeasonStats(
     const yellow = events.some((e: any) => e.team === side && e.type === "yellow" && (e.playerId ?? e.player) === pid) ? 1 : 0;
     const red = events.some((e: any) => e.team === side && e.type === "red" && (e.playerId ?? e.player) === pid) ? 1 : 0;
 
-    const prev = seasonStatsAccum[key] ?? { playerId: pid, playerName: pr.name, matches_played: 0, total_rating: 0, goals: 0, yellow_cards: 0, red_cards: 0 };
+    const prev = seasonStatsAccum[key] ?? { playerId: pid, playerName: pr.name, matches_played: 0, total_rating: 0, goals: 0, assists: 0, yellow_cards: 0, red_cards: 0 };
     seasonStatsAccum[key] = {
       playerId: pid, playerName: pr.name,
       matches_played: prev.matches_played + 1,
       total_rating: prev.total_rating + pr.rating,
       goals: prev.goals + goals,
+      assists: prev.assists + (pr.assists ?? 0),
       yellow_cards: prev.yellow_cards + yellow,
       red_cards: prev.red_cards + red,
     };
@@ -117,6 +118,7 @@ export async function persistStatusAndStats(
         matches_played: (existing.matches_played ?? 0) + upd.matches_played,
         total_rating: (existing.total_rating ?? 0) + upd.total_rating,
         goals: (existing.goals ?? 0) + upd.goals,
+        assists: (existing.assists ?? 0) + upd.assists,
         yellow_cards: (existing.yellow_cards ?? 0) + upd.yellow_cards,
         red_cards: (existing.red_cards ?? 0) + upd.red_cards,
       }).eq("id", existing.id));
@@ -124,7 +126,7 @@ export async function persistStatusAndStats(
       writes.push(supabase.from("player_season_stats").insert({
         season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
         matches_played: upd.matches_played, total_rating: upd.total_rating,
-        goals: upd.goals, yellow_cards: upd.yellow_cards, red_cards: upd.red_cards,
+        goals: upd.goals, assists: upd.assists, yellow_cards: upd.yellow_cards, red_cards: upd.red_cards,
       }));
     }
   }

@@ -177,6 +177,15 @@ export default function CupsPage() {
                       <div className={`text-center py-3 text-sm ${ui.muted}`}>🏆 {comp.winner_club} {copy.cupsWonTitle}</div>
                     ) : currentRoundFixtures.map((f: any) => {
                       const isUserMatch = f.home_club === userClub || f.away_club === userClub;
+                      if (f.is_bye) {
+                        return (
+                          <div key={f.id} className={`flex items-center justify-center gap-2 py-1.5 rounded-lg ${isUserMatch ? (theme === "aurora" ? "bg-violet-50" : "bg-white/[0.04]") : ""}`}>
+                            <img src={getClubLogo(f.home_club)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                            <span className="text-xs font-bold">{f.home_club}</span>
+                            <span className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>— {locale === "ru" ? "проходит без матча" : "walkover"}</span>
+                          </div>
+                        );
+                      }
                       return (
                         <div key={f.id} className={`flex items-center gap-2 py-1.5 rounded-lg ${isUserMatch ? (theme === "aurora" ? "bg-violet-50" : "bg-white/[0.04]") : ""}`}>
                           <div className="flex items-center gap-1.5 flex-1 justify-end">
