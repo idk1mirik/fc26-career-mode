@@ -466,6 +466,36 @@ export default function DashboardPage() {
   const [simulatingSeason, setSimulatingSeason] = useState(false);
   const [seasonSimProgress, setSeasonSimProgress] = useState<{ done: number; matchday: number } | null>(null);
 
+  // При автопромотке лиги кубки раньше вообще не трогались — их fixtures
+  // просто копились неигранными. Теперь после каждого лигового тура ещё
+  // проверяем все активные турниры: если дата текущего раунда уже наступила
+  // (или прошла) по игровому календарю — доигрываем его тоже, в автопилоте.
+  const advanceDueCups = async (currentDateStr: string) => {
+    let safety = 10; // на случай нескольких кубковых раундов подряд между лиговыми турами
+    while (safety-- > 0) {
+      const compRes = await fetch(`/api/competitions?seasonId=${seasonId}`);
+      if (!compRes.ok) return;
+      const { competitions, fixturesByComp } = await compRes.json();
+      let advancedAny = false;
+
+      for (const comp of competitions ?? []) {
+        if (comp.status === "finished") continue;
+        const roundFixtures = (fixturesByComp[comp.id] ?? []).filter((f: any) => f.round === comp.current_round);
+        const unplayed = roundFixtures.filter((f: any) => !f.played);
+        if (!unplayed.length) continue; // раунд был только баем — уже "сыгран" сам
+        const roundDate = unplayed[0]?.match_date;
+        if (roundDate && roundDate > currentDateStr) continue; // дата ещё не наступила
+
+        await fetch("/api/cup/advance", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competitionId: comp.id, userClubId: userClub }),
+        });
+        advancedAny = true;
+      }
+      if (!advancedAny) break;
+    }
+  };
+
   const simulateWholeSeason = async () => {
     if (!seasonId || simulating || simulatingSeason) return;
     setSimulatingSeason(true);
@@ -485,6 +515,9 @@ export default function DashboardPage() {
         iterations++;
         finished = !!data.finished;
         setSeasonSimProgress({ done: iterations, matchday: data.nextMatchday });
+
+        await advanceDueCups(getLeagueMatchdayDate(data.nextMatchday));
+
         if (finished) setSeasonFinished(true);
       }
       await loadData(seasonId);
