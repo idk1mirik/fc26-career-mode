@@ -61,6 +61,7 @@ export default function CupsPage() {
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
   const [simulating, setSimulating] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -101,14 +102,35 @@ export default function CupsPage() {
     setSimulating(null);
   };
 
+  const repairCups = async () => {
+    if (!seasonId || repairing) return;
+    setRepairing(true);
+    try {
+      const res = await fetch("/api/season/repair-cups", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId }),
+      });
+      if (res.ok) await loadData();
+    } catch (e) { console.error(e); }
+    setRepairing(false);
+  };
+
   if (!hydrated) return null;
 
   return (
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
-        <div className="mb-6">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.cupsHeaderLabel}</div>
-          <h1 className="text-2xl font-black">{copy.cupsTitle}</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.cupsHeaderLabel}</div>
+            <h1 className="text-2xl font-black">{copy.cupsTitle}</h1>
+          </div>
+          <button onClick={repairCups} disabled={repairing}
+            title={locale === "ru" ? "Пересоздать текущие турниры (если кто-то пропал из сетки из-за старого бага)" : "Regenerate current tournaments (if a club vanished from the bracket due to the old bug)"}
+            className="px-3 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 hover:opacity-80"
+            style={{ background: "rgba(255,255,255,0.06)" }}>
+            {repairing ? (locale === "ru" ? "Чиню…" : "Repairing…") : (locale === "ru" ? "Починить кубки" : "Repair Cups")}
+          </button>
         </div>
 
         {!lineupValid && (
