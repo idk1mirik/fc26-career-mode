@@ -8,11 +8,26 @@ export interface CalendarSlot {
   type: "league" | "domestic_cup" | "super_cup" | "champions_league" | "europa_league" | "conference_league";
 }
 
-// Реальные примерные даты евро-кубков сезона 2025/26 (раунды лиги-фазы + плей-офф + 1/8-финал)
-// Упрощено под наш формат (наша версия — обычный knockout с 1-го раунда, не лига-фаза)
-const CL_ROUND_DATES  = ["2025-09-17", "2025-10-22", "2025-11-26", "2025-12-10", "2026-02-18", "2026-03-11", "2026-04-08", "2026-04-29", "2026-05-30"];
-const EL_ROUND_DATES  = ["2025-09-25", "2025-10-23", "2025-11-27", "2025-12-11", "2026-02-19", "2026-03-12", "2026-04-09", "2026-04-30", "2026-05-20"];
-const ECL_ROUND_DATES = ["2025-10-02", "2025-10-24", "2025-11-28", "2025-12-12", "2026-02-20", "2026-03-13", "2026-04-10", "2026-05-01", "2026-05-27"];
+// Реальные примерные даты еврокубков 2025/26 — теперь полноценно: 8 туров
+// лиг-фазы (6 для Лиги конференций) с сентября по январь, затем плей-офф и
+// классический двухматчевый плей-офф до финала (однокруговой).
+const CL_LEAGUE_PHASE_DATES  = ["2025-09-17", "2025-10-01", "2025-10-22", "2025-11-05", "2025-11-26", "2025-12-10", "2026-01-21", "2026-01-28"];
+const EL_LEAGUE_PHASE_DATES  = ["2025-09-25", "2025-10-02", "2025-10-23", "2025-11-06", "2025-11-27", "2025-12-11", "2026-01-22", "2026-01-29"];
+const ECL_LEAGUE_PHASE_DATES = ["2025-10-02", "2025-10-23", "2025-11-06", "2025-11-27", "2025-12-11", "2026-01-22"];
+
+type KnockoutStage = "playoff" | "r16" | "qf" | "sf" | "final";
+const CL_KNOCKOUT_DATES: Record<KnockoutStage, string[]> = {
+  playoff: ["2026-02-17", "2026-02-24"], r16: ["2026-03-10", "2026-03-17"],
+  qf: ["2026-04-07", "2026-04-14"], sf: ["2026-04-28", "2026-05-05"], final: ["2026-05-30"],
+};
+const EL_KNOCKOUT_DATES: Record<KnockoutStage, string[]> = {
+  playoff: ["2026-02-19", "2026-02-26"], r16: ["2026-03-12", "2026-03-19"],
+  qf: ["2026-04-09", "2026-04-16"], sf: ["2026-04-30", "2026-05-07"], final: ["2026-05-20"],
+};
+const ECL_KNOCKOUT_DATES: Record<KnockoutStage, string[]> = {
+  playoff: ["2026-02-19", "2026-02-26"], qf: ["2026-04-09", "2026-04-16"],
+  sf: ["2026-04-30", "2026-05-07"], final: ["2026-05-27"], r16: ["2026-03-12", "2026-03-19"],
+};
 
 // Внутренний кубок — обычно по средам/вторникам между турами лиги, начиная с сентября
 function domesticCupDate(round: number): string {
@@ -33,8 +48,25 @@ function superCupRoundDate(round: number): string {
   return dates[Math.min(round - 1, dates.length - 1)];
 }
 
-export function getEuroCupRoundDate(comp: "champions_league" | "europa_league" | "conference_league", round: number): string {
-  const arr = comp === "champions_league" ? CL_ROUND_DATES : comp === "europa_league" ? EL_ROUND_DATES : ECL_ROUND_DATES;
+type EuroComp = "champions_league" | "europa_league" | "conference_league";
+
+// Дата конкретного тура лиг-фазы (1-индексация, 1..8 или 1..6)
+export function getLeaguePhaseMatchdayDate(comp: EuroComp, matchdayIndex: number): string {
+  const arr = comp === "champions_league" ? CL_LEAGUE_PHASE_DATES : comp === "europa_league" ? EL_LEAGUE_PHASE_DATES : ECL_LEAGUE_PHASE_DATES;
+  return arr[Math.min(matchdayIndex - 1, arr.length - 1)] ?? arr[arr.length - 1];
+}
+
+// Дата конкретной ноги плей-офф стадии (leg 1 или 2; финал — leg игнорируется, всегда одна дата)
+export function getKnockoutLegDate(comp: EuroComp, stage: KnockoutStage, leg: 1 | 2): string {
+  const map = comp === "champions_league" ? CL_KNOCKOUT_DATES : comp === "europa_league" ? EL_KNOCKOUT_DATES : ECL_KNOCKOUT_DATES;
+  const dates = map[stage];
+  return dates[Math.min(leg - 1, dates.length - 1)];
+}
+
+// Оставлено для обратной совместимости с уже созданными (старыми) турнирами,
+// у которых был простой knockout с "Round N" вместо лиг-фазы.
+export function getEuroCupRoundDate(comp: EuroComp, round: number): string {
+  const arr = comp === "champions_league" ? CL_LEAGUE_PHASE_DATES : comp === "europa_league" ? EL_LEAGUE_PHASE_DATES : ECL_LEAGUE_PHASE_DATES;
   return arr[Math.min(round - 1, arr.length - 1)] ?? arr[arr.length - 1];
 }
 

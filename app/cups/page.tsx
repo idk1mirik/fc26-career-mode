@@ -7,6 +7,7 @@ import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { Trophy, Zap, Lock } from "lucide-react";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
+import { getStageInfo, getStageDisplayName } from "@/lib/continentalKnockout";
 import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 import { getThemeCopy } from "@/lib/i18n";
 
@@ -60,6 +61,7 @@ export default function CupsPage() {
   const [hydrated, setHydrated] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
+  const [standingsByComp, setStandingsByComp] = useState<Record<string, any[]>>({});
   const [simulating, setSimulating] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
 
@@ -81,6 +83,7 @@ export default function CupsPage() {
       const data = await res.json();
       setCompetitions(data.competitions ?? []);
       setFixturesByComp(data.fixturesByComp ?? {});
+      setStandingsByComp(data.standingsByComp ?? {});
     }
   };
 
@@ -153,7 +156,23 @@ export default function CupsPage() {
               const fixtures = fixturesByComp[comp.id] ?? [];
               const currentRoundFixtures = fixtures.filter((f: any) => f.round === comp.current_round);
               const isUserInComp = fixtures.some((f: any) => f.home_club === userClub || f.away_club === userClub);
-              const allPlayed = currentRoundFixtures.every((f: any) => f.played);
+              const isNewFormat = comp.type === "continental" && (comp.league_phase_rounds ?? 0) > 0;
+              const standings = standingsByComp[comp.id] ?? [];
+
+              let roundLabel: string;
+              if (isNewFormat && comp.phase === "league_phase") {
+                roundLabel = locale === "ru"
+                  ? `Лиг-фаза — тур ${comp.current_round}/${comp.league_phase_rounds}`
+                  : `League Phase — MD ${comp.current_round}/${comp.league_phase_rounds}`;
+              } else if (isNewFormat && comp.phase === "knockout") {
+                const info = getStageInfo(comp.name, comp.league_phase_rounds, comp.current_round);
+                roundLabel = info
+                  ? `${getStageDisplayName(info.stage)}${info.leg ? ` — Leg ${info.leg}/2` : ""}`
+                  : `${copy.cupsRoundPrefix} ${comp.current_round}`;
+              } else {
+                roundLabel = `${copy.cupsRoundPrefix} ${comp.current_round}`;
+              }
+              if (comp.status !== "finished" && isUserInComp) roundLabel += ` · ${copy.cupsYoureIn}`;
 
               return (
                 <div key={comp.id} className={`rounded-2xl overflow-hidden ${ui.card}`}>
@@ -163,9 +182,7 @@ export default function CupsPage() {
                       <div>
                         <div className="font-black text-sm">{comp.name}</div>
                         <div className={`text-[10px] ${ui.muted}`}>
-                          {comp.status === "finished"
-                            ? `${copy.cupsWinnerPrefix} ${comp.winner_club}`
-                            : `${copy.cupsRoundPrefix} ${comp.current_round}${isUserInComp ? ` · ${copy.cupsYoureIn}` : ""}`}
+                          {comp.status === "finished" ? `${copy.cupsWinnerPrefix} ${comp.winner_club}` : roundLabel}
                         </div>
                       </div>
                     </div>
@@ -193,6 +210,35 @@ export default function CupsPage() {
                     })()}
                     {comp.status === "finished" && <Trophy size={18} className="text-yellow-400" />}
                   </div>
+
+                  {isNewFormat && standings.length > 0 && (
+                    <div className="px-5 py-3">
+                      <div className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 text-[9px] uppercase tracking-widest mb-1.5 px-1 ${ui.muted}`}>
+                        <span>#</span><span>{locale === "ru" ? "Клуб" : "Club"}</span>
+                        <span className="text-center">{locale === "ru" ? "И" : "P"}</span>
+                        <span className="text-center">{locale === "ru" ? "РМ" : "GD"}</span>
+                        <span className="text-center font-black">{locale === "ru" ? "О" : "Pts"}</span>
+                      </div>
+                      <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                        {standings.map((s: any, i: number) => {
+                          const qualifyLine = comp.league_phase_rounds ? (i === 7 || i === 23) : false; // грань прямого выхода / вылета — ориентировочно
+                          return (
+                            <div key={s.club}
+                              className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 items-center text-xs py-1 px-1 rounded-md ${s.club === userClub ? (theme === "aurora" ? "bg-violet-50" : "bg-white/[0.05]") : ""} ${qualifyLine ? `border-b ${ui.divider}` : ""}`}>
+                              <span className={`font-black ${i < 8 ? "text-emerald-400" : i < 24 ? "" : "opacity-40"}`}>{i + 1}</span>
+                              <span className="font-bold truncate flex items-center gap-1.5">
+                                <img src={getClubLogo(s.club)} className="w-3.5 h-3.5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                                {s.club}
+                              </span>
+                              <span className="text-center">{s.played}</span>
+                              <span className="text-center">{s.gd > 0 ? `+${s.gd}` : s.gd}</span>
+                              <span className="text-center font-black">{s.points}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="px-5 py-3 space-y-1.5">
                     {currentRoundFixtures.length === 0 && comp.status === "finished" ? (

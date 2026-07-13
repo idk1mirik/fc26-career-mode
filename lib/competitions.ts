@@ -98,6 +98,132 @@ export function getLeaguePositionPrize(position: number, totalClubs: number): nu
   return 500_000;
 }
 
+export interface LeaguePhaseConfig {
+  games: number;         // сколько соперников/матчей у каждого клуба в лиг-фазе
+  koEntrySize: number;   // сколько клубов попадает в стадию плей-офф после лиг-фазы (степень двойки)
+  directQualify: number; // сколько идут туда НАПРЯМУЮ (без стыковых матчей)
+}
+
+// Реальный формат УЕФА с 2024/25: единая жеребьёвка перед стартом сезона —
+// каждому клубу сразу назначают N соперников на весь групповой этап (не по
+// раунду за раз, как было раньше). По итогам — общая таблица очков, топ
+// клубов идёт напрямую в плей-офф, следующие играют стыковые матчи, худшие
+// вылетают.
+export const LEAGUE_PHASE_CONFIG: Record<string, LeaguePhaseConfig> = {
+  [CHAMPIONS_LEAGUE.name]: { games: 8, koEntrySize: 16, directQualify: 8 },
+  [EUROPA_LEAGUE.name]: { games: 8, koEntrySize: 16, directQualify: 8 },
+  [CONFERENCE_LEAGUE.name]: { games: 6, koEntrySize: 8, directQualify: 4 },
+};
+
+// Генератор расписания лиг-фазы: N туров, в каждом клуб встречает РАЗНОГО
+// соперника (без повторов на всей дистанции), с балансом дом/выезд и
+// (для еврокубков) минимизацией пар из одной лиги/ассоциации.
+//
+// Как это устроено:
+// 1. Клубы переставляются так, чтобы одноли́говые были максимально разнесены
+//    (интерливинг по группам) — это готовит почву для меньшего числа
+//    конфликтов ещё до самой жеребьёвки.
+// 2. Классический "circle method" — стандартный алгоритм генерации кругового
+//    расписания: гарантирует, что за N туров (N < общего числа участников)
+//    каждый клуб встретит N РАЗНЫХ соперников, без повторов вообще.
+// 3. Жадный баланс дом/выезд — на каждой паровке хозяином становится тот,
+//    у кого пока меньше домашних матчей.
+// 4. "Ремонтный" проход — до 4000 попыток обменять соперников между разными
+//    турами, чтобы убрать оставшиеся пары одной лиги, не трогая остальное
+//    расписание (без дублей соперников).
+export function generateLeaguePhaseSchedule(
+  clubs: string[], rounds: number, avoidSameGroup?: (clubId: string) => string | undefined
+): { home: string; away: string }[][] {
+  let ordered = [...clubs];
+  if (avoidSameGroup) {
+    const groups = new Map<string, string[]>();
+    for (const c of clubs) {
+      const g = avoidSameGroup(c) ?? "__none__";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g)!.push(c);
+    }
+    for (const arr of groups.values()) arr.sort(() => Math.random() - 0.5);
+    const lists = [...groups.values()].sort(() => Math.random() - 0.5);
+    const maxLen = Math.max(...lists.map(l => l.length));
+    ordered = [];
+    for (let i = 0; i < maxLen; i++) {
+      for (const l of lists) if (i < l.length) ordered.push(l[i]);
+    }
+  }
+
+  const BYE = "__BYE__";
+  const arr = [...ordered];
+  if (arr.length % 2 === 1) arr.push(BYE);
+  const n = arr.length;
+  const half = n / 2;
+
+  const rawSchedule: [string, string][][] = [];
+  let rotation = [...arr];
+  for (let r = 0; r < rounds; r++) {
+    const pairs: [string, string][] = [];
+    for (let i = 0; i < half; i++) {
+      const a = rotation[i], b = rotation[n - 1 - i];
+      if (a !== BYE && b !== BYE) pairs.push([a, b]);
+    }
+    rawSchedule.push(pairs);
+    const fixed = rotation[0];
+    const rest = rotation.slice(1);
+    rest.unshift(rest.pop()!);
+    rotation = [fixed, ...rest];
+  }
+
+  const homeCount = new Map<string, number>();
+  const schedule: { home: string; away: string }[][] = rawSchedule.map(pairs =>
+    pairs.map(([a, b]) => {
+      const ha = homeCount.get(a) ?? 0, hb = homeCount.get(b) ?? 0;
+      let home: string, away: string;
+      if (ha < hb) { home = a; away = b; }
+      else if (hb < ha) { home = b; away = a; }
+      else { [home, away] = Math.random() < 0.5 ? [a, b] : [b, a]; }
+      homeCount.set(home, (homeCount.get(home) ?? 0) + 1);
+      return { home, away };
+    })
+  );
+
+  if (avoidSameGroup) {
+    const flat: { r: number; i: number }[] = [];
+    for (let r = 0; r < schedule.length; r++) for (let i = 0; i < schedule[r].length; i++) flat.push({ r, i });
+
+    const buildOpponents = () => {
+      const opp = new Map<string, Set<string>>();
+      for (const rnd of schedule) for (const { home, away } of rnd) {
+        if (!opp.has(home)) opp.set(home, new Set());
+        if (!opp.has(away)) opp.set(away, new Set());
+        opp.get(home)!.add(away); opp.get(away)!.add(home);
+      }
+      return opp;
+    };
+
+    for (let iter = 0; iter < 4000; iter++) {
+      const conflicts = flat.filter(({ r, i }) => {
+        const f = schedule[r][i];
+        return avoidSameGroup(f.home) && avoidSameGroup(f.home) === avoidSameGroup(f.away);
+      });
+      if (conflicts.length === 0) break;
+      const { r: ri, i: pi } = conflicts[Math.floor(Math.random() * conflicts.length)];
+      const a = schedule[ri][pi].home, b = schedule[ri][pi].away;
+      const candidates = [...flat].sort(() => Math.random() - 0.5);
+      const opp = buildOpponents();
+      for (const { r: rj, i: pj } of candidates) {
+        if (rj === ri && pj === pi) continue;
+        const c = schedule[rj][pj].home, d = schedule[rj][pj].away;
+        if (a === c || a === d || b === c || b === d) continue;
+        if (opp.get(a)?.has(d) || opp.get(c)?.has(b)) continue;
+        schedule[ri][pi] = { home: a, away: d };
+        schedule[rj][pj] = { home: c, away: b };
+        break;
+      }
+    }
+  }
+
+  return schedule;
+}
+
 export function getRoundName(matchesInRound: number): string {
   if (matchesInRound === 1) return "Final";
   if (matchesInRound === 2) return "Semi-final";

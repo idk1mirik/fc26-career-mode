@@ -1,19 +1,30 @@
 // app/api/season/repair-cups/route.ts
-// Турниры, созданные ДО фикса баев/жеребьёвки, уже могли "схлопнуться" из-за
-// старого бага (клубы пропадали без матча при нечётном числе участников —
-// бракет неровно сжимался вплоть до одного оставшегося матча). Этот роут не
-// трогает уже ЗАВЕРШЁННые турниры (тут переигрывать нечего — чемпион остаётся
-// чемпионом), а для ещё активных — стирает текущие fixtures и создаёт заново
-// раунд 1 уже по исправленной логике (баи вместо исчезновения, защита от пар
-// внутри одной лиги для еврокубков).
+// Турниры, созданные ДО фикса формата, могли быть либо "схлопнуты" старым
+// багом (клубы пропадали без матча), либо созданы ещё в старом однораундовом
+// плей-офф формате (без лиг-фазы). Этот роут не трогает уже ЗАВЕРШЁННые
+// турниры, а для ещё активных — стирает fixtures и создаёт заново:
+// - кубок страны: простой плей-офф с баями (как и раньше);
+// - еврокубки: ПОЛНОСТЬЮ новый формат — лиг-фаза на N соперников + плей-офф
+//   с двумя ногами (тот же формат, что и для новых карьер).
 import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
 import {
-  DOMESTIC_CUPS, CHAMPIONS_LEAGUE, EUROPA_LEAGUE, CONFERENCE_LEAGUE,
+  CHAMPIONS_LEAGUE, EUROPA_LEAGUE, CONFERENCE_LEAGUE,
   CHAMPIONS_LEAGUE_CLUBS_2025, EUROPA_LEAGUE_CLUBS_2025, CONFERENCE_LEAGUE_CLUBS_2025,
-  generateKnockoutRound1, getClubLeague,
+  generateKnockoutRound1, getClubLeague, LEAGUE_PHASE_CONFIG, generateLeaguePhaseSchedule,
 } from "@/lib/competitions";
-import { getDomesticCupRoundDate, getEuroCupRoundDate } from "@/lib/seasonCalendar";
+import { getDomesticCupRoundDate, getLeaguePhaseMatchdayDate } from "@/lib/seasonCalendar";
+
+const CAL_KEY_MAP: Record<string, "champions_league" | "europa_league" | "conference_league"> = {
+  [CHAMPIONS_LEAGUE.name]: "champions_league",
+  [EUROPA_LEAGUE.name]: "europa_league",
+  [CONFERENCE_LEAGUE.name]: "conference_league",
+};
+const CLUB_LIST_MAP: Record<string, string[]> = {
+  [CHAMPIONS_LEAGUE.name]: CHAMPIONS_LEAGUE_CLUBS_2025,
+  [EUROPA_LEAGUE.name]: EUROPA_LEAGUE_CLUBS_2025,
+  [CONFERENCE_LEAGUE.name]: CONFERENCE_LEAGUE_CLUBS_2025,
+};
 
 export async function POST(req: Request) {
   const { seasonId } = await req.json();
@@ -32,53 +43,62 @@ export async function POST(req: Request) {
   const leagueClubs: string[] = (league?.clubs ?? []).map((c: any) => c.id);
 
   for (const comp of competitions) {
-    let clubList: string[] | null = null;
-    let avoidSameGroup: ((clubId: string) => string | undefined) | undefined;
-    let getRoundDate: (() => string) | null = null;
-
     if (comp.type === "domestic_cup") {
-      clubList = leagueClubs;
-      getRoundDate = () => getDomesticCupRoundDate(1);
-    } else if (comp.type === "continental") {
-      const map: Record<string, string[]> = {
-        [CHAMPIONS_LEAGUE.name]: CHAMPIONS_LEAGUE_CLUBS_2025,
-        [EUROPA_LEAGUE.name]: EUROPA_LEAGUE_CLUBS_2025,
-        [CONFERENCE_LEAGUE.name]: CONFERENCE_LEAGUE_CLUBS_2025,
-      };
-      const calKeyMap: Record<string, "champions_league" | "europa_league" | "conference_league"> = {
-        [CHAMPIONS_LEAGUE.name]: "champions_league",
-        [EUROPA_LEAGUE.name]: "europa_league",
-        [CONFERENCE_LEAGUE.name]: "conference_league",
-      };
-      clubList = map[comp.name] ?? null;
-      avoidSameGroup = getClubLeague;
-      if (clubList) getRoundDate = () => getEuroCupRoundDate(calKeyMap[comp.name], 1);
-    }
-    // super_cup — не трогаем: одноматчевые/полуфинальные форматы не подвержены
-    // этому багу (список участников там всегда маленький и фиксированный).
+      if (leagueClubs.length < 2) continue;
+      await supabase.from("cup_fixtures").delete().eq("competition_id", comp.id);
 
-    if (!clubList || clubList.length < 2 || !getRoundDate) continue;
-
-    await supabase.from("cup_fixtures").delete().eq("competition_id", comp.id);
-
-    const { pairs, byeTeam } = generateKnockoutRound1(clubList, avoidSameGroup);
-    const matchDate = getRoundDate();
-    const rows: any[] = pairs.map(p => ({
-      competition_id: comp.id, round: 1, round_name: "Round 1",
-      home_club: p.home, away_club: p.away, match_date: matchDate,
-      ...(comp.type === "continental" ? { is_two_legs: true } : {}),
-    }));
-    if (byeTeam) {
-      rows.push({
+      const { pairs, byeTeam } = generateKnockoutRound1(leagueClubs);
+      const matchDate = getDomesticCupRoundDate(1);
+      const rows: any[] = pairs.map(p => ({
         competition_id: comp.id, round: 1, round_name: "Round 1",
-        home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
-        played: true, winner_club: byeTeam, is_bye: true,
-      });
+        home_club: p.home, away_club: p.away, match_date: matchDate,
+      }));
+      if (byeTeam) {
+        rows.push({
+          competition_id: comp.id, round: 1, round_name: "Round 1",
+          home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
+          played: true, winner_club: byeTeam, is_bye: true,
+        });
+      }
+      await supabase.from("cup_fixtures").insert(rows);
+      await supabase.from("competitions").update({
+        current_round: 1, status: "active", winner_club: null, phase: "knockout", league_phase_rounds: 0,
+      }).eq("id", comp.id);
+      repaired.push(comp.name);
+      continue;
     }
-    await supabase.from("cup_fixtures").insert(rows);
-    await supabase.from("competitions").update({ current_round: 1, status: "active", winner_club: null }).eq("id", comp.id);
 
-    repaired.push(comp.name);
+    if (comp.type === "continental") {
+      const clubList = CLUB_LIST_MAP[comp.name];
+      const calKey = CAL_KEY_MAP[comp.name];
+      const phaseConfig = LEAGUE_PHASE_CONFIG[comp.name];
+      if (!clubList || !calKey || !phaseConfig) continue;
+
+      await supabase.from("cup_fixtures").delete().eq("competition_id", comp.id);
+
+      const schedule = generateLeaguePhaseSchedule(clubList, phaseConfig.games, getClubLeague);
+      const rows: any[] = [];
+      schedule.forEach((roundPairs, idx) => {
+        const md = idx + 1;
+        const matchDate = getLeaguePhaseMatchdayDate(calKey, md);
+        for (const p of roundPairs) {
+          rows.push({
+            competition_id: comp.id, round: md, round_name: "League Phase",
+            matchday_label: `MD${md}`, home_club: p.home, away_club: p.away, match_date: matchDate,
+          });
+        }
+      });
+      await supabase.from("cup_fixtures").insert(rows);
+      await supabase.from("competitions").update({
+        current_round: 1, status: "active", winner_club: null,
+        phase: "league_phase", league_phase_rounds: phaseConfig.games,
+      }).eq("id", comp.id);
+      repaired.push(comp.name);
+      continue;
+    }
+
+    // super_cup — не трогаем: одноматчевые/полуфинальные форматы с маленьким
+    // фиксированным числом участников этой категории багов не подвержены.
   }
 
   return Response.json({ repaired });

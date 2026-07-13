@@ -5,8 +5,9 @@ import {
   DOMESTIC_CUPS, SUPER_CUPS, CHAMPIONS_LEAGUE, EUROPA_LEAGUE, CONFERENCE_LEAGUE,
   CHAMPIONS_LEAGUE_CLUBS_2025, EUROPA_LEAGUE_CLUBS_2025, CONFERENCE_LEAGUE_CLUBS_2025,
   TOP5_LEAGUES, generateKnockoutRound1, getClubLeague,
+  LEAGUE_PHASE_CONFIG, generateLeaguePhaseSchedule,
 } from "@/lib/competitions";
-import { getEuroCupRoundDate, getDomesticCupRoundDate, getSuperCupDate, getSuperCupRoundDate } from "@/lib/seasonCalendar";
+import { getEuroCupRoundDate, getDomesticCupRoundDate, getSuperCupDate, getSuperCupRoundDate, getLeaguePhaseMatchdayDate } from "@/lib/seasonCalendar";
 
 export async function createSeasonCompetitions(
   seasonId: string, leagueName: string,
@@ -58,28 +59,31 @@ export async function createSeasonCompetitions(
 
     for (const [def, clubList, calKey] of euroComps) {
       if (clubList.length < 2) continue;
+      const phaseConfig = LEAGUE_PHASE_CONFIG[def.name];
 
       const { data: comp } = await supabase.from("competitions").insert({
         season_id: seasonId, type: def.type, name: def.name, format: def.format,
         prize_winner: def.prizeWinner, prize_runner: def.prizeRunner, prize_participation: def.prizeParticipation,
+        phase: "league_phase", league_phase_rounds: phaseConfig?.games ?? 0,
       }).select().single();
 
-      if (comp) {
-        const { pairs, byeTeam } = generateKnockoutRound1(clubList, getClubLeague);
-        const matchDate = getEuroCupRoundDate(calKey, 1);
-        const rows: any[] = pairs.map(p => ({
-          competition_id: comp.id, round: 1, round_name: "Round 1", is_two_legs: true,
-          home_club: p.home, away_club: p.away, match_date: matchDate,
-        }));
-        if (byeTeam) {
-          // Нечётное число клубов в списке еврокубка (реальные составы 2025/26
-          // не всегда чётные) — раньше один клуб просто пропадал без матча.
-          rows.push({
-            competition_id: comp.id, round: 1, round_name: "Round 1",
-            home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
-            played: true, winner_club: byeTeam, is_bye: true,
-          });
-        }
+      if (comp && phaseConfig) {
+        // Единая жеребьёвка перед стартом сезона: каждому клубу сразу
+        // назначаются N разных соперников на весь групповой этап (реальный
+        // формат УЕФА с 2024/25 — не однокруговой knockout с 1-го раунда,
+        // как было раньше).
+        const schedule = generateLeaguePhaseSchedule(clubList, phaseConfig.games, getClubLeague);
+        const rows: any[] = [];
+        schedule.forEach((roundPairs, idx) => {
+          const md = idx + 1;
+          const matchDate = getLeaguePhaseMatchdayDate(calKey, md);
+          for (const p of roundPairs) {
+            rows.push({
+              competition_id: comp.id, round: md, round_name: `League Phase`,
+              matchday_label: `MD${md}`, home_club: p.home, away_club: p.away, match_date: matchDate,
+            });
+          }
+        });
         await supabase.from("cup_fixtures").insert(rows);
         created.push({ name: def.name, id: comp.id });
       }
