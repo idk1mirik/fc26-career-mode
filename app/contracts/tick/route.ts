@@ -3,12 +3,13 @@
 //
 // Ручной/дебажный эндпоинт — аналог app/api/season/repair-budget/route.ts
 // из твоего проекта. В норме payWeeklyWages вызывается автоматически из
-// lib/simulateMatchday.ts, а advanceContractYears — из перехода на новый сезон.
-// Этот роут нужен, если понадобится вручную дёрнуть тик (тест/отладка/ремонт).
-import { payWeeklyWages, advanceContractYears } from "@/lib/contracts";
+// lib/simulateMatchday.ts, а rolloverContracts — из перехода на новый сезон
+// (app/api/season/new/route.ts). Этот роут нужен, если понадобится вручную
+// дёрнуть тик (тест/отладка/ремонт).
+import { payWeeklyWages, rolloverContracts } from "@/lib/contracts";
 
 export async function POST(req: Request) {
-  const { mode, seasonId, careerId, clubIds } = await req.json();
+  const { mode, seasonId, careerId, clubIds, newSeasonId } = await req.json();
 
   if (mode === "wages") {
     if (!seasonId || !clubIds?.length) {
@@ -19,11 +20,11 @@ export async function POST(req: Request) {
   }
 
   if (mode === "years") {
-    if (!careerId || !seasonId) {
-      return Response.json({ error: "careerId and seasonId are required" }, { status: 400 });
+    if (!careerId || !seasonId || !newSeasonId) {
+      return Response.json({ error: "careerId, seasonId (old) and newSeasonId are required" }, { status: 400 });
     }
-    const expired = await advanceContractYears(careerId, seasonId);
-    return Response.json({ ok: true, expiredCount: expired.length, expired });
+    const result = await rolloverContracts(careerId, seasonId, newSeasonId);
+    return Response.json({ ok: true, ...result });
   }
 
   return Response.json({ error: "mode must be 'wages' or 'years'" }, { status: 400 });
