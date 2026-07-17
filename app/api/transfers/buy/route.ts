@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { chargeClub, applyClubEarning } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
+import { calculateWageDemand } from "@/lib/contracts";
 
 export async function POST(req: Request) {
   const { seasonId, buyerClubId, playerId } = await req.json();
@@ -49,6 +50,29 @@ export async function POST(req: Request) {
     .eq("season_id", seasonId).eq("player_id", playerId).eq("status", "open");
 
   invalidateOverridesCache(seasonId);
+
+  // Контракт: старый — у прежнего клуба, его нужно закрыть, у нового
+  // владельца создать свежий (иначе привязка club_id в contracts не
+  // совпадает с реальным клубом игрока после трансфера).
+  try {
+    const { data: oldContract } = await supabase.from("contracts")
+      .select("*").eq("season_id", seasonId).eq("club_id", currentClub).eq("player_id", playerId).maybeSingle();
+
+    await supabase.from("contracts").delete()
+      .eq("season_id", seasonId).eq("club_id", currentClub).eq("player_id", playerId);
+
+    const newWage = oldContract?.wage_weekly ?? calculateWageDemand(
+      { overall: player.overall, age: player.age }, { reputationDiscount: 0 }, "rotation"
+    );
+
+    await supabase.from("contracts").insert({
+      season_id: seasonId, career_id: oldContract?.career_id ?? seasonId,
+      club_id: buyerClubId, player_id: playerId, player_name: player.name,
+      wage_weekly: newWage, years_left: 3, squad_role: oldContract?.squad_role ?? "rotation",
+      release_clause: null, signing_bonus: 0, happiness: 65, // чуть ниже нейтрали — обвыкается в новом клубе
+      wants_renewal: false, transfer_listed: false,
+    });
+  } catch (e) { console.error("Contract transfer failed", e); }
 
   return Response.json({ success: true, player: { ...player, team: buyerClubId }, fee, fromClub: currentClub });
 }

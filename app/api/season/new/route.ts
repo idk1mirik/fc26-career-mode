@@ -7,6 +7,7 @@ import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { getPlayersByClub } from "@/lib/players";
 import { computeInitialBudget } from "@/lib/finance";
 import { progressLeaguePlayers } from "@/lib/progression";
+import { rolloverContracts, createContractsForClub } from "@/lib/contracts";
 
 function buildFixtures(clubs: string[], seasonId: string) {
   const rows: any[] = [];
@@ -72,6 +73,13 @@ export async function POST(req: Request) {
   try {
     await progressLeaguePlayers(clubs, oldSeasonId, careerId);
   } catch (e) { console.error("Player progression failed", e); }
+
+  // Контракты не переживают смену season_id сами по себе — переносим их
+  // явно (с уменьшенным years_left). У кого контракт кончился — не переносится,
+  // такие игроки станут доступны как свободные агенты на трансферном рынке.
+  try {
+    await rolloverContracts(careerId, oldSeasonId, newSeason.id);
+  } catch (e) { console.error("Contract rollover failed", e); }
 
   const fixtures = buildFixtures(clubs, newSeason.id);
   await supabase.from("fixtures").insert(fixtures);

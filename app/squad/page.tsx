@@ -8,6 +8,7 @@ import { getLeagueTheme } from "@/constants/themes";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { PlayerModal, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
 import { getAdjustedOverall } from "@/lib/positionPenalty";
+import { ContractPanel } from "@/components/ContractPanel";
 
 // ─── FORMATIONS ───────────────────────────────────────────────────────────────
 // Генератор координат для линий
@@ -420,6 +421,8 @@ export default function SquadPage() {
   const [hydrated, setHydrated]         = useState(false);
   const [modalPlayer, setModalPlayer]   = useState<any>(null);
   const [modalClosing, setModalClosing] = useState(false);
+  const [clubContracts, setClubContracts] = useState<any[]>([]);
+  const [contractPanelPlayer, setContractPanelPlayer] = useState<any>(null);
   const [tab, setTab]                   = useState<"lineup"|"squad">("lineup");
   const [lineup, setLineup]             = useState<Record<string, any>>({});
   const [formation, setFormation]       = useState("4-3-3");
@@ -483,8 +486,16 @@ export default function SquadPage() {
 
       fetch(`/api/season-stats?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
         .then(r => r.ok ? r.json() : null).then(data => { if (data) setSeasonStats(data.stats ?? []); }).catch(() => {});
+
+      fetch(`/api/contracts?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setClubContracts(data.contracts ?? []); }).catch(() => {});
     }
   }, [hydrated, selectedClub, seasonId]);
+
+  const contractFor = useCallback((player: any) => {
+    const key = player?.id ?? player?.name;
+    return clubContracts.find(c => c.player_id === key);
+  }, [clubContracts]);
 
   function autoFill(data: any[], form: string) {
     const slots = FORMATIONS[form] ?? FORMATIONS["4-3-3"];
@@ -836,16 +847,58 @@ export default function SquadPage() {
       </div>
 
       {modalPlayer && (
-        <PlayerModal
-          player={modalPlayer}
-          clubName={selectedClub?.name || ""}
-          clubColor={glowColor}
-          theme={theme}
-          onClose={closeModal}
-          isClosing={modalClosing}
-          seasonStats={seasonStats.find(s => (s.player_id || s.player_name) === (modalPlayer.id ?? modalPlayer.name)) ?? null}
-        />
+        <>
+          <PlayerModal
+            player={modalPlayer}
+            clubName={selectedClub?.name || ""}
+            clubColor={glowColor}
+            theme={theme}
+            onClose={closeModal}
+            isClosing={modalClosing}
+            seasonStats={seasonStats.find(s => (s.player_id || s.player_name) === (modalPlayer.id ?? modalPlayer.name)) ?? null}
+          />
+          {/* Кнопка контракта поверх модалки игрока — сама модалка из
+              playerComponents.tsx не принимает доп. кнопки, поэтому кладём
+              рядом с тем же z-index-слоем. */}
+          <button
+            onClick={() => setContractPanelPlayer(modalPlayer)}
+            className="fixed z-[60] bottom-8 right-8 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-full px-5 py-3 shadow-lg"
+          >
+            💰 Contract
+          </button>
+        </>
       )}
+
+      {contractPanelPlayer && (() => {
+        const contract = contractFor(contractPanelPlayer);
+        if (!contract) return null; // контракт ещё грузится/не создан — страховка на всякий случай
+        return (
+          <ContractPanel
+            theme={theme as any}
+            locale="en"
+            player={{
+              contractId: contract.id,
+              playerId: contractPanelPlayer.id ?? contractPanelPlayer.name,
+              playerName: contractPanelPlayer.name,
+              overall: contractPanelPlayer.overall,
+              age: contractPanelPlayer.age,
+              currentWage: contract.wage_weekly,
+              currentYears: contract.years_left,
+              currentRole: contract.squad_role,
+              happiness: contract.happiness,
+            }}
+            onClose={() => setContractPanelPlayer(null)}
+            onSigned={() => {
+              setContractPanelPlayer(null);
+              // перечитать контракты клуба, чтобы UI сразу показал новые условия
+              if (seasonId && selectedClub) {
+                fetch(`/api/contracts?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
+                  .then(r => r.ok ? r.json() : null).then(data => { if (data) setClubContracts(data.contracts ?? []); }).catch(() => {});
+              }
+            }}
+          />
+        );
+      })()}
 
       {showNamePrompt && (
         <NamePromptModal defaultValue="My Formation" theme={theme}

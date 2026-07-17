@@ -8,6 +8,7 @@ import { simulateMatchByRating } from "@/lib/matchEngine";
 import { createSeasonCompetitions } from "@/lib/createCompetitions";
 import { getPlayersByClub } from "@/lib/players";
 import { computeInitialBudget } from "@/lib/finance";
+import { createContractsForClub } from "@/lib/contracts";
 
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 
@@ -73,15 +74,22 @@ export async function POST(req: Request) {
 
   // Инициализируем таблицу — включая стартовый бюджет клуба (раньше это
   // значение нигде не сохранялось и пересчитывалось на лету при каждом рендере).
-  const budgets = await Promise.all(clubs.map(async (c) => {
-    const players = await getPlayersByClub(c, season.id);
+  const clubPlayers = await Promise.all(clubs.map(c => getPlayersByClub(c, season.id)));
+  const budgets = clubPlayers.map((players) => {
     const squadValue = players.reduce((s, p: any) => s + (p.market_value ?? 0), 0);
     const avgOverall = players.length ? players.reduce((s, p: any) => s + (p.overall ?? 70), 0) / players.length : 70;
     return computeInitialBudget(squadValue, avgOverall);
-  }));
+  });
   const standingsRows = clubs.map((c, i) => ({ season_id: season.id, club_id: c, budget: budgets[i] }));
   const { error: stErr } = await supabase.from("standings").insert(standingsRows);
   if (stErr) return Response.json({ error: stErr.message }, { status: 500 });
+
+  // Контракты всех игроков всех клубов лиги — без этого шага payWeeklyWages
+  // в simulateMatchday.ts не находит ни одной строки (бюджет никогда не
+  // уменьшается) и ContractPanel в UI видит пустоту для новой карьеры.
+  try {
+    await Promise.all(clubs.map((c, i) => createContractsForClub(season.id, season.id, c, clubPlayers[i])));
+  } catch (e) { console.error("Contract creation failed", e); }
 
   // Создаём кубки/евро-кубки/суперкубок для этого сезона
   try {

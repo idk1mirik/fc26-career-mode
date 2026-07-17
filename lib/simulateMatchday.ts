@@ -9,6 +9,7 @@ import { generateMatchRatings } from "@/lib/playerRatings";
 import { getPlayersByClub } from "@/lib/players";
 import { awardLeaguePositionPrizes } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
+import { payWeeklyWages } from "@/lib/contracts";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
@@ -207,6 +208,7 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   }
 
   await Promise.all(writes);
+  await payWeeklyWages(seasonId, allClubs);
   await persistStatusAndStats(seasonId, allClubs, statusUpdates, seasonStatsAccum);
 
   const { count } = await supabase.from("fixtures")

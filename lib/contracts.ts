@@ -221,38 +221,74 @@ export async function payWeeklyWages(seasonId: string, clubIds: string[]) {
   await Promise.all(writes);
 }
 
-// ── Тик по годам контракта (вызывать раз в сезон, рядом с progressLeaguePlayers) ──
-// Возвращает список игроков, у которых контракт кончился (years_left <= 0) —
-// их стоит выкинуть в пул свободных агентов на трансферном рынке.
-export async function advanceContractYears(careerId: string, seasonId: string): Promise<Contract[]> {
+// ── Перенос контрактов на новый сезон (вызывать из season/new вместе с
+// progressLeaguePlayers) ──
+// ВАЖНО: contracts, как и standings/player_status в этом проекте, привязаны
+// к конкретному season_id. Поэтому переход на новый сезон = НОВЫЙ season_id,
+// и контракты нужно не мутировать на месте, а скопировать вперёд под новый
+// season_id с уменьшенным years_left — иначе на второй сезон карьеры они
+// просто "исчезают" (GET /api/contracts?seasonId=новый ничего не найдёт).
+//
+// Игроки с истёкшим контрактом (years_left доходит до 0) в новый сезон НЕ
+// переносятся — возвращаются отдельным списком expired, чтобы вызывающий
+// код (season/new/route.ts) мог закинуть их в пул свободных агентов.
+export async function rolloverContracts(
+  careerId: string, oldSeasonId: string, newSeasonId: string
+): Promise<{ expired: Contract[]; carried: number }> {
   const { data: contracts } = await supabase.from("contracts")
-    .select("*").eq("career_id", careerId).eq("season_id", seasonId);
-  if (!contracts?.length) return [];
+    .select("*").eq("career_id", careerId).eq("season_id", oldSeasonId);
+  if (!contracts?.length) return { expired: [], carried: 0 };
 
   const expired: Contract[] = [];
-  const writes = [];
+  const toInsert: any[] = [];
 
   for (const c of contracts as Contract[]) {
     const newYears = c.years_left - 1;
     if (newYears <= 0) {
-      expired.push(c);
-      // Контракт не продлён — освобождаем агента, а не удаляем строку
-      // (чтобы историю зарплат/довольства можно было посмотреть)
-      writes.push(supabase.from("contracts").update({
-        years_left: 0, transfer_listed: true, wants_renewal: false,
-      }).eq("id", c.id));
-    } else {
-      // Ближе к истечению контракта (последний год) — шанс, что игрок
-      // сам просит продление, если он доволен клубом
-      const wantsRenewal = newYears === 1 && c.happiness >= 55 && Math.random() < 0.4;
-      writes.push(supabase.from("contracts").update({
-        years_left: newYears, wants_renewal: wantsRenewal,
-      }).eq("id", c.id));
+      expired.push({ ...c, years_left: 0 });
+      continue; // контракт кончился — не переносим, игрок уходит в свободные агенты
     }
+    const wantsRenewal = newYears === 1 && c.happiness >= 55 && Math.random() < 0.4;
+    toInsert.push({
+      season_id: newSeasonId, career_id: careerId, club_id: c.club_id,
+      player_id: c.player_id, player_name: c.player_name,
+      wage_weekly: c.wage_weekly, years_left: newYears,
+      release_clause: c.release_clause, signing_bonus: 0,
+      squad_role: c.squad_role, happiness: c.happiness,
+      wants_renewal: wantsRenewal, transfer_listed: false,
+    });
   }
 
-  await Promise.all(writes);
-  return expired;
+  if (toInsert.length) {
+    const { error } = await supabase.from("contracts").insert(toInsert);
+    if (error) throw error;
+  }
+
+  return { expired, carried: toInsert.length };
+}
+
+// ── Массовое создание контрактов для клуба (старт новой карьеры / бэкафилл) ──
+// players — можно передать уже загруженный список (см. интеграцию в
+// season/route.ts, где players для клуба и так уже загружаются для бюджета,
+// повторный getPlayersByClub не нужен).
+export async function createContractsForClub(
+  seasonId: string, careerId: string, clubId: string, players: any[]
+) {
+  const rows = players.map((p: any) => ({
+    season_id: seasonId, career_id: careerId, club_id: clubId,
+    player_id: p.id ?? p.name, player_name: p.name,
+    wage_weekly: p.wage ?? Math.max(500, Math.round((p.overall * p.overall * 0.3) / 500) * 500),
+    years_left: p.age >= 30 ? 1 : p.age <= 21 ? 4 : 3,
+    squad_role: p.overall >= 82 ? "star" : p.overall >= 76 ? "important" : p.age <= 20 ? "prospect" : "rotation",
+    release_clause: null, signing_bonus: 0, happiness: 70,
+    wants_renewal: false, transfer_listed: false,
+  }));
+  if (!rows.length) return;
+  // upsert, чтобы можно было безопасно перевызвать (например, если часть
+  // клубов уже получила контракты, а запрос упал на середине списка)
+  const { error } = await supabase.from("contracts")
+    .upsert(rows, { onConflict: "season_id,club_id,player_id", ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 // ── Довольство игрока — небольшой износ/восстановление за сезон ──
