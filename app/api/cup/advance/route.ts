@@ -102,6 +102,7 @@ export async function POST(req: Request) {
   const results: any[] = [];
   const statusUpdates: Record<string, StatusUpdateAcc> = {};
   const seasonStatsAccum: Record<string, SeasonStatAcc> = {};
+  const fixtureWrites: any[] = [];
 
   for (const fix of safeFixtures) {
     const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
@@ -158,9 +159,9 @@ export async function POST(req: Request) {
     if (homeGoals === awayGoals) winner = Math.random() > 0.5 ? fix.home_club : fix.away_club;
     else winner = homeGoals > awayGoals ? fix.home_club : fix.away_club;
 
-    await supabase.from("cup_fixtures").update({
+    fixtureWrites.push(supabase.from("cup_fixtures").update({
       home_goals: homeGoals, away_goals: awayGoals, played: true, winner_club: winner, events, ratings,
-    }).eq("id", fix.id);
+    }).eq("id", fix.id));
 
     results.push({
       home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, winner, events, ratings,
@@ -173,7 +174,7 @@ export async function POST(req: Request) {
     accumulateSeasonStats(events, "away", fix.away_club, ratings.away, seasonStatsAccum);
   }
 
-  await persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum);
+  await Promise.all([Promise.all(fixtureWrites), persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum)]);
 
   // ════════════════════════════════════════════════════════════════════════
   // НОВЫЙ ФОРМАТ: лиг-фаза → плей-офф с двумя ногами

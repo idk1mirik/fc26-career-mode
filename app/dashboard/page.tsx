@@ -470,25 +470,27 @@ export default function DashboardPage() {
   // просто копились неигранными. Теперь после каждого лигового тура ещё
   // проверяем все активные турниры: если дата текущего раунда уже наступила
   // (или прошла) по игровому календарю — доигрываем его тоже, в автопилоте.
-  const advanceDueCups = async (currentDateStr: string) => {
-    let safety = 10; // на случай нескольких кубковых раундов подряд между лиговыми турами
+  const advanceDueCups = async (currentDateStr: string, ignoreDate = false) => {
+    // Раньше тут дёргался полный /api/competitions (все fixtures + таблица
+    // лиг-фазы) на КАЖДОЙ проверке — при промотке всего сезона это тысячи
+    // тяжёлых запросов и заметные тормоза. Теперь — лёгкая проверка "у кого
+    // вообще есть неигранный тур и когда он датирован", без лишних данных.
+    //
+    // ignoreDate=true — используется ПОСЛЕ завершения лигового сезона: раз
+    // календарь игры двигается только через туры лиги, а лига уже закончилась,
+    // дальше ждать больше нечего — доигрываем оставшиеся раунды кубков как есть.
+    let safety = ignoreDate ? 20 : 6;
     while (safety-- > 0) {
-      const compRes = await fetch(`/api/competitions?seasonId=${seasonId}`);
-      if (!compRes.ok) return;
-      const { competitions, fixturesByComp } = await compRes.json();
+      const dueRes = await fetch(`/api/competitions/due?seasonId=${seasonId}`);
+      if (!dueRes.ok) return;
+      const { due } = await dueRes.json();
       let advancedAny = false;
 
-      for (const comp of competitions ?? []) {
-        if (comp.status === "finished") continue;
-        const roundFixtures = (fixturesByComp[comp.id] ?? []).filter((f: any) => f.round === comp.current_round);
-        const unplayed = roundFixtures.filter((f: any) => !f.played);
-        if (!unplayed.length) continue; // раунд был только баем — уже "сыгран" сам
-        const roundDate = unplayed[0]?.match_date;
-        if (roundDate && roundDate > currentDateStr) continue; // дата ещё не наступила
-
+      for (const d of due as { competitionId: string; matchDate: string | null }[]) {
+        if (!ignoreDate && d.matchDate && d.matchDate > currentDateStr) continue; // дата ещё не наступила
         await fetch("/api/cup/advance", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ competitionId: comp.id, userClubId: userClub }),
+          body: JSON.stringify({ competitionId: d.competitionId, userClubId: userClub }),
         });
         advancedAny = true;
       }
@@ -520,6 +522,11 @@ export default function DashboardPage() {
 
         if (finished) setSeasonFinished(true);
       }
+      // Лига закончилась, но у кубков (особенно еврокубков — их плей-офф
+      // может ещё продолжаться) могли остаться недоигранные раунды с датами
+      // ПОСЛЕ последнего тура лиги. Дальше календарь всё равно не двигается
+      // сам по себе — доигрываем всё, что осталось, не дожидаясь дат.
+      await advanceDueCups("9999-12-31", true);
       await loadData(seasonId);
       await loadCalendar(seasonId, userClub);
     } catch (e) { console.error(e); setApiError("Network error during season simulation."); }
