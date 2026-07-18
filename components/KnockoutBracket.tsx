@@ -14,8 +14,6 @@ type Fixture = {
   played: boolean; is_bye?: boolean; winner_club?: string | null;
 };
 
-const STAGE_ORDER = ["Playoff Round", "Round of 16", "Quarter-final", "Semi-final", "Final"];
-
 export function KnockoutBracket({
   fixtures, userClub, getClubLogo, theme = "classic",
 }: {
@@ -24,9 +22,21 @@ export function KnockoutBracket({
   getClubLogo: (club: string) => string;
   theme?: "classic" | "aurora" | "maleficent";
 }) {
-  const stages = STAGE_ORDER
-    .map(name => ({ name, fx: fixtures.filter(f => f.round_name === name) }))
-    .filter(s => s.fx.length > 0);
+  // Стадии определяем по факту: группируем по round_name, порядок — по
+  // минимальному round внутри группы. Раньше список стадий был жёстко
+  // зашит под еврокубки (Playoff Round → ... → Final) — для кубка страны
+  // с другими названиями раундов сетка просто не рисовалась вообще.
+  const stageMap = new Map<string, { minRound: number; fx: Fixture[] }>();
+  for (const f of fixtures) {
+    const key = f.round_name || `Round ${f.round}`;
+    if (!stageMap.has(key)) stageMap.set(key, { minRound: f.round, fx: [] });
+    const s = stageMap.get(key)!;
+    s.minRound = Math.min(s.minRound, f.round);
+    s.fx.push(f);
+  }
+  const stages = [...stageMap.entries()]
+    .sort((a, b) => a[1].minRound - b[1].minRound)
+    .map(([name, v]) => ({ name, fx: v.fx }));
 
   if (!stages.length) return null;
 

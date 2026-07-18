@@ -847,26 +847,16 @@ export default function SquadPage() {
       </div>
 
       {modalPlayer && (
-        <>
-          <PlayerModal
-            player={modalPlayer}
-            clubName={selectedClub?.name || ""}
-            clubColor={glowColor}
-            theme={theme}
-            onClose={closeModal}
-            isClosing={modalClosing}
-            seasonStats={seasonStats.find(s => (s.player_id || s.player_name) === (modalPlayer.id ?? modalPlayer.name)) ?? null}
-          />
-          {/* Кнопка контракта поверх модалки игрока — сама модалка из
-              playerComponents.tsx не принимает доп. кнопки, поэтому кладём
-              рядом с тем же z-index-слоем. */}
-          <button
-            onClick={() => setContractPanelPlayer(modalPlayer)}
-            className="fixed z-[1000] bottom-8 right-8 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-full px-5 py-3 shadow-lg shadow-emerald-500/30 transition-transform hover:scale-105"
-          >
-            💰 Contract
-          </button>
-        </>
+        <PlayerModal
+          player={modalPlayer}
+          clubName={selectedClub?.name || ""}
+          clubColor={glowColor}
+          theme={theme}
+          onClose={closeModal}
+          isClosing={modalClosing}
+          seasonStats={seasonStats.find(s => (s.player_id || s.player_name) === (modalPlayer.id ?? modalPlayer.name)) ?? null}
+          onManageContract={() => setContractPanelPlayer(modalPlayer)}
+        />
       )}
 
       {contractPanelPlayer && (() => {

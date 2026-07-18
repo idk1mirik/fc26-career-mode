@@ -621,11 +621,12 @@ export function ExpandableStats({ player, isGK, stats, cfg, br }: {
 // ─── PLAYER MODAL ─────────────────────────────────────────────────────────────
 
 export function PlayerModal({
-  player, clubName, clubColor, theme, onClose, isClosing, seasonStats, locale = "en",
+  player, clubName, clubColor, theme, onClose, isClosing, seasonStats, locale = "en", onManageContract,
 }: {
   player: any; clubName: string; clubColor: string; theme: string; onClose: () => void; isClosing?: boolean;
   seasonStats?: { matches_played: number; goals: number; assists?: number; yellow_cards: number; red_cards: number; avg_rating: number } | null;
   locale?: "en" | "ru";
+  onManageContract?: () => void;
 }) {
   const [imgError, setImgError]         = useState(false);
   const [fullImgError, setFullImgError] = useState(false);
@@ -794,6 +795,13 @@ export function PlayerModal({
                   <span style={{ fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
                 </div>
               ))}
+              {onManageContract && (
+                <button onClick={onManageContract}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, padding: "6px 16px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: br, cursor: "pointer" }}>
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>💰</span>
+                  <span style={{ fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: "#10b981" }}>{locale === "ru" ? "Контракт" : "Contract"}</span>
+                </button>
+              )}
             </div>
             <div style={{ height: 1, background: cfg.accentLine }} />
             <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
@@ -864,6 +872,15 @@ export function PlayerModal({
                   <span style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.4em", color: cfg.labelColor, marginTop: 2 }}>{label}</span>
                 </div>
               ))}
+              {onManageContract && (
+                <button onClick={onManageContract}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "8px 18px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: br, cursor: "pointer", transition: "transform 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.transform = "scale(1.04)"}
+                  onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                  <span style={{ fontSize: 20, lineHeight: 1 }}>💰</span>
+                  <span style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: "#10b981" }}>{locale === "ru" ? "Контракт" : "Contract"}</span>
+                </button>
+              )}
             </div>
             <div style={{ height: 1, background: cfg.accentLine }} />
             <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />

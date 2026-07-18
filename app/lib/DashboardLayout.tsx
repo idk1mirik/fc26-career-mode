@@ -211,7 +211,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden relative z-10">
         <div className="absolute top-4 right-4 z-50"><ThemeToggle /></div>
-        <div key={pathname} className="animate-fade-in-up">
+        <div key={pathname} className="animate-fade-in">
           {children}
         </div>
       </div>

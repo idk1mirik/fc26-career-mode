@@ -6,6 +6,7 @@ import { useThemeStore } from "@/app/store/themeStore";
 import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { getThemeCopy } from "@/lib/i18n";
+import { KnockoutBracket } from "@/components/KnockoutBracket";
 
 const THEME_UI = {
   classic: {
@@ -47,7 +48,6 @@ const COMP_ICON: Record<string, string> = {
   league: "⚽", domestic_cup: "🏆", super_cup: "⚡", continental: "🌍",
 };
 
-
 export default function FixturesPage() {
   const router = useRouter();
   const themeRaw = useThemeStore(s => s.theme);
@@ -55,7 +55,14 @@ export default function FixturesPage() {
   const selectedClub = useCareerStore(s => s.selectedClub);
   const [matches, setMatches] = useState<any[]>([]);
   const [filter, setFilter]   = useState("all");
+  const [view, setView] = useState<"matches" | "standings">("matches");
   const [hydrated, setHydrated] = useState(false);
+
+  // ── Данные для вкладок "Таблица / Сетка" ──────────────────────────────
+  const [leagueStandings, setLeagueStandings] = useState<any[]>([]);
+  const [competitions, setCompetitions] = useState<any[]>([]);
+  const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
+  const [standingsByComp, setStandingsByComp] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -81,7 +88,21 @@ export default function FixturesPage() {
     fetch(`/api/calendar?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
       .then(r => r.json()).then(data => setMatches(data.matches ?? []))
       .catch(() => {});
+    fetch(`/api/standings?seasonId=${seasonId}`)
+      .then(r => r.json()).then(data => setLeagueStandings(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    fetch(`/api/competitions?seasonId=${seasonId}`)
+      .then(r => r.ok ? r.json() : null).then(data => {
+        if (!data) return;
+        setCompetitions(data.competitions ?? []);
+        setFixturesByComp(data.fixturesByComp ?? {});
+        setStandingsByComp(data.standingsByComp ?? {});
+      }).catch(() => {});
   }, [hydrated, seasonId, userClub]);
+
+  // Переключаясь на "Все", вкладка "Таблица/Сетка" теряет смысл (нет единой
+  // сетки на все турниры сразу) — сбрасываем обратно на список матчей.
+  useEffect(() => { if (filter === "all") setView("matches"); }, [filter]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return matches;
@@ -99,6 +120,21 @@ export default function FixturesPage() {
     return g;
   }, [filtered]);
 
+  // Трофеи сезона — раньше после промотки сезона было видно только место в
+  // лиге на /table, а выигранные кубки/еврокубки нигде явно не показывались.
+  const wonTrophies = useMemo(
+    () => competitions.filter((c: any) => c.status === "finished" && c.winner_club === userClub),
+    [competitions, userClub]
+  );
+
+  // Для выбранного фильтра — какие данные показывать во вкладке "Таблица/Сетка"
+  const activeComp = useMemo(() => {
+    if (filter === "league" || filter === "all") return null;
+    return competitions.find((c: any) => c.type === filter || (filter === "domestic_cup" && c.type === "domestic_cup"));
+  }, [competitions, filter]);
+
+  const hasStandingsView = filter === "league" || !!activeComp;
+
   if (!hydrated) return null;
 
   return (
@@ -106,11 +142,28 @@ export default function FixturesPage() {
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-6">
           <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.fixturesHeaderLabel}</div>
-          <h1 className="text-2xl font-black">{copy.fixturesTitle}</h1>
+          <h1 className="text-2xl font-display font-black">{copy.fixturesTitle}</h1>
         </div>
 
+        {/* Трофеи этого сезона */}
+        {wonTrophies.length > 0 && (
+          <div className={`mb-6 rounded-2xl p-4 animate-fade-in-up ${ui.card}`} style={{ borderLeft: "3px solid #eab308" }}>
+            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>
+              {locale === "ru" ? "Трофеи в этом сезоне" : "Trophies this season"}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {wonTrophies.map((c: any) => (
+                <div key={c.id} className="flex items-center gap-2 text-sm font-bold">
+                  <span className="text-xl">🏆</span>
+                  <span>{c.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Competition filter */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
           {COMP_FILTERS.map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)}
               className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${filter === f.key ? ui.tabActive : ui.tabIdle}`}>
@@ -119,48 +172,143 @@ export default function FixturesPage() {
           ))}
         </div>
 
-        {Object.keys(grouped).length === 0 && (
-          <div className={`text-center py-10 ${ui.muted} text-sm`}>{copy.fixturesNoMatches}</div>
+        {/* Переключатель "Матчи / Таблица-сетка" — то, чего не хватало: раньше
+            турниры были просто фильтром списка матчей, без возможности глянуть
+            саму таблицу группы или сетку плей-офф прямо здесь. */}
+        {hasStandingsView && (
+          <div className="flex gap-2 mb-6">
+            <button onClick={() => setView("matches")}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${view === "matches" ? ui.tabActive : ui.tabIdle}`}>
+              {locale === "ru" ? "📅 Матчи" : "📅 Matches"}
+            </button>
+            <button onClick={() => setView("standings")}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${view === "standings" ? ui.tabActive : ui.tabIdle}`}>
+              {filter === "league" || (activeComp && activeComp.phase === "league_phase")
+                ? (locale === "ru" ? "📊 Таблица" : "📊 Table")
+                : (locale === "ru" ? "🏆 Сетка" : "🏆 Bracket")}
+            </button>
+          </div>
         )}
 
-        {Object.entries(grouped).map(([month, monthMatches]) => (
-          <div key={month} className="mb-6">
-            <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>
-              {month === "TBD" ? copy.fixturesDateTBD : new Date(month + "-01").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { month: "long", year: "numeric" })}
+        {view === "standings" && filter === "league" && (
+          <div className={`rounded-2xl overflow-hidden animate-fade-in-up ${ui.card}`}>
+            <div className={`grid text-[9px] uppercase tracking-widest ${ui.muted} px-4 py-3 border-b ${ui.divider}`}
+              style={{ gridTemplateColumns: "32px 1fr 40px 40px 50px" }}>
+              <span>#</span><span>{locale === "ru" ? "Клуб" : "Club"}</span>
+              <span className="text-center">{locale === "ru" ? "И" : "P"}</span>
+              <span className="text-center">{locale === "ru" ? "РМ" : "GD"}</span>
+              <span className="text-center font-black">{locale === "ru" ? "О" : "Pts"}</span>
             </div>
-            <div className={`rounded-2xl overflow-hidden ${ui.card} animate-fade-in-up`}>
-              {monthMatches.map((f, i) => {
-                const isUser = f.home_club === userClub || f.away_club === userClub;
-                const played = f.played;
-                const dateStr = f.match_date
-                  ? new Date(f.match_date + "T00:00:00").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { weekday: "short", day: "numeric" })
-                  : "TBD";
-                return (
-                  <div key={f.id}
-                    className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
-                    <div className={`text-[10px] leading-tight ${ui.muted} sm:w-24 sm:shrink-0 flex items-center gap-1`}>
-                      <span>{COMP_ICON[f.competition_type] ?? "⚽"}</span>
-                      <span>{dateStr} · {f.competition_name}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 sm:flex-1">
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-end min-w-0">
-                        <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
-                        <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
-                      </div>
-                      <div className={`w-14 sm:w-16 text-center font-black text-xs sm:text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
-                        {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
-                      </div>
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-start min-w-0">
-                        <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
-                        <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            {leagueStandings.length === 0 && (
+              <div className={`text-center py-8 ${ui.muted} text-sm`}>{copy.tableNoStandings}</div>
+            )}
+            {leagueStandings.map((row: any, i: number) => {
+              const isUser = row.club_id === userClub;
+              const gd = row.gf - row.ga;
+              return (
+                <div key={row.club_id}
+                  className={`grid items-center px-4 py-2 text-xs ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}
+                  style={{ gridTemplateColumns: "32px 1fr 40px 40px 50px" }}>
+                  <span className={`font-black ${ui.muted}`}>{i + 1}</span>
+                  <span className={`flex items-center gap-1.5 font-bold truncate ${isUser ? ui.userColor : ""}`}>
+                    <img src={getClubLogo(row.club_id)} className="w-4 h-4 object-contain shrink-0" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                    {row.club_id}
+                  </span>
+                  <span className={`text-center ${ui.muted}`}>{row.played}</span>
+                  <span className={`text-center font-bold ${gd > 0 ? "text-emerald-400" : gd < 0 ? "text-red-400" : ui.muted}`}>{gd > 0 ? `+${gd}` : gd}</span>
+                  <span className="text-center font-black">{row.points}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {view === "standings" && activeComp && activeComp.phase === "league_phase" && (
+          <div className={`rounded-2xl overflow-hidden p-4 animate-fade-in-up ${ui.card}`}>
+            <div className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 text-[9px] uppercase tracking-widest mb-1.5 px-1 ${ui.muted}`}>
+              <span>#</span><span>{locale === "ru" ? "Клуб" : "Club"}</span>
+              <span className="text-center">{locale === "ru" ? "И" : "P"}</span>
+              <span className="text-center">{locale === "ru" ? "РМ" : "GD"}</span>
+              <span className="text-center font-black">{locale === "ru" ? "О" : "Pts"}</span>
+            </div>
+            <div className="space-y-0.5 max-h-96 overflow-y-auto">
+              {(standingsByComp[activeComp.id] ?? []).map((s: any, i: number) => (
+                <div key={s.club}
+                  className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 items-center text-xs py-1 px-1 rounded-md ${s.club === userClub ? ui.highlight : ""}`}>
+                  <span className={`font-black ${i < 8 ? "text-emerald-400" : i < 24 ? "" : "opacity-40"}`}>{i + 1}</span>
+                  <span className="font-bold truncate flex items-center gap-1.5">
+                    <img src={getClubLogo(s.club)} className="w-3.5 h-3.5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                    {s.club}
+                  </span>
+                  <span className="text-center">{s.played}</span>
+                  <span className="text-center">{s.gd > 0 ? `+${s.gd}` : s.gd}</span>
+                  <span className="text-center font-black">{s.points}</span>
+                </div>
+              ))}
+              {(standingsByComp[activeComp.id] ?? []).length === 0 && (
+                <div className={`text-center py-6 text-sm ${ui.muted}`}>{copy.fixturesNoMatches}</div>
+              )}
             </div>
           </div>
-        ))}
+        )}
+
+        {view === "standings" && activeComp && activeComp.phase !== "league_phase" && (
+          <div className={`rounded-2xl overflow-hidden p-4 animate-fade-in-up ${ui.card}`}>
+            <KnockoutBracket
+              fixtures={(fixturesByComp[activeComp.id] ?? []).filter((f: any) => f.round > (activeComp.league_phase_rounds ?? 0))}
+              userClub={userClub}
+              getClubLogo={getClubLogo}
+              theme={theme as any}
+            />
+          </div>
+        )}
+
+        {view === "matches" && (
+          <>
+            {Object.keys(grouped).length === 0 && (
+              <div className={`text-center py-10 ${ui.muted} text-sm`}>{copy.fixturesNoMatches}</div>
+            )}
+
+            {Object.entries(grouped).map(([month, monthMatches]) => (
+              <div key={month} className="mb-6">
+                <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>
+                  {month === "TBD" ? copy.fixturesDateTBD : new Date(month + "-01").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { month: "long", year: "numeric" })}
+                </div>
+                <div className={`rounded-2xl overflow-hidden ${ui.card} animate-fade-in-up`}>
+                  {monthMatches.map((f, i) => {
+                    const isUser = f.home_club === userClub || f.away_club === userClub;
+                    const played = f.played;
+                    const dateStr = f.match_date
+                      ? new Date(f.match_date + "T00:00:00").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { weekday: "short", day: "numeric" })
+                      : "TBD";
+                    return (
+                      <div key={f.id}
+                        className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
+                        <div className={`text-[10px] leading-tight ${ui.muted} sm:w-24 sm:shrink-0 flex items-center gap-1`}>
+                          <span>{COMP_ICON[f.competition_type] ?? "⚽"}</span>
+                          <span>{dateStr} · {f.competition_name}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 sm:flex-1">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-end min-w-0">
+                            <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
+                            <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                          </div>
+                          <div className={`w-14 sm:w-16 text-center font-black text-xs sm:text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
+                            {played ? `${f.home_goals} – ${f.away_goals}` : "vs"}
+                          </div>
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-start min-w-0">
+                            <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
+                            <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

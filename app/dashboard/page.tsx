@@ -58,7 +58,7 @@ const GLOBAL_UI = {
     navIcon: "bg-pink-50 border border-pink-100 rounded-xl",
     navLabel: "font-semibold text-pink-900/70",
     navLabelActive: "font-black text-pink-900",
-    card: "bg-white/65 border-2 border-pink-100 rounded-[32px] backdrop-blur-xl shadow-[0_8px_40px_rgba(236,72,153,0.08)]",
+    card: "bg-white/85 border-2 border-pink-100 rounded-[32px] backdrop-blur-xl shadow-[0_8px_40px_rgba(236,72,153,0.12)]",
     cardAlt: "bg-white/50 border border-violet-100 rounded-[32px] backdrop-blur-xl",
     subLabel: "text-pink-800/40 uppercase tracking-widest text-[9px] font-black",
     badge: "bg-pink-50 border border-pink-100 rounded-xl",
@@ -183,11 +183,20 @@ function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any
   const [tab, setTab] = useState<"events" | "ratings">("events");
   const [selectedRatingPlayer, setSelectedRatingPlayer] = useState<any>(null);
 
-  const ratingColor = (r: number) => r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
+  const ratingColor = (r: number) => {
+    if (theme === "aurora") {
+      // На светлом фоне яркий жёлтый/лайм-текст почти нечитаем — берём более
+      // тёмные/насыщенные оттенки специально для aurora.
+      return r >= 8.5 ? "#16a34a" : r >= 7.0 ? "#65a30d" : r >= 6.0 ? "#b45309" : r >= 5.0 ? "#c2410c" : "#dc2626";
+    }
+    return r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
+  };
+
+  const overlayBg = theme === "aurora" ? "rgba(168,85,247,0.18)" : theme === "maleficent" ? "rgba(0,0,0,0.88)" : "rgba(0,0,0,0.7)";
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card} animate-fade-in-up`} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: overlayBg, backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card} animate-fade-in`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>{copy.dashMatchReport}</div>
           <button onClick={onClose} className={`text-lg ${ui.muted}`}>✕</button>
@@ -348,6 +357,7 @@ export default function DashboardPage() {
   const [showResults, setShowResults] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [seasonFinished, setSeasonFinished] = useState(false);
+  const [seasonTrophies, setSeasonTrophies] = useState<any[]>([]);
   const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
@@ -373,6 +383,17 @@ export default function DashboardPage() {
   const leagueTheme = getLeagueTheme(selectedLeague?.name || selectedClub?.league || "Premier League", theme);
   const glowColor   = leagueTheme?.rawColor || "#ffffff";
   const userClub    = selectedClub?.name || "";
+
+  useEffect(() => {
+    if (!seasonFinished || !seasonId) return;
+    fetch(`/api/competitions?seasonId=${seasonId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const won = (data.competitions ?? []).filter((c: any) => c.status === "finished" && c.winner_club === userClub);
+        setSeasonTrophies(won);
+      }).catch(() => {});
+  }, [seasonFinished, seasonId, userClub]);
 
   // Загрузка таблицы и расписания
   const loadData = useCallback(async (sid: string) => {
@@ -577,21 +598,38 @@ export default function DashboardPage() {
       <DashboardLayout>
         <main className={`min-h-screen relative overflow-hidden flex items-center justify-center p-6 ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
           <div className={`w-full max-w-lg p-8 rounded-3xl text-center ${ui.card} animate-fade-in-up`}>
-            <div className="text-5xl mb-3">🏁</div>
+            <div className="text-5xl mb-3 animate-floaty-sm inline-block">🏁</div>
             <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>Season Complete</div>
-            <h1 className={`text-2xl font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
-            <div className={`text-sm mb-6 ${ui.muted}`}>Final position: #{userPos} of {sortedStandings.length}</div>
+            <h1 className={`text-2xl font-display font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
+            <div className={`text-sm mb-5 ${ui.muted}`}>Final league position: #{userPos} of {sortedStandings.length}</div>
+
+            {/* Трофеи сезона — раньше здесь был виден только результат в лиге,
+                выигранные кубки/еврокубки нигде явно не отображались. */}
+            {seasonTrophies.length > 0 ? (
+              <div className="flex flex-wrap justify-center gap-3 mb-6">
+                {seasonTrophies.map((t: any) => (
+                  <div key={t.id} className={`flex flex-col items-center gap-1 px-4 py-3 rounded-2xl animate-fade-in-up ${ui.card}`} style={{ borderTop: "2px solid #eab308" }}>
+                    <span className="text-2xl">🏆</span>
+                    <span className={`text-[11px] font-bold ${ui.text}`}>{t.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={`text-xs mb-6 ${ui.muted}`}>
+                {locale === "ru" ? "В этом сезоне без трофеев — в следующем получится." : "No trophies this season — next time."}
+              </div>
+            )}
 
             <div className="flex justify-center gap-2 mb-6">
               <img src={getClubLogo(sortedStandings[0]?.club_id || "")} className="w-10 h-10 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
               <div className="text-left">
-                <div className={`text-[10px] uppercase ${ui.muted}`}>Champion</div>
+                <div className={`text-[10px] uppercase ${ui.muted}`}>League Champion</div>
                 <div className={`text-sm font-black ${ui.text}`}>{sortedStandings[0]?.club_id}</div>
               </div>
             </div>
 
             <button onClick={handleStartNewSeason} disabled={startingNewSeason}
-              className={`w-full py-4 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${ui.btnPrimary}`}>
+              className={`w-full py-4 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-transform hover:scale-[1.02] ${ui.btnPrimary}`}>
               <Zap size={16} />
               {startingNewSeason ? "Starting new season…" : "Start New Season →"}
             </button>
