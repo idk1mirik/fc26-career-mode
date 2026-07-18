@@ -17,7 +17,7 @@ const PANEL_STYLES: Record<ThemeKey, {
   primaryBtn: string; secondaryBtn: string; barBg: string; barFill: string; reaction: string;
 }> = {
   classic: {
-    overlay: "fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4",
+    overlay: "fixed inset-0 bg-black/70 backdrop-blur-sm z-[1100] flex items-center justify-center p-4",
     panel: "bg-slate-950 border border-white/[0.08] rounded-2xl p-6 w-full max-w-md text-white",
     title: "text-lg font-bold mb-4", label: "text-xs text-slate-400 uppercase tracking-wide",
     input: "w-full bg-white/[0.05] border border-white/[0.1] text-white rounded-xl px-3 py-2 mt-1 outline-none",
@@ -26,7 +26,7 @@ const PANEL_STYLES: Record<ThemeKey, {
     barBg: "bg-white/[0.08]", barFill: "bg-emerald-400", reaction: "text-emerald-300",
   },
   aurora: {
-    overlay: "fixed inset-0 bg-pink-950/20 backdrop-blur-sm z-50 flex items-center justify-center p-4",
+    overlay: "fixed inset-0 bg-pink-950/20 backdrop-blur-sm z-[1100] flex items-center justify-center p-4",
     panel: "bg-white border-2 border-pink-100 rounded-2xl p-6 w-full max-w-md text-pink-950",
     title: "text-lg font-bold mb-4 font-serif italic", label: "text-xs text-pink-400 uppercase tracking-wide",
     input: "w-full bg-white border border-pink-100 text-pink-950 rounded-2xl px-3 py-2 mt-1 outline-none",
@@ -35,7 +35,7 @@ const PANEL_STYLES: Record<ThemeKey, {
     barBg: "bg-pink-100", barFill: "bg-pink-500", reaction: "text-pink-600",
   },
   maleficent: {
-    overlay: "fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4",
+    overlay: "fixed inset-0 bg-black/85 backdrop-blur-sm z-[1100] flex items-center justify-center p-4",
     panel: "bg-black border border-purple-900/40 rounded-none p-6 w-full max-w-md text-fuchsia-300 font-mono",
     title: "text-lg font-bold mb-4 uppercase tracking-widest", label: "text-xs text-purple-500 uppercase tracking-wide",
     input: "w-full bg-black/60 border border-purple-900/40 text-fuchsia-400 px-3 py-2 mt-1 outline-none font-mono",
@@ -129,7 +129,7 @@ export function ContractPanel({
 
   return (
     <div className={s.overlay} onClick={onClose}>
-      <div className={s.panel} onClick={(e) => e.stopPropagation()}>
+      <div className={`${s.panel} animate-modal-pop`} onClick={(e) => e.stopPropagation()}>
         <div className={s.title}>{t.title} — {player.playerName}</div>
 
         <div className="mb-4">

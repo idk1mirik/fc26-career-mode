@@ -128,7 +128,7 @@ export default function FixturesPage() {
             <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>
               {month === "TBD" ? copy.fixturesDateTBD : new Date(month + "-01").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { month: "long", year: "numeric" })}
             </div>
-            <div className={`rounded-2xl overflow-hidden ${ui.card}`}>
+            <div className={`rounded-2xl overflow-hidden ${ui.card} animate-fade-in-up`}>
               {monthMatches.map((f, i) => {
                 const isUser = f.home_club === userClub || f.away_club === userClub;
                 const played = f.played;

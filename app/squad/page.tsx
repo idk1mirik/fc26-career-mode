@@ -209,7 +209,7 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
   const sofaColor = (r: number) => r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
 
   return (
-    <div className={`rounded-2xl transition-all ${ui.card} ${ui.cardHover} ${isXI ? "ring-1 ring-emerald-500/40" : ""} ${isUnavailable ? "opacity-60" : ""}`}>
+    <div className={`rounded-2xl transition-all card-lift animate-fade-in-up ${ui.card} ${ui.cardHover} ${isXI ? "ring-1 ring-emerald-500/40" : ""} ${isUnavailable ? "opacity-60" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-2.5 cursor-pointer" onClick={() => onOpen(p)}>
         <div className="w-10 h-10 shrink-0 relative">
           {!imgErr
@@ -862,7 +862,7 @@ export default function SquadPage() {
               рядом с тем же z-index-слоем. */}
           <button
             onClick={() => setContractPanelPlayer(modalPlayer)}
-            className="fixed z-[60] bottom-8 right-8 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-full px-5 py-3 shadow-lg"
+            className="fixed z-[1000] bottom-8 right-8 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-full px-5 py-3 shadow-lg shadow-emerald-500/30 transition-transform hover:scale-105"
           >
             💰 Contract
           </button>

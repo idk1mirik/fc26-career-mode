@@ -10,6 +10,7 @@ import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { getStageInfo, getStageDisplayName } from "@/lib/continentalKnockout";
 import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 import { getThemeCopy } from "@/lib/i18n";
+import { KnockoutBracket } from "@/components/KnockoutBracket";
 
 const THEME_UI = {
   classic: {
@@ -63,6 +64,7 @@ export default function CupsPage() {
   const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
   const [standingsByComp, setStandingsByComp] = useState<Record<string, any[]>>({});
   const [simulating, setSimulating] = useState<string | null>(null);
+  const [cupError, setCupError] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
@@ -95,13 +97,24 @@ export default function CupsPage() {
   const advanceCup = async (competitionId: string) => {
     if (!lineupValid) return;
     setSimulating(competitionId);
+    setCupError(null);
     try {
       const res = await fetch("/api/cup/advance", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitionId, userClubId: userClub, userTactic: tactic, userLineup: Object.values(lineup || {}).filter(Boolean) }),
       });
-      if (res.ok) await loadData();
-    } catch (e) { console.error(e); }
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        await loadData();
+      } else {
+        // Раньше при ошибке сервера (500/400) код просто молчал — раунд
+        // "зависал" без единого матча и без объяснения. Теперь показываем,
+        // что реально сказал сервер.
+        setCupError(data?.error ?? `Request failed (${res.status})`);
+      }
+    } catch (e: any) {
+      setCupError(e?.message ?? "Network error");
+    }
     setSimulating(null);
   };
 
@@ -142,6 +155,13 @@ export default function CupsPage() {
           </div>
         )}
 
+        {cupError && (
+          <div className="mb-5 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+            <span>⚠️ {cupError}</span>
+            <button onClick={() => setCupError(null)} className="opacity-60 hover:opacity-100 px-2">✕</button>
+          </div>
+        )}
+
         {!seasonId ? (
           <div className={`p-6 rounded-2xl text-center ${ui.card}`}>
             <p className={ui.muted}>{copy.cupsNoSeason}</p>
@@ -175,7 +195,7 @@ export default function CupsPage() {
               if (comp.status !== "finished" && isUserInComp) roundLabel += ` · ${copy.cupsYoureIn}`;
 
               return (
-                <div key={comp.id} className={`rounded-2xl overflow-hidden ${ui.card}`}>
+                <div key={comp.id} className={`rounded-2xl overflow-hidden card-lift animate-fade-in-up ${ui.card}`}>
                   <div className={`flex items-center justify-between px-5 py-4 border-b ${ui.divider}`}>
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{COMP_ICON[comp.type] ?? "🏆"}</span>
@@ -240,6 +260,21 @@ export default function CupsPage() {
                     </div>
                   )}
 
+                  {isNewFormat && comp.phase === "knockout" && (
+                    <div className="px-5 py-3 border-t border-b border-white/5">
+                      <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>
+                        {locale === "ru" ? "Сетка плей-офф" : "Knockout bracket"}
+                      </div>
+                      <KnockoutBracket
+                        fixtures={fixtures.filter((f: any) => f.round > (comp.league_phase_rounds ?? 0))}
+                        userClub={userClub}
+                        getClubLogo={getClubLogo}
+                        theme={theme as any}
+                      />
+                    </div>
+                  )}
+
+                  {!(isNewFormat && comp.phase === "knockout") && (
                   <div className="px-5 py-3 space-y-1.5">
                     {currentRoundFixtures.length === 0 && comp.status === "finished" ? (
                       <div className={`text-center py-3 text-sm ${ui.muted}`}>🏆 {comp.winner_club} {copy.cupsWonTitle}</div>
@@ -271,6 +306,7 @@ export default function CupsPage() {
                       );
                     })}
                   </div>
+                  )}
 
                   <div className={`px-5 py-2.5 flex gap-4 text-[10px] ${ui.muted} border-t ${ui.divider}`}>
                     <span>🏆 {copy.cupsWinnerLabel}: {formatMoney(comp.prize_winner)}</span>

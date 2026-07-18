@@ -277,7 +277,7 @@ export async function createContractsForClub(
   const rows = players.map((p: any) => ({
     season_id: seasonId, career_id: careerId, club_id: clubId,
     player_id: p.id ?? p.name, player_name: p.name,
-    wage_weekly: p.wage ?? Math.max(500, Math.round((p.overall * p.overall * 0.3) / 500) * 500),
+    wage_weekly: p.wage > 0 ? p.wage : Math.max(500, Math.round((p.overall * p.overall * 0.3) / 500) * 500),
     years_left: p.age >= 30 ? 1 : p.age <= 21 ? 4 : 3,
     squad_role: p.overall >= 82 ? "star" : p.overall >= 76 ? "important" : p.age <= 20 ? "prospect" : "rotation",
     release_clause: null, signing_bonus: 0, happiness: 70,

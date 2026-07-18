@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     await supabase.from("contracts").delete()
       .eq("season_id", seasonId).eq("club_id", currentClub).eq("player_id", playerId);
 
-    const newWage = oldContract?.wage_weekly ?? calculateWageDemand(
+    const newWage = (oldContract?.wage_weekly ?? 0) > 0 ? oldContract.wage_weekly : calculateWageDemand(
       { overall: player.overall, age: player.age }, { reputationDiscount: 0 }, "rotation"
     );
 

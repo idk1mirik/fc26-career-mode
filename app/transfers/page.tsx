@@ -69,7 +69,7 @@ const TransferPlayerRow = memo(function TransferPlayerRow({
   const ovr = p.overall ?? 75;
 
   return (
-    <div className={`rounded-2xl transition-all ${ui.card} ${ui.cardHover}`}>
+    <div className={`rounded-2xl transition-all ${ui.card} animate-fade-in-up ${ui.cardHover}`}>
       <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap">
         <div className="flex items-center gap-3 flex-1 min-w-[160px] cursor-pointer" onClick={() => onOpen(p)}>
           <div className="w-10 h-10 shrink-0 relative">
@@ -106,7 +106,7 @@ function AskingPriceModal({ ui, player, onCancel, onConfirm, copy }: {
   const [value, setValue] = useState(String(player.market_value ?? 1_000_000));
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
-      <div className={`w-full max-w-sm rounded-2xl p-5 ${ui.card}`} style={{ background: "var(--modal-bg, #0b0d16)" }} onClick={e => e.stopPropagation()}>
+      <div className={`w-full max-w-sm rounded-2xl p-5 ${ui.card} animate-fade-in-up`} style={{ background: "var(--modal-bg, #0b0d16)" }} onClick={e => e.stopPropagation()}>
         <div className={`text-sm font-black mb-1 ${ui.nameColor}`}>{copy.transfersList} {player.name}</div>
         <div className={`text-[11px] mb-4 ${ui.muted}`}>{copy.transfersListModalMarketEstimate} {fmtMoney(player.market_value ?? 0)}</div>
         <input type="number" value={value} onChange={e => setValue(e.target.value)}
@@ -356,7 +356,7 @@ export default function TransfersPage() {
         </div>
 
         {!isOpen ? (
-          <div className={`rounded-2xl p-10 text-center ${ui.card}`}>
+          <div className={`rounded-2xl p-10 text-center ${ui.card} animate-fade-in-up`}>
             <Lock size={40} className={`mx-auto mb-4 ${ui.muted}`} />
             <div className="text-lg font-black mb-2">{copy.transfersClosed}</div>
             <div className={`text-sm ${ui.muted}`}>{nextOpen}</div>
@@ -451,7 +451,7 @@ export default function TransfersPage() {
             {history.length > 0 && (
               <div className="mt-8">
                 <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.transfersRecentActivity}</div>
-                <div className={`rounded-2xl divide-y ${ui.card} ${theme === "aurora" ? "divide-pink-100" : "divide-white/[0.06]"}`}>
+                <div className={`rounded-2xl divide-y ${ui.card} animate-fade-in-up ${theme === "aurora" ? "divide-pink-100" : "divide-white/[0.06]"}`}>
                   {history.slice(0, 8).map((t: any) => (
                     <div key={t.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
                       <span className={ui.nameColor}>

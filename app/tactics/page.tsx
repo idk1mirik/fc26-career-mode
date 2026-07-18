@@ -114,7 +114,7 @@ export default function TacticsPage() {
               {Object.entries(TACTICS).map(([key, t]) => (
                 <div key={key} onClick={() => setTactic(key)}
                   className={`p-4 rounded-2xl cursor-pointer transition-all border ${
-                    tactic === key ? ui.cardActive : `${ui.card} ${ui.hover}`
+                    tactic === key ? ui.cardActive : `${ui.card} animate-fade-in-up ${ui.hover}`
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <div className={`font-black text-sm ${tactic === key ? "" : ui.nameColor}`}>{t.name}</div>
@@ -129,7 +129,7 @@ export default function TacticsPage() {
           {/* Current tactic details */}
           <div>
             <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.tacticsCurrent}: {current.name}</div>
-            <div className={`p-5 rounded-2xl ${ui.card}`}>
+            <div className={`p-5 rounded-2xl ${ui.card} animate-fade-in-up`}>
               <div className="space-y-4">
                 {Object.entries(PARAM_LABELS).map(([key, label]) => {
                   const val = current[key as keyof typeof current] as number;

@@ -384,10 +384,15 @@ async function transitionToKnockout(comp: any, competitionId: string, calKey: "c
     rows.push({
       competition_id: competitionId, round: playoffRound, round_name: "Playoff Round",
       home_club: club, away_club: club, played: true, winner_club: club, is_bye: true,
+      match_date: legDate,
     });
   }
 
-  await supabase.from("cup_fixtures").insert(rows);
+  const { error: insErr } = await supabase.from("cup_fixtures").insert(rows);
+  if (insErr) {
+    console.error("transitionToKnockout insert failed", insErr);
+    return Response.json({ error: `Failed to create knockout round: ${insErr.message}` }, { status: 500 });
+  }
   await supabase.from("competitions").update({ phase: "knockout", current_round: playoffRound }).eq("id", competitionId);
 
   return Response.json({ finished: false, nextRound: playoffRound, results: [], transitionedToKnockout: true, standings });

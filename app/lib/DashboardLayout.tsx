@@ -96,8 +96,8 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
 
   return (
     <>
-      <div className={`mb-5 p-3 flex items-center gap-3 rounded-2xl ${theme === "classic" ? "bg-white/[0.03] border border-white/[0.07]" : theme === "aurora" ? "bg-white/60 border border-pink-100" : "bg-purple-950/20 border border-fuchsia-900/30"}`}>
-        <img src={getClubLogo(selectedClub?.name || "")} alt="" className="w-9 h-9 object-contain"
+      <div className={`mb-5 p-3 flex items-center gap-3 rounded-2xl transition-transform hover:scale-[1.02] ${theme === "classic" ? "bg-white/[0.03] border border-white/[0.07]" : theme === "aurora" ? "bg-white/60 border border-pink-100" : "bg-purple-950/20 border border-fuchsia-900/30"}`}>
+        <img src={getClubLogo(selectedClub?.name || "")} alt="" className="w-9 h-9 object-contain animate-floaty-sm"
           onError={e => (e.currentTarget.style.display = "none")} />
         <div>
           <div className="text-sm font-black truncate max-w-[140px]">{selectedClub?.name || "No Club"}</div>
@@ -116,7 +116,7 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate }: {
         </div>
         <div className="flex justify-between items-center">
           <span className="text-[9px] uppercase tracking-widest opacity-30">Matchday</span>
-          <span className="text-xl font-black" style={{ color: glowColor }}>{matchday}</span>
+          <span className="text-xl font-display font-black animate-soft-pulse rounded-md px-1" style={{ color: glowColor }}>{matchday}</span>
         </div>
       </div>
 
@@ -167,8 +167,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className={`min-h-screen flex relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full blur-[120px]"
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full blur-[120px] animate-floaty"
           style={{ backgroundColor: `${glowColor}10` }} />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[400px] h-[400px] rounded-full blur-[130px] animate-floaty"
+          style={{ backgroundColor: `${glowColor}08`, animationDelay: "-2s", animationDuration: "6s" }} />
       </div>
 
       {/* Desktop sidebar */}
@@ -209,7 +211,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden relative z-10">
         <div className="absolute top-4 right-4 z-50"><ThemeToggle /></div>
-        {children}
+        <div key={pathname} className="animate-fade-in-up">
+          {children}
+        </div>
       </div>
     </div>
   );

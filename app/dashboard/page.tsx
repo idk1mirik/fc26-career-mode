@@ -187,7 +187,7 @@ function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card}`} onClick={e => e.stopPropagation()}>
+      <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card} animate-fade-in-up`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>{copy.dashMatchReport}</div>
           <button onClick={onClose} className={`text-lg ${ui.muted}`}>✕</button>
@@ -286,7 +286,7 @@ function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any
 
         {selectedRatingPlayer && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setSelectedRatingPlayer(null)}>
-            <div className={`w-full max-w-xs rounded-2xl p-5 ${ui.card}`} onClick={e => e.stopPropagation()}>
+            <div className={`w-full max-w-xs rounded-2xl p-5 ${ui.card} animate-fade-in-up`} onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-sm font-black ${ui.text}`}>{selectedRatingPlayer.name}</span>
                 <span className="text-lg font-black px-2 py-0.5 rounded-md" style={{ color: ratingColor(selectedRatingPlayer.rating), background: `${ratingColor(selectedRatingPlayer.rating)}18` }}>
@@ -576,7 +576,7 @@ export default function DashboardPage() {
     return (
       <DashboardLayout>
         <main className={`min-h-screen relative overflow-hidden flex items-center justify-center p-6 ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
-          <div className={`w-full max-w-lg p-8 rounded-3xl text-center ${ui.card}`}>
+          <div className={`w-full max-w-lg p-8 rounded-3xl text-center ${ui.card} animate-fade-in-up`}>
             <div className="text-5xl mb-3">🏁</div>
             <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>Season Complete</div>
             <h1 className={`text-2xl font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
@@ -644,7 +644,7 @@ export default function DashboardPage() {
 
               if (cupReady) {
                 return (
-                  <div className={`p-6 ${ui.card}`} style={{ borderLeft: `3px solid ${glowColor}` }}>
+                  <div className={`p-6 ${ui.card} animate-fade-in-up`} style={{ borderLeft: `3px solid ${glowColor}` }}>
                     <div className={`${ui.subLabel} mb-2 flex items-center gap-2`}>
                       <span>🏆 {nextMatch.competition_name} — {nextMatch.round_name}</span>
                     </div>
@@ -673,7 +673,7 @@ export default function DashboardPage() {
 
               if (!seasonId) {
                 return (
-                  <div className={`p-6 ${ui.card} text-center`}>
+                  <div className={`p-6 ${ui.card} animate-fade-in-up text-center`}>
                     <p className={`${ui.muted} mb-4 text-sm`}>{copy.dashNoSeason}</p>
                     <Link href="/leagues"><button className={`px-6 py-3 ${ui.btnPrimary}`}>{copy.dashStartCareer}</button></Link>
                   </div>
@@ -681,7 +681,7 @@ export default function DashboardPage() {
               }
 
               return (
-                <div className={`p-6 ${ui.card}`}>
+                <div className={`p-6 ${ui.card} animate-fade-in-up`}>
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div>
                       <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
@@ -744,7 +744,7 @@ export default function DashboardPage() {
 
             {/* Last results */}
             {showResults && lastResults.length > 0 && (
-              <div className={`p-5 ${ui.card} fade-in`}>
+              <div className={`p-5 ${ui.card} animate-fade-in-up fade-in`}>
                 <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday - 1} — ${copy.dashMatchdayResults}` : `Matchday ${matchday - 1} ${copy.dashMatchdayResults}`}</div>
                 <div className="space-y-1">
                   {lastResults.map((r, i) => (
@@ -756,7 +756,7 @@ export default function DashboardPage() {
 
             {/* Current matchday fixtures */}
             {currentFixtures.length > 0 && (
-              <div className={`p-5 ${ui.card}`}>
+              <div className={`p-5 ${ui.card} animate-fade-in-up`}>
                 <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday} — ${copy.dashUpcoming}` : `Matchday ${matchday} — ${copy.dashUpcoming}`}</div>
                 <div className="space-y-1">
                   {currentFixtures.map((f, i) => (
@@ -769,7 +769,7 @@ export default function DashboardPage() {
 
           {/* RIGHT: standings */}
           <div className="xl:col-span-2 fade-in">
-            <div className={`p-5 ${ui.card}`}>
+            <div className={`p-5 ${ui.card} animate-fade-in-up`}>
               <div className="flex items-center gap-2 mb-4">
                 <img src={getLeagueLogo(selectedLeague?.name || selectedClub?.league || "")} alt="" className="w-6 h-6 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
                 <div className={`${ui.subLabel}`}>{selectedLeague?.name || selectedClub?.league || "League Table"}</div>

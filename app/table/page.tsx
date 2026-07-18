@@ -83,7 +83,7 @@ export default function TablePage() {
           </div>
         </div>
 
-        <div className={`rounded-2xl overflow-hidden ${ui.card}`}>
+        <div className={`rounded-2xl overflow-hidden ${ui.card} animate-fade-in-up`}>
           {/* Header */}
           <div className={`grid text-[9px] uppercase tracking-widest ${ui.muted} px-4 py-3 border-b ${ui.divider}`}
             style={{ gridTemplateColumns: "32px 1fr 40px 40px 40px 40px 50px 48px" }}>
