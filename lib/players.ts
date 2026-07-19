@@ -2,6 +2,7 @@
 import fs from "fs";
 import path from "path";
 import csv from "csv-parser";
+import { supabase } from "./supabase";
 
 export interface Player {
   id: string;
@@ -46,7 +47,7 @@ const POSITION_VALUE_MULT: Record<string, number> = {
   GK: 0.60,
 };
 
-function computeMarketValue(ovr: number, age: number, potential: number, position: string): number {
+export function computeMarketValue(ovr: number, age: number, potential: number, position: string): number {
   if (ovr <= 0) return 0;
 
   const base = 2_500_000 * Math.pow(2.0, (ovr - 60) / 5);
@@ -83,7 +84,7 @@ function seededRandom(seed: string): number {
   return ((h >>> 0) % 10000) / 10000;
 }
 
-function computePotential(ovr: number, age: number, id: string): number {
+export function computePotential(ovr: number, age: number, id: string): number {
   if (age <= 0 || ovr <= 0) return ovr;
   const ceiling = ovr >= 88 ? ovr + 3 : ovr >= 82 ? ovr + 8 : ovr >= 75 ? ovr + 12 : ovr + 6;
   const r = seededRandom(id);
@@ -252,6 +253,15 @@ export async function getPlayersByClub(clubName: string, seasonId?: string): Pro
       .filter((p): p is Player => !!p && !stayedIds.has(p.id));
 
     squad = [...stayed, ...incoming];
+  }
+
+  // Выпускники академии, повышенные в первую команду — это СИНТЕТИЧЕСКИЕ
+  // игроки (не из CSV-датасета), поэтому CSV-фильтрация выше их в принципе
+  // не видит. Подмешиваем отдельно по статусу "promoted" в youth_prospects.
+  const { data: promotedRows } = await supabase.from("youth_prospects")
+    .select("attrs").eq("season_id", seasonId).eq("club_id", clubName).eq("status", "promoted");
+  if (promotedRows?.length) {
+    squad = [...squad, ...promotedRows.map((r: any) => r.attrs as Player)];
   }
 
   if (progression.size === 0) return squad;

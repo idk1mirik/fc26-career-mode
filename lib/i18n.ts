@@ -7,7 +7,7 @@ export type ThemeKey = "classic" | "aurora" | "maleficent";
 export interface ThemeCopy {
   // Навигация
   navOverview: string; navSquad: string; navTactics: string; navTransfers: string;
-  navFixtures: string; navTable: string; navCups: string; navQuit: string;
+  navFixtures: string; navTable: string; navCups: string; navAcademy: string; navQuit: string;
   sidebarSeason: string; sidebarMatchday: string; sidebarNoClub: string;
 
   // Squad page
@@ -71,7 +71,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
   en: {
     classic: {
       navOverview: "Overview", navSquad: "Squad", navTactics: "Tactics", navTransfers: "Transfers",
-      navFixtures: "Fixtures", navTable: "League Table", navCups: "Cups", navQuit: "Quit Career",
+      navFixtures: "Fixtures", navTable: "League Table", navCups: "Cups", navAcademy: "Academy", navQuit: "Quit Career",
       sidebarSeason: "Season", sidebarMatchday: "Matchday", sidebarNoClub: "No Club",
 
       squadTitle: "Players", squadPlayersLabel: "Players",
@@ -123,7 +123,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
     },
     aurora: {
       navOverview: "✦ My Story", navSquad: "✦ My Team", navTactics: "✦ Game Plan", navTransfers: "✦ Wishlist",
-      navFixtures: "✦ Upcoming", navTable: "✦ Standings", navCups: "✦ Trophies", navQuit: "Leave This Story",
+      navFixtures: "✦ Upcoming", navTable: "✦ Standings", navCups: "✦ Trophies", navAcademy: "✦ Academy", navQuit: "Leave This Story",
       sidebarSeason: "Chapter", sidebarMatchday: "Page", sidebarNoClub: "No Team Yet",
 
       squadTitle: "My Lovely Players", squadPlayersLabel: "team members",
@@ -175,7 +175,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
     },
     maleficent: {
       navOverview: ">_ OVERVIEW", navSquad: ">_ ROSTER", navTactics: ">_ STRATEGY", navTransfers: ">_ MARKET",
-      navFixtures: ">_ SCHEDULE", navTable: ">_ STANDINGS", navCups: ">_ TROPHIES", navQuit: "TERMINATE_CAREER",
+      navFixtures: ">_ SCHEDULE", navTable: ">_ STANDINGS", navCups: ">_ TROPHIES", navAcademy: ">_ ACADEMY", navQuit: "TERMINATE_CAREER",
       sidebarSeason: "CYCLE", sidebarMatchday: "PHASE", sidebarNoClub: "NO_TARGET_LOCKED",
 
       squadTitle: "ROSTER_DB", squadPlayersLabel: "units",
@@ -229,7 +229,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
   ru: {
     classic: {
       navOverview: "Обзор", navSquad: "Состав", navTactics: "Тактика", navTransfers: "Трансферы",
-      navFixtures: "Календарь", navTable: "Таблица лиги", navCups: "Кубки", navQuit: "Завершить карьеру",
+      navFixtures: "Календарь", navTable: "Таблица лиги", navCups: "Кубки", navAcademy: "Академия", navQuit: "Завершить карьеру",
       sidebarSeason: "Сезон", sidebarMatchday: "Тур", sidebarNoClub: "Нет клуба",
 
       squadTitle: "Игроки", squadPlayersLabel: "игроков",
@@ -281,7 +281,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
     },
     aurora: {
       navOverview: "✦ Моя история", navSquad: "✦ Моя команда", navTactics: "✦ План игры", navTransfers: "✦ Список желаний",
-      navFixtures: "✦ Скоро", navTable: "✦ Положение", navCups: "✦ Трофеи", navQuit: "Покинуть историю",
+      navFixtures: "✦ Скоро", navTable: "✦ Положение", navCups: "✦ Трофеи", navAcademy: "✦ Академия", navQuit: "Покинуть историю",
       sidebarSeason: "Глава", sidebarMatchday: "Страница", sidebarNoClub: "Команды пока нет",
 
       squadTitle: "Мои любимые игроки", squadPlayersLabel: "участников команды",
@@ -333,7 +333,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
     },
     maleficent: {
       navOverview: ">_ ОБЗОР", navSquad: ">_ СОСТАВ", navTactics: ">_ СТРАТЕГИЯ", navTransfers: ">_ РЫНОК",
-      navFixtures: ">_ РАСПИСАНИЕ", navTable: ">_ РЕЙТИНГ", navCups: ">_ ТРОФЕИ", navQuit: "ЗАВЕРШИТЬ_КАРЬЕРУ",
+      navFixtures: ">_ РАСПИСАНИЕ", navTable: ">_ РЕЙТИНГ", navCups: ">_ ТРОФЕИ", navAcademy: ">_ АКАДЕМИЯ", navQuit: "ЗАВЕРШИТЬ_КАРЬЕРУ",
       sidebarSeason: "ЦИКЛ", sidebarMatchday: "ФАЗА", sidebarNoClub: "ЦЕЛЬ_НЕ_ВЫБРАНА",
 
       squadTitle: "БАЗА_СОСТАВА", squadPlayersLabel: "единиц",

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award } from "lucide-react";
+import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap } from "lucide-react";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useThemeStore } from "@/app/store/themeStore";
@@ -12,6 +12,7 @@ import { getThemeCopy } from "@/lib/i18n";
 const NAV_ICONS = [
   { key: "navOverview",  icon: LayoutDashboard, href: "/dashboard" },
   { key: "navSquad",     icon: Users,           href: "/squad" },
+  { key: "navAcademy",   icon: GraduationCap,   href: "/academy" },
   { key: "navTactics",   icon: Target,          href: "/tactics" },
   { key: "navTransfers", icon: ArrowRightLeft,  href: "/transfers" },
   { key: "navFixtures",  icon: CalendarDays,    href: "/fixtures" },

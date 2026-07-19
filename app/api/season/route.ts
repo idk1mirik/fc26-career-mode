@@ -9,6 +9,7 @@ import { createSeasonCompetitions } from "@/lib/createCompetitions";
 import { getPlayersByClub } from "@/lib/players";
 import { computeInitialBudget } from "@/lib/finance";
 import { createContractsForClub } from "@/lib/contracts";
+import { getOrCreateAcademy, generateIntake } from "@/lib/academy";
 
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 
@@ -90,6 +91,13 @@ export async function POST(req: Request) {
   try {
     await Promise.all(clubs.map((c, i) => createContractsForClub(season.id, season.id, c, clubPlayers[i])));
   } catch (e) { console.error("Contract creation failed", e); }
+
+  // Академия — только для клуба пользователя, ИИ-клубам не симулируем
+  // (иначе пришлось бы плодить проспектов для всех 20+ клубов лиги впустую).
+  try {
+    const academy = await getOrCreateAcademy(season.id, season.id, clubId);
+    await generateIntake(season.id, season.id, clubId, academy.level, league.name);
+  } catch (e) { console.error("Academy creation failed", e); }
 
   // Создаём кубки/евро-кубки/суперкубок для этого сезона
   try {

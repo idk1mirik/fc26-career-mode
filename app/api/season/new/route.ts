@@ -8,6 +8,7 @@ import { getPlayersByClub } from "@/lib/players";
 import { computeInitialBudget } from "@/lib/finance";
 import { progressLeaguePlayers } from "@/lib/progression";
 import { rolloverContracts, createContractsForClub } from "@/lib/contracts";
+import { rolloverAcademy } from "@/lib/academy";
 
 function buildFixtures(clubs: string[], seasonId: string) {
   const rows: any[] = [];
@@ -80,6 +81,10 @@ export async function POST(req: Request) {
   try {
     await rolloverContracts(careerId, oldSeasonId, newSeason.id);
   } catch (e) { console.error("Contract rollover failed", e); }
+
+  try {
+    await rolloverAcademy(careerId, oldSeasonId, newSeason.id, oldSeason.club_id, league.name);
+  } catch (e) { console.error("Academy rollover failed", e); }
 
   const fixtures = buildFixtures(clubs, newSeason.id);
   await supabase.from("fixtures").insert(fixtures);
