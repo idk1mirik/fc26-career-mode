@@ -99,18 +99,27 @@ export function generateMatchRatings(
       const goals = sideEvents.filter((e: any) => e.type === "goal" && eventKey(e, "player") === pKey).length;
       const yellow = sideEvents.some((e: any) => e.type === "yellow" && eventKey(e, "player") === pKey);
       const red = sideEvents.some((e: any) => e.type === "red" && eventKey(e, "player") === pKey);
-      const subbedOut = sideEvents.some((e: any) => e.type === "substitution" && eventKey(e, "player") === pKey);
-      const subbedIn = subbedInKeys.has(pKey);
+      const subOutEvent = sideEvents.find((e: any) => e.type === "substitution" && eventKey(e, "player") === pKey);
+      const subInEvent = sideEvents.find((e: any) => e.type === "substitution" && eventKey(e, "player2") === pKey);
+      const redEvent = sideEvents.find((e: any) => e.type === "red" && eventKey(e, "player") === pKey);
+      const subbedOut = !!subOutEvent;
+      const subbedIn = !!subInEvent;
 
       const isAttacker = ["ST", "CF", "LW", "RW"].includes(p.position);
       const isMid = ["CM", "CDM", "CAM", "LM", "RM"].includes(p.position);
       const isDef = ["CB", "LB", "RB", "LWB", "RWB"].includes(p.position);
       const isGK = p.position === "GK";
 
-      // Минуты на поле: сыграл полностью, ушёл досрочно, или вышел с банки
+      // Минуты на поле — берём РЕАЛЬНУЮ минуту события, а не отдельный случайный
+      // розыгрыш. Раньше подсчёт минут был полностью независим от того, что
+      // реально произошло в events: игрок с красной карточкой не считался
+      // "ушедшим с поля" вообще (учитывалась только формальная замена), а даже
+      // для замены минута бралась случайно заново — не совпадая с минутой
+      // самого события субституции в отчёте матча.
       let minutesPlayed = 90;
-      if (subbedOut) minutesPlayed = 60 + Math.floor(Math.random() * 30);
-      if (subbedIn) minutesPlayed = 90 - (60 + Math.floor(Math.random() * 30));
+      if (subOutEvent) minutesPlayed = subOutEvent.minute;
+      else if (redEvent) minutesPlayed = redEvent.minute;
+      if (subInEvent) minutesPlayed = Math.max(1, 90 - subInEvent.minute);
 
       // Меньше минут → меньше шансов на статистические действия (пропорционально)
       const minuteFactor = minutesPlayed / 90;

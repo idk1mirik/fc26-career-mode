@@ -16,6 +16,8 @@ import { getLeagueLogo } from "@/data/leagueLogos";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
 import { getThemeCopy } from "@/lib/i18n";
+import { MatchReportModal } from "@/components/MatchReportModal";
+import { HelpHint } from "@/components/HelpHint";
 import React from "react";
 
 const NAV = [
@@ -173,159 +175,6 @@ function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userCl
 }
 
 // ─── MATCH REPORT MODAL ───────────────────────────────────────────────────────
-const EVENT_ICON: Record<string, string> = {
-  goal: "⚽", yellow: "🟨", red: "🟥", substitution: "🔁", injury: "🩹",
-};
-
-function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any; theme: string; onClose: () => void; copy: any }) {
-  const events = fix.events ?? [];
-  const ratings = fix.ratings ?? { home: [], away: [] };
-  const [tab, setTab] = useState<"events" | "ratings">("events");
-  const [selectedRatingPlayer, setSelectedRatingPlayer] = useState<any>(null);
-
-  const ratingColor = (r: number) => {
-    if (theme === "aurora") {
-      // На светлом фоне яркий жёлтый/лайм-текст почти нечитаем — берём более
-      // тёмные/насыщенные оттенки специально для aurora.
-      return r >= 8.5 ? "#16a34a" : r >= 7.0 ? "#65a30d" : r >= 6.0 ? "#b45309" : r >= 5.0 ? "#c2410c" : "#dc2626";
-    }
-    return r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
-  };
-
-  const overlayBg = theme === "aurora" ? "rgba(168,85,247,0.18)" : theme === "maleficent" ? "rgba(0,0,0,0.88)" : "rgba(0,0,0,0.7)";
-
-  return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: overlayBg, backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className={`w-full max-w-md rounded-3xl p-6 max-h-[80vh] overflow-y-auto ${ui.card} animate-fade-in`} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>{copy.dashMatchReport}</div>
-          <button onClick={onClose} className={`text-lg ${ui.muted}`}>✕</button>
-        </div>
-        <div className="flex items-center justify-center gap-4 mb-5">
-          <div className="flex flex-col items-center gap-1">
-            <img src={getClubLogo(fix.home_club)} alt="" className="w-10 h-10 object-contain" />
-            <span className={`text-xs font-bold ${ui.text}`}>{fix.home_club}</span>
-          </div>
-          <div className={`text-3xl font-black ${ui.text}`}>{fix.home_goals} – {fix.away_goals}</div>
-          <div className="flex flex-col items-center gap-1">
-            <img src={getClubLogo(fix.away_club)} alt="" className="w-10 h-10 object-contain" />
-            <span className={`text-xs font-bold ${ui.text}`}>{fix.away_club}</span>
-          </div>
-        </div>
-
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setTab("events")}
-            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${tab === "events" ? ui.tabActive : ui.tabIdle}`}>
-            {copy.dashEvents}
-          </button>
-          <button onClick={() => setTab("ratings")}
-            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${tab === "ratings" ? ui.tabActive : ui.tabIdle}`}>
-            {copy.dashPlayerRatings}
-          </button>
-        </div>
-
-        {tab === "events" && (
-          <div className="space-y-2">
-            {events.length === 0 && <div className={`text-center text-sm ${ui.muted} py-4`}>No events recorded</div>}
-            {events.map((e: any, i: number) => (
-              <div key={i} className={`flex items-center gap-3 py-2 px-3 rounded-xl ${ui.tableRow}`}>
-                <span className={`text-xs font-black w-8 ${ui.muted}`}>{e.minute}'</span>
-                <span className="text-base">{EVENT_ICON[e.type] ?? "•"}</span>
-                <div className="flex-1">
-                  <div className={`text-sm font-bold ${ui.text}`}>
-                    {e.type === "substitution" ? `${e.player2} ↔ ${e.player}` : e.player}
-                  </div>
-                  <div className={`text-[10px] ${ui.muted} capitalize`}>
-                    {e.team === "home" ? fix.home_club : fix.away_club} · {e.type}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {tab === "ratings" && (
-          <div className="space-y-5">
-            {[{ label: fix.home_club, list: ratings.home ?? [] }, { label: fix.away_club, list: ratings.away ?? [] }].map(({ label, list }) => {
-              const starters = list.filter((p: any) => !p.subbedIn);
-              const subs = list.filter((p: any) => p.subbedIn);
-              return (
-                <div key={label}>
-                  <div className={`text-[10px] uppercase tracking-widest font-black mb-2 flex items-center gap-1.5 ${ui.muted}`}>
-                    <img src={getClubLogo(label)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                    {label}
-                  </div>
-
-                  {/* Стартовый состав — сетка как на поле, по линиям */}
-                  <div className="grid grid-cols-3 gap-1.5 mb-2">
-                    {starters.length === 0 && <div className={`text-xs col-span-3 ${ui.muted}`}>No data</div>}
-                    {starters.map((p: any, i: number) => (
-                      <button key={i} onClick={() => setSelectedRatingPlayer(p)}
-                        className={`flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors ${ui.tableRow}`}>
-                        <span className={`text-[11px] font-bold truncate ${ui.text}`}>{p.name}</span>
-                        <span className="text-xs font-black px-1.5 py-0.5 rounded-md shrink-0 ml-1" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
-                          {p.rating.toFixed(1)}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Замены — отдельным блоком */}
-                  {subs.length > 0 && (
-                    <div>
-                      <div className={`text-[9px] uppercase tracking-widest mb-1 ${ui.muted}`}>Substitutes</div>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {subs.map((p: any, i: number) => (
-                          <button key={i} onClick={() => setSelectedRatingPlayer(p)}
-                            className={`flex items-center justify-between py-1.5 px-2 rounded-lg opacity-80 transition-colors ${ui.tableRow}`}>
-                            <span className={`text-[11px] font-bold truncate ${ui.text}`}>{p.name}</span>
-                            <span className="text-xs font-black px-1.5 py-0.5 rounded-md shrink-0 ml-1" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
-                              {p.rating.toFixed(1)}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {selectedRatingPlayer && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setSelectedRatingPlayer(null)}>
-            <div className={`w-full max-w-xs rounded-2xl p-5 ${ui.card} animate-fade-in-up`} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-sm font-black ${ui.text}`}>{selectedRatingPlayer.name}</span>
-                <span className="text-lg font-black px-2 py-0.5 rounded-md" style={{ color: ratingColor(selectedRatingPlayer.rating), background: `${ratingColor(selectedRatingPlayer.rating)}18` }}>
-                  {selectedRatingPlayer.rating.toFixed(1)}
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {[
-                  ["Goals", selectedRatingPlayer.stats?.goals],
-                  ["Assists", selectedRatingPlayer.stats?.assists],
-                  ["Key Passes", selectedRatingPlayer.stats?.keyPasses],
-                  ["Saves", selectedRatingPlayer.stats?.saves],
-                  ["Tackles", selectedRatingPlayer.stats?.tackles],
-                  ["Interceptions", selectedRatingPlayer.stats?.interceptions],
-                  ["Mistakes", selectedRatingPlayer.stats?.mistakes],
-                  ["Minutes", selectedRatingPlayer.stats?.minutesPlayed],
-                ].filter(([, v]) => v !== undefined).map(([label, value]) => (
-                  <div key={label as string} className={`flex items-center justify-between text-xs ${ui.muted}`}>
-                    <span>{label}</span>
-                    <span className={`font-bold ${ui.text}`}>{value as any}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
@@ -570,6 +419,19 @@ export default function DashboardPage() {
   const userRow = standings.find(s => s.club_id === userClub);
   const userPos = userRow ? standings.indexOf(userRow) + 1 : "—";
 
+  const recentForm = useMemo(() => {
+    return fixtures
+      .filter(f => f.played && (f.home_club === userClub || f.away_club === userClub))
+      .sort((a, b) => (a.matchday ?? 0) - (b.matchday ?? 0))
+      .slice(-5)
+      .map(f => {
+        const isHome = f.home_club === userClub;
+        const gf = isHome ? f.home_goals : f.away_goals;
+        const ga = isHome ? f.away_goals : f.home_goals;
+        return gf > ga ? "W" : gf < ga ? "L" : "D";
+      });
+  }, [fixtures, userClub]);
+
   const [startingNewSeason, setStartingNewSeason] = useState(false);
   const handleStartNewSeason = async () => {
     if (!seasonId || startingNewSeason) return;
@@ -650,21 +512,74 @@ export default function DashboardPage() {
 
       {/* BG */}
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[150px]"
+        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[150px] animate-floaty"
           style={{ backgroundColor: `${glowColor}10` }} />
-        <div className="absolute bottom-[-15%] right-[-5%] w-[400px] h-[400px] rounded-full blur-[120px]"
-          style={{ backgroundColor: `${glowColor}08` }} />
+        <div className="absolute bottom-[-15%] right-[-5%] w-[400px] h-[400px] rounded-full blur-[120px] animate-floaty"
+          style={{ backgroundColor: `${glowColor}08`, animationDelay: "-2s", animationDuration: "6s" }} />
       </div>
 
       {/* Main */}
       <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
-        {/* Top bar */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <div className={`${ui.subLabel} mb-1`}>{copy.dashTitle}</div>
-            <h2 className="text-2xl font-black" style={theme === "classic" ? { fontFamily: "'Bebas Neue',sans-serif", fontSize: "2.2rem" } : theme === "maleficent" ? { fontFamily: "'Share Tech Mono',monospace" } : {}}>
-              {selectedClub?.name} — Season 2025/26
-            </h2>
+        {/* Top bar — герб + название + быстрые статы в одну строку */}
+        <div className={`flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-5 rounded-3xl animate-fade-in-up ${ui.card}`}
+          style={{ borderLeft: `3px solid ${glowColor}` }}>
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="relative shrink-0">
+              <div className="absolute inset-0 rounded-full blur-xl opacity-40 animate-floaty-sm" style={{ background: glowColor }} />
+              <img src={getClubLogo(selectedClub?.name || "")} alt="" className="relative w-14 h-14 object-contain"
+                onError={e => (e.currentTarget.style.display = "none")} />
+            </div>
+            <div className="min-w-0">
+              <div className={`${ui.subLabel} mb-1`}>{copy.dashTitle}</div>
+              <h2 className="text-xl sm:text-2xl font-display font-black truncate"
+                style={theme === "classic" ? { fontFamily: "'Bebas Neue',sans-serif", fontSize: "2rem" } : theme === "maleficent" ? { fontFamily: "'Share Tech Mono',monospace" } : {}}>
+                {selectedClub?.name} — Season 2025/26
+              </h2>
+              {recentForm.length > 0 && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  <span className={`text-[9px] uppercase tracking-widest font-black mr-1 ${ui.muted}`}>{locale === "ru" ? "Форма" : "Form"}</span>
+                  {recentForm.map((r, i) => (
+                    <span key={i}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black text-white animate-fade-in-up"
+                      style={{
+                        background: r === "W" ? "#22c55e" : r === "L" ? "#ef4444" : "#94a3b8",
+                        animationDelay: `${i * 60}ms`,
+                      }}>
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Быстрые статы — раньше их не было видно нигде, кроме отдельных страниц */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <HelpHint id="dash-quickstats" theme={theme as any}
+              title={locale === "ru" ? "Быстрые статы" : "Quick stats"}
+              text={locale === "ru"
+                ? "Место и очки — из турнирной таблицы лиги. Бюджет — сколько денег осталось на трансферы после вычета зарплат. Тур — какой матчдей лиги сейчас."
+                : "Position and points come from the league table. Budget is what's left for transfers after wages. Matchday is the current league round."} />
+            <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
+              <span className="text-base font-display font-black" style={{ color: glowColor }}>{userPos}</span>
+              <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Место" : "Position"}</span>
+            </div>
+            <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
+              <span className="text-base font-display font-black">{userRow?.points ?? 0}</span>
+              <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Очки" : "Points"}</span>
+            </div>
+            {userRow?.budget != null && (
+              <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
+                <span className="text-base font-display font-black text-emerald-500">
+                  {userRow.budget >= 1_000_000 ? `€${(userRow.budget / 1_000_000).toFixed(1)}M` : `€${Math.round(userRow.budget / 1000)}K`}
+                </span>
+                <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Бюджет" : "Budget"}</span>
+              </div>
+            )}
+            <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
+              <span className="text-base font-display font-black">⚽ {matchday}</span>
+              <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Тур" : "Matchday"}</span>
+            </div>
           </div>
         </div>
 
@@ -721,9 +636,40 @@ export default function DashboardPage() {
               return (
                 <div className={`p-6 ${ui.card} animate-fade-in-up`}>
                   <div className="flex items-center justify-between gap-4 mb-4">
-                    <div>
-                      <div className={`${ui.subLabel} mb-1`}>Matchday {matchday}</div>
-                      <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>
+                    <div className="flex items-center gap-3 min-w-0">
+                      {(() => {
+                        const myMatch = currentFixtures.find(f => f.home_club === userClub || f.away_club === userClub);
+                        const opponent = myMatch ? (myMatch.home_club === userClub ? myMatch.away_club : myMatch.home_club) : null;
+                        const isHome = myMatch?.home_club === userClub;
+                        return opponent ? (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <img src={getClubLogo(opponent)} className="w-11 h-11 object-contain" alt=""
+                              onError={e => (e.currentTarget.style.display = "none")} />
+                          </div>
+                        ) : null;
+                      })()}
+                      <div className="min-w-0">
+                        <div className={`${ui.subLabel} mb-1 flex items-center gap-1.5`}>
+                          Matchday {matchday}
+                          <HelpHint id="dash-simulate" theme={theme as any}
+                            title={locale === "ru" ? "Симуляция" : "Simulation"}
+                            text={locale === "ru"
+                              ? "«Симулировать тур» играет матч твоего клуба по выбранной тактике/составу. «Весь сезон» доигрывает ИИ все оставшиеся туры разом, включая твои — используй, если просто хочешь долистать до конца сезона."
+                              : "\"Simulate\" plays your club's match with your chosen tactic/lineup. \"Sim Season\" has the AI play out every remaining round at once, including yours — use it to fast-forward to season's end."} />
+                        </div>
+                        {(() => {
+                          const myMatch = currentFixtures.find(f => f.home_club === userClub || f.away_club === userClub);
+                          const opponent = myMatch ? (myMatch.home_club === userClub ? myMatch.away_club : myMatch.home_club) : null;
+                          const isHome = myMatch?.home_club === userClub;
+                          return opponent ? (
+                            <div className={`text-lg font-display font-black truncate ${ui.text}`}>
+                              {isHome ? locale === "ru" ? "дома против" : "vs" : locale === "ru" ? "в гостях у" : "at"} {opponent}
+                            </div>
+                          ) : (
+                            <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>
+                          );
+                        })()}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={advanceMatchday} disabled={simulating || simulatingSeason || currentFixtures.every(f => f.played) || !lineupValid}

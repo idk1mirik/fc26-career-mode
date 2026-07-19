@@ -11,6 +11,7 @@ import { getStageInfo, getStageDisplayName } from "@/lib/continentalKnockout";
 import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 import { getThemeCopy } from "@/lib/i18n";
 import { KnockoutBracket } from "@/components/KnockoutBracket";
+import { HelpHint } from "@/components/HelpHint";
 
 const THEME_UI = {
   classic: {
@@ -200,7 +201,18 @@ export default function CupsPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{COMP_ICON[comp.type] ?? "🏆"}</span>
                       <div>
-                        <div className="font-black text-sm">{comp.name}</div>
+                        <div className="font-black text-sm flex items-center gap-1.5">
+                          {comp.name}
+                          <HelpHint id={`cup-round-${comp.type}`} theme={theme as any}
+                            title={comp.name}
+                            text={locale === "ru"
+                              ? (comp.type === "continental"
+                                ? "Групповой этап (лиг-фаза) → плей-офф на вылет с раундами по 2 матча (кроме финала). Раунд открывается для симуляции только когда календарь лиги дойдёт до его даты."
+                                : "Раунды на вылет. Раунд открывается для симуляции только когда календарь лиги дойдёт до его даты — играть его раньше времени нельзя.")
+                              : (comp.type === "continental"
+                                ? "Group (league) phase → knockout with two-legged ties (except the final). A round only unlocks once the league calendar reaches its date."
+                                : "Single-elimination rounds. A round only unlocks once the league calendar reaches its date.")} />
+                        </div>
                         <div className={`text-[10px] ${ui.muted}`}>
                           {comp.status === "finished" ? `${copy.cupsWinnerPrefix} ${comp.winner_club}` : roundLabel}
                         </div>

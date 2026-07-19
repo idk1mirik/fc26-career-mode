@@ -9,6 +9,7 @@ import DashboardLayout from "@/app/lib/DashboardLayout";
 import { PlayerModal, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
 import { getAdjustedOverall } from "@/lib/positionPenalty";
 import { ContractPanel } from "@/components/ContractPanel";
+import { HelpHint } from "@/components/HelpHint";
 
 // ─── FORMATIONS ───────────────────────────────────────────────────────────────
 // Генератор координат для линий
@@ -133,12 +134,13 @@ function pickBest(players: any[], positions: string[], used: Set<string>): any |
 }
 
 // ─── PITCH SLOT ───────────────────────────────────────────────────────────────
-const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot }: {
+const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot, theme }: {
   slot: string; player: any | null; x: number; y: number; glowColor: string;
   onSlotClick: (slot: string, player: any | null) => void;
   isCustom?: boolean; customPos?: string;
   onPickPosition?: (slot: string) => void;
   onDeleteCustomSlot?: (slot: string) => void;
+  theme?: string;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const realPos = isCustom ? (customPos || "CM") : (POS_PRIORITY[slot]?.[0] ?? slot);
@@ -177,7 +179,7 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
               <div className="text-[12px] font-black truncate max-w-[74px] drop-shadow-lg" style={{ color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
                 {player.name.split(" ").slice(-1)[0]}
               </div>
-              <div className="text-[14px] font-black drop-shadow flex items-center gap-0.5 justify-center" style={{ color: getRatingColor(ovr ?? 0), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+              <div className="text-[14px] font-black drop-shadow flex items-center gap-0.5 justify-center" style={{ color: getRatingColor(ovr ?? 0, theme), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                 {ovr}{isPenalized && <span style={{ fontSize: 9, color: "#ef4444" }}>↓</span>}
               </div>
             </>
@@ -194,11 +196,12 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
 });
 
 // ─── PLAYER ROW ───────────────────────────────────────────────────────────────
-const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating }: {
+const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating, theme }: {
   p: any; ui: typeof THEME_UI["classic"]; onOpen: (p: any) => void; isXI?: boolean; onAddToLineup?: (p: any) => void;
   emptySlots?: { slot: string; label: string }[];
   status?: { status: string; matches_out: number; yellow_cards: number } | null;
   avgRating?: number | null;
+  theme?: string;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [showSlots, setShowSlots] = useState(false);
@@ -206,7 +209,9 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
   const pot = p.potential ?? ovr;
   const isUnavailable = status && status.matches_out > 0;
 
-  const sofaColor = (r: number) => r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444";
+  const sofaColor = (r: number) => theme === "aurora"
+    ? (r >= 8.5 ? "#16a34a" : r >= 7.0 ? "#65a30d" : r >= 6.0 ? "#b45309" : r >= 5.0 ? "#c2410c" : "#dc2626")
+    : (r >= 8.5 ? "#22c55e" : r >= 7.0 ? "#84cc16" : r >= 6.0 ? "#eab308" : r >= 5.0 ? "#f97316" : "#ef4444");
 
   return (
     <div className={`rounded-2xl transition-all card-lift animate-fade-in-up ${ui.card} ${ui.cardHover} ${isXI ? "ring-1 ring-emerald-500/40" : ""} ${isUnavailable ? "opacity-60" : ""}`}>
@@ -236,10 +241,10 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
         <FlagImage country={p.nationality || p.nation} size={14} />
         <div className={`text-xs w-8 text-center ${ui.muted}`}>{p.age}</div>
         <div className="text-xs text-center w-10">
-          <span className="font-bold" style={{ color: getRatingColor(pot) }}>{pot}</span>
+          <span className="font-bold" style={{ color: getRatingColor(pot, theme) }}>{pot}</span>
         </div>
         <div className="text-center w-11">
-          <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
+          <span className="text-base font-black" style={{ color: getRatingColor(ovr, theme) }}>{ovr}</span>
         </div>
         {avgRating != null && avgRating > 0 ? (
           <div className="text-center w-10 shrink-0">
@@ -688,6 +693,10 @@ export default function SquadPage() {
                   style={{ background: justSaved ? "rgba(34,197,94,0.25)" : `${glowColor}25`, color: justSaved ? "#22c55e" : glowColor, border: `1px solid ${justSaved ? "#22c55e" : glowColor}50` }}>
                   {justSaved ? ui.savedLabel : ui.saveLabel}
                 </button>
+                <HelpHint id="squad-save-lineup" theme={theme as any}
+                  title="Lineup"
+                  text="Каждая схема (4-3-3, 4-4-2 и т.д.) хранит свой состав отдельно — переключаясь между схемами, не нужно каждый раз расставлять игроков заново."
+                  side="left" />
               </div>
 
               {isCustomFormation && (
@@ -741,6 +750,7 @@ export default function SquadPage() {
                     isCustom={isCustomFormation}
                     customPos={customPositions[slot]}
                     onPickPosition={s => setEditingSlot(s)}
+                    theme={theme}
                     onDeleteCustomSlot={s => {
                       setCustomSlots(prev => prev.filter(cs => cs.slot !== s));
                       setLineup(prev => { const n = {...prev}; delete n[s]; return n; });
@@ -802,7 +812,7 @@ export default function SquadPage() {
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                       onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
                       status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
-                      avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} />
+                      avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} />
                   ))}
               </div>
             </div>
@@ -836,7 +846,7 @@ export default function SquadPage() {
                         isXI={startingIds.has(p.id ?? p.name)}
                         onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
                         status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
-                        avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} />
+                        avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} />
                     ))}
                   </div>
                 </div>
@@ -866,6 +876,8 @@ export default function SquadPage() {
           <ContractPanel
             theme={theme as any}
             locale="en"
+            seasonId={seasonId ?? undefined}
+            clubId={selectedClub?.name}
             player={{
               contractId: contract.id,
               playerId: contractPanelPlayer.id ?? contractPanelPlayer.name,
@@ -878,6 +890,13 @@ export default function SquadPage() {
               happiness: contract.happiness,
             }}
             onClose={() => setContractPanelPlayer(null)}
+            onReleased={() => {
+              // Игрок физически покинул состав (squad_overrides переехал на
+              // сентинел свободного агента) — проще всего перезагрузить
+              // страницу, чем аккуратно вычищать его из десятка мест
+              // локального состояния (состав, лайнап, скамейка, статы).
+              window.location.reload();
+            }}
             onSigned={() => {
               setContractPanelPlayer(null);
               // перечитать контракты клуба, чтобы UI сразу показал новые условия

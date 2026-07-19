@@ -7,6 +7,7 @@ import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { getThemeCopy } from "@/lib/i18n";
 import { KnockoutBracket } from "@/components/KnockoutBracket";
+import { MatchReportModal } from "@/components/MatchReportModal";
 
 const THEME_UI = {
   classic: {
@@ -17,6 +18,7 @@ const THEME_UI = {
     tabIdle: "bg-white/[0.04] text-white/40 hover:bg-white/[0.08]",
     scoreBg: "bg-white/[0.06] rounded-lg",
     highlight: "bg-white/[0.04]",
+    tableRow: "hover:bg-white/[0.06]",
     userColor: "text-emerald-400",
     font: {},
   },
@@ -28,6 +30,7 @@ const THEME_UI = {
     tabIdle: "bg-pink-50 text-pink-400 hover:bg-pink-100",
     scoreBg: "bg-pink-50 rounded-lg",
     highlight: "bg-violet-50/50",
+    tableRow: "hover:bg-pink-50/60",
     userColor: "text-violet-600",
     font: { fontFamily: "'Fraunces',serif" },
   },
@@ -39,6 +42,7 @@ const THEME_UI = {
     tabIdle: "bg-purple-950/20 text-purple-500/50 hover:bg-purple-950/40 font-mono",
     scoreBg: "bg-purple-950/30 rounded-none",
     highlight: "bg-purple-950/20",
+    tableRow: "hover:bg-purple-950/30",
     userColor: "text-fuchsia-400",
     font: { fontFamily: "'Share Tech Mono',monospace" },
   },
@@ -54,6 +58,7 @@ export default function FixturesPage() {
   const seasonId   = useCareerStore(s => s.seasonId);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const [matches, setMatches] = useState<any[]>([]);
+  const [reportFix, setReportFix] = useState<any>(null);
   const [filter, setFilter]   = useState("all");
   const [view, setView] = useState<"matches" | "standings">("matches");
   const [hydrated, setHydrated] = useState(false);
@@ -283,7 +288,8 @@ export default function FixturesPage() {
                       : "TBD";
                     return (
                       <div key={f.id}
-                        className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}>
+                        onClick={() => played && setReportFix(f)}
+                        className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""} ${played ? `cursor-pointer transition-colors ${ui.tableRow}` : ""}`}>
                         <div className={`text-[10px] leading-tight ${ui.muted} sm:w-24 sm:shrink-0 flex items-center gap-1`}>
                           <span>{COMP_ICON[f.competition_type] ?? "⚽"}</span>
                           <span>{dateStr} · {f.competition_name}</span>
@@ -310,6 +316,10 @@ export default function FixturesPage() {
           </>
         )}
       </div>
+
+      {reportFix && (
+        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} onClose={() => setReportFix(null)} />
+      )}
     </DashboardLayout>
   );
 }

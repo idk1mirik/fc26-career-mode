@@ -131,7 +131,14 @@ export const FlagImage = memo(function FlagImage({ country, size = 20 }: { count
 });
 
 // ─── RATING COLOR ─────────────────────────────────────────────────────────────
-export function getRatingColor(v: number): string {
+export function getRatingColor(v: number, theme?: string): string {
+  if (theme === "aurora") {
+    if (v >= 90) return "#16a34a";
+    if (v >= 85) return "#a16207";
+    if (v >= 80) return "#2563eb";
+    if (v >= 75) return "#9333ea";
+    return "#64748b";
+  }
   if (v >= 90) return "#22c55e";
   if (v >= 85) return "#eab308";
   if (v >= 80) return "#3b82f6";
@@ -234,8 +241,8 @@ export const PlayerCard = memo(function PlayerCard({
 
   const ovr   = player.overall ?? player.ovr ?? 75;
   const pot   = player.potential ?? player.pot ?? ovr;
-  const ovrColor = getRatingColor(ovr);
-  const potColor = getRatingColor(pot);
+  const ovrColor = getRatingColor(ovr, theme);
+  const potColor = getRatingColor(pot, theme);
 
   if (theme === "classic") {
     return (
@@ -295,7 +302,7 @@ export const PlayerCard = memo(function PlayerCard({
           <div className="grid grid-cols-3 gap-1.5 mb-4">
             {stats.map(s => (
               <div key={s.label} className="flex flex-col items-center py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.05]">
-                <span className="font-black text-sm font-mono" style={{ color: getRatingColor(s.value) }}>{s.value}</span>
+                <span className="font-black text-sm font-mono" style={{ color: getRatingColor(s.value, theme) }}>{s.value}</span>
                 <span className="text-[8px] text-white/20 uppercase font-mono font-black tracking-widest">{s.label}</span>
               </div>
             ))}
@@ -381,8 +388,8 @@ export const PlayerCard = memo(function PlayerCard({
           <div className="grid grid-cols-3 gap-1.5 mb-4">
             {stats.map(s => (
               <div key={s.label} className="flex flex-col items-center py-1.5 rounded-2xl"
-                style={{ background: `${getRatingColor(s.value)}10`, border: `1.5px solid ${getRatingColor(s.value)}25` }}>
-                <span className="font-black text-sm" style={{ color: getRatingColor(s.value), fontFamily: "'Fraunces',serif" }}>{s.value}</span>
+                style={{ background: `${getRatingColor(s.value, theme)}10`, border: `1.5px solid ${getRatingColor(s.value, theme)}25` }}>
+                <span className="font-black text-sm" style={{ color: getRatingColor(s.value, theme), fontFamily: "'Fraunces',serif" }}>{s.value}</span>
                 <span className="text-[8px] text-pink-800/30 uppercase font-bold tracking-widest">{s.label}</span>
               </div>
             ))}
@@ -471,7 +478,7 @@ export const PlayerCard = memo(function PlayerCard({
           {stats.map(s => (
             <div key={s.label} className="flex flex-col items-center py-1.5"
               style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.12)" }}>
-              <span className="font-black font-mono text-sm" style={{ color: getRatingColor(s.value) }}>{s.value}</span>
+              <span className="font-black font-mono text-sm" style={{ color: getRatingColor(s.value, theme) }}>{s.value}</span>
               <span className="text-[7px] font-mono font-black text-purple-600/40 uppercase tracking-widest">{s.label}</span>
             </div>
           ))}
@@ -502,9 +509,9 @@ export const PlayerCard = memo(function PlayerCard({
 });
 
 // ─── EXPANDABLE STATS ─────────────────────────────────────────────────────────
-export function ExpandableStats({ player, isGK, stats, cfg, br }: {
+export function ExpandableStats({ player, isGK, stats, cfg, br, theme }: {
   player: any; isGK: boolean; stats: { label: string; value: number }[];
-  cfg: any; br: number;
+  cfg: any; br: number; theme?: string;
 }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
@@ -579,14 +586,14 @@ export function ExpandableStats({ player, isGK, stats, cfg, br }: {
               style={{
                 display: "flex", flexDirection: "column", alignItems: "center",
                 padding: "8px 2px",
-                background: isOpen ? `${getRatingColor(s.value)}18` : cfg.statBg,
-                border: `1px solid ${isOpen ? getRatingColor(s.value) + "60" : cfg.statBorder}`,
+                background: isOpen ? `${getRatingColor(s.value, theme)}18` : cfg.statBg,
+                border: `1px solid ${isOpen ? getRatingColor(s.value, theme) + "60" : cfg.statBorder}`,
                 borderRadius: br,
                 cursor: hasSubs ? "pointer" : "default",
                 transition: "all 0.15s",
               }}
             >
-              <span style={{ fontSize: 16, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
+              <span style={{ fontSize: 16, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value, theme) }}>{s.value}</span>
               <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.3em", color: cfg.labelColor, marginTop: 2 }}>
                 {s.label}{hasSubs ? (isOpen ? " ▲" : " ▼") : ""}
               </span>
@@ -608,7 +615,7 @@ export function ExpandableStats({ player, isGK, stats, cfg, br }: {
           <style>{`@keyframes subStatsIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }`}</style>
           {subsMap[openIdx].map((s, i) => (
             <div key={s.label + i} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 2px" }}>
-              <span style={{ fontSize: 14, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value) }}>{s.value}</span>
+              <span style={{ fontSize: 14, fontWeight: 900, lineHeight: 1, color: getRatingColor(s.value, theme) }}>{s.value}</span>
               <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.2em", color: cfg.labelColor, marginTop: 2 }}>{s.label}</span>
             </div>
           ))}
@@ -663,8 +670,8 @@ export function PlayerModal({
 
   const ovr      = player.overall ?? 75;
   const pot      = player.potential ?? ovr;
-  const ovrColor = getRatingColor(ovr);
-  const potColor = getRatingColor(pot);
+  const ovrColor = getRatingColor(ovr, theme);
+  const potColor = getRatingColor(pot, theme);
   const nationality = player.nationality || player.nation || "";
 
   const modalCfg = {
@@ -804,7 +811,7 @@ export function PlayerModal({
               )}
             </div>
             <div style={{ height: 1, background: cfg.accentLine }} />
-            <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
+            <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} theme={theme} />
             {seasonStats && seasonStats.matches_played > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ height: 1, background: cfg.accentLine }} />
@@ -821,7 +828,7 @@ export function PlayerModal({
                     { key: "avg", label: locale === "ru" ? "СР" : "AVG", value: seasonStats.avg_rating.toFixed(1) },
                   ].map(s => (
                     <div key={s.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
-                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.key === "avg" ? getRatingColor(Number(s.value) * 10) : cfg.metaColor }}>{s.value}</span>
+                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.key === "avg" ? getRatingColor(Number(s.value) * 10, theme) : cfg.metaColor }}>{s.value}</span>
                       <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.25em", color: cfg.labelColor, marginTop: 3 }}>{s.label}</span>
                     </div>
                   ))}
@@ -883,7 +890,7 @@ export function PlayerModal({
               )}
             </div>
             <div style={{ height: 1, background: cfg.accentLine }} />
-            <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} />
+            <ExpandableStats player={player} isGK={isGK} stats={stats} cfg={cfg} br={br} theme={theme} />
             {seasonStats && seasonStats.matches_played > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ height: 1, background: cfg.accentLine }} />
@@ -900,7 +907,7 @@ export function PlayerModal({
                     { key: "avg", label: locale === "ru" ? "СР" : "AVG", value: seasonStats.avg_rating.toFixed(1) },
                   ].map(s => (
                     <div key={s.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
-                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.key === "avg" ? getRatingColor(Number(s.value) * 10) : cfg.metaColor }}>{s.value}</span>
+                      <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.key === "avg" ? getRatingColor(Number(s.value) * 10, theme) : cfg.metaColor }}>{s.value}</span>
                       <span style={{ fontSize: 7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.25em", color: cfg.labelColor, marginTop: 3 }}>{s.label}</span>
                     </div>
                   ))}

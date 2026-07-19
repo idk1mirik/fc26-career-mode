@@ -5,6 +5,7 @@ import { useThemeStore } from "@/app/store/themeStore";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { TACTICS, recommendTactics } from "@/lib/tactics";
 import { getThemeCopy } from "@/lib/i18n";
+import { HelpHint } from "@/components/HelpHint";
 
 const THEME_UI = {
   classic: {
@@ -94,7 +95,14 @@ export default function TacticsPage() {
         {/* Recommendations */}
         {recs.length > 0 && (
           <div className="mb-6">
-            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.tacticsRecommended}</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted} flex items-center gap-1.5`}>
+              {copy.tacticsRecommended}
+              <HelpHint id="tactics-recommended" theme={theme as any}
+                title={locale === "ru" ? "Рекомендации" : "Recommendations"}
+                text={locale === "ru"
+                  ? "Подбирается по составу твоей команды: сильная атака и скорость на флангах — тактики с высоким темпом, крепкая оборона — более сдержанные схемы."
+                  : "Based on your squad: strong pace and wide attackers favor high-tempo tactics, a solid defense favors more conservative setups."} />
+            </div>
             <div className="flex gap-2 flex-wrap">
               {recs.map(r => (
                 <button key={r} onClick={() => setTactic(r)}
@@ -130,6 +138,13 @@ export default function TacticsPage() {
           <div>
             <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.tacticsCurrent}: {current.name}</div>
             <div className={`p-5 rounded-2xl ${ui.card} animate-fade-in-up`}>
+              <div className="flex items-center justify-end -mt-1 mb-2">
+                <HelpHint id="tactics-params" theme={theme as any}
+                  title={locale === "ru" ? "Параметры тактики" : "Tactic parameters"}
+                  text={locale === "ru"
+                    ? "Влияют напрямую на движок матча: высокая линия обороны и прессинг сильнее давят соперника, но уязвимее к контратакам. Кастомную тактику можно настроить ползунками под свой состав."
+                    : "These feed directly into the match engine: a high defensive line and pressing squeeze the opponent but are more exposed to counters. The Custom tactic lets you tune every slider for your squad."} />
+              </div>
               <div className="space-y-4">
                 {Object.entries(PARAM_LABELS).map(([key, label]) => {
                   const val = current[key as keyof typeof current] as number;

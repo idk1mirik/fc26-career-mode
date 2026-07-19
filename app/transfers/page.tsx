@@ -8,6 +8,8 @@ import { getRatingColor, FlagImage, PlayerModal } from "@/app/lib/playerComponen
 import { getLeagueTheme } from "@/constants/themes";
 import { TrendingUp, TrendingDown, Lock, Search, Wallet, Tag, X as XIcon } from "lucide-react";
 import { getThemeCopy } from "@/lib/i18n";
+import { HelpHint } from "@/components/HelpHint";
+import { ContractPanel } from "@/components/ContractPanel";
 
 // ─── Тема — тот же паттерн THEME_UI, что и на странице состава/тактики ──────
 const THEME_UI = {
@@ -59,11 +61,11 @@ function fmtMoney(v: number) {
 }
 
 const TransferPlayerRow = memo(function TransferPlayerRow({
-  p, ui, actions, onOpen, priceLabel, subLabel,
+  p, ui, actions, onOpen, priceLabel, subLabel, theme,
 }: {
   p: any; ui: typeof THEME_UI["classic"];
   actions: { label: string; icon: any; onClick: () => void; busy?: boolean; disabled?: boolean; cls: string }[];
-  onOpen: (p: any) => void; priceLabel?: string; subLabel?: string;
+  onOpen: (p: any) => void; priceLabel?: string; subLabel?: string; theme?: string;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const ovr = p.overall ?? 75;
@@ -84,7 +86,7 @@ const TransferPlayerRow = memo(function TransferPlayerRow({
         </div>
         <FlagImage country={p.nationality || p.nation} size={14} />
         <div className="text-center w-10">
-          <span className="text-base font-black" style={{ color: getRatingColor(ovr) }}>{ovr}</span>
+          <span className="text-base font-black" style={{ color: getRatingColor(ovr, theme) }}>{ovr}</span>
         </div>
         <div className={`text-xs font-black w-20 text-right ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
         <div className="flex items-center gap-1.5">
@@ -142,12 +144,14 @@ export default function TransfersPage() {
   const windowLabel = preseasonOpen ? copy.transfersPreseasonWindow : winterOpen ? copy.transfersWinterWindow : copy.transfersClosed;
   const nextOpen    = matchday < 20 ? copy.transfersNextOpenWinter : copy.transfersNextOpenPreseason;
 
-  const [tab, setTab] = useState<"market" | "squad" | "listings">("market");
+  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents">("market");
   const [budget, setBudget] = useState<number | null>(null);
   const [market, setMarket] = useState<any[]>([]);
   const [squad, setSquad] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
+  const [freeAgents, setFreeAgents] = useState<any[]>([]);
+  const [signingAgent, setSigningAgent] = useState<any | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -174,12 +178,13 @@ export default function TransfersPage() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId }),
       }).catch(() => {});
 
-      const [standingsRes, marketRes, squadRes, historyRes, listingsRes] = await Promise.all([
+      const [standingsRes, marketRes, squadRes, historyRes, listingsRes, agentsRes] = await Promise.all([
         fetch(`/api/standings?seasonId=${seasonId}`),
         fetch(`/api/transfers/market?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
         fetch(`/api/players?club=${encodeURIComponent(userClub)}&seasonId=${seasonId}`),
         fetch(`/api/transfers/history?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
         fetch(`/api/transfers/listings?seasonId=${seasonId}`),
+        fetch(`/api/contracts/free-agents?seasonId=${seasonId}`),
       ]);
       if (standingsRes.ok) {
         const standings = await standingsRes.json();
@@ -189,6 +194,7 @@ export default function TransfersPage() {
       if (marketRes.ok) setMarket((await marketRes.json()).players ?? []);
       if (squadRes.ok) setSquad(await squadRes.json());
       if (historyRes.ok) setHistory((await historyRes.json()).transfers ?? []);
+      if (agentsRes.ok) setFreeAgents((await agentsRes.json()).agents ?? []);
       if (listingsRes.ok) {
         const ls = (await listingsRes.json()).listings ?? [];
         setListings(ls);
@@ -207,6 +213,12 @@ export default function TransfersPage() {
     if (!q) return market;
     return market.filter((p: any) => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q));
   }, [market, search]);
+
+  const filteredFreeAgents = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return freeAgents;
+    return freeAgents.filter((p: any) => p.playerName.toLowerCase().includes(q));
+  }, [freeAgents, search]);
 
   const filteredSquad = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -364,7 +376,7 @@ export default function TransfersPage() {
         ) : (
           <>
             {/* ── Tabs ── */}
-            <div className="flex gap-2 mb-4 flex-wrap">
+            <div className="flex gap-2 mb-4 flex-wrap items-center">
               <button onClick={() => setTab("market")}
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "market" ? ui.tabActive : ui.tabIdle}`}>
                 {copy.transfersMarketTab}
@@ -377,6 +389,31 @@ export default function TransfersPage() {
                 className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "listings" ? ui.tabActive : ui.tabIdle}`}>
                 {copy.transfersListingsTab} ({otherListings.length})
               </button>
+              <button onClick={() => setTab("agents")}
+                className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === "agents" ? ui.tabActive : ui.tabIdle}`}>
+                🆓 {locale === "ru" ? "Агенты" : "Free Agents"} ({freeAgents.length})
+              </button>
+              {tab === "squad" && (
+                <HelpHint id="transfers-squad-actions" theme={theme as any}
+                  title={locale === "ru" ? "Продажа игрока" : "Selling a player"}
+                  text={locale === "ru"
+                    ? "Быстрая продажа — мгновенно, но со скидкой от рыночной цены (чем выше рейтинг, тем больше скидка). Выставить на рынок — цену назначаешь сам, но ждёшь покупателя."
+                    : "Quick Sell — instant, but at a discount from market value (bigger stars get bigger discounts). List for Sale — you set the price, but wait for a buyer."} />
+              )}
+              {tab === "market" && (
+                <HelpHint id="transfers-market-buy" theme={theme as any}
+                  title={locale === "ru" ? "Трансферный рынок" : "Transfer market"}
+                  text={locale === "ru"
+                    ? "Покупка игрока автоматически создаёт ему новый контракт в твоём клубе (старый контракт с прежним клубом закрывается)."
+                    : "Buying a player automatically creates a fresh contract at your club (their old club's contract is closed)."} />
+              )}
+              {tab === "agents" && (
+                <HelpHint id="transfers-agents" theme={theme as any}
+                  title={locale === "ru" ? "Свободные агенты" : "Free agents"}
+                  text={locale === "ru"
+                    ? "Игроки без клуба — контракт истёк и не был продлён. Подписать можно без трансферной суммы, только зарплата и срок по переговорам."
+                    : "Players without a club — their contract expired and wasn't renewed. Sign them with no transfer fee, just negotiate wage and length."} />
+              )}
             </div>
 
             {/* ── Search ── */}
@@ -395,7 +432,7 @@ export default function TransfersPage() {
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredMarket.map((p: any) => (
-                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team}
+                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
                     actions={[{
                       label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
                       busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
@@ -409,14 +446,14 @@ export default function TransfersPage() {
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredSquad.map((p: any) => (
-                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`}
+                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`} theme={theme}
                     actions={[
                       { label: copy.transfersQuickSell, icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
                       { label: copy.transfersList, icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
                     ]} />
                 ))}
               </div>
-            ) : (
+            ) : tab === "listings" ? (
               <div className="space-y-6">
                 {myListings.length > 0 && (
                   <div>
@@ -424,7 +461,7 @@ export default function TransfersPage() {
                     <div className="space-y-1.5">
                       {myListings.map((l: any) => (
                         <TransferPlayerRow key={l.id} p={enrichListing(l)}
-                          ui={ui} onOpen={openModal} subLabel="listed by you" priceLabel={fmtMoney(l.asking_price)}
+                          ui={ui} onOpen={openModal} subLabel="listed by you" priceLabel={fmtMoney(l.asking_price)} theme={theme}
                           actions={[{ label: copy.transfersCancel, icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
                       ))}
                     </div>
@@ -438,12 +475,35 @@ export default function TransfersPage() {
                     <div className="space-y-1.5">
                       {otherListings.map((l: any) => (
                         <TransferPlayerRow key={l.id} p={enrichListing(l)}
-                          ui={ui} onOpen={openModal} subLabel={l.seller_club} priceLabel={fmtMoney(l.asking_price)}
+                          ui={ui} onOpen={openModal} subLabel={l.seller_club} priceLabel={fmtMoney(l.asking_price)} theme={theme}
                           actions={[{ label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn, busy: busyId === l.id, disabled: budget !== null && l.asking_price > budget, onClick: () => handleBuyListing(l) }]} />
                       ))}
                     </div>
                   )}
                 </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {filteredFreeAgents.length === 0 && (
+                  <div className={`text-center py-10 text-sm ${ui.muted}`}>
+                    {locale === "ru" ? "Пока свободных агентов нет — они появляются, когда у кого-то истекает контракт." : "No free agents right now — they appear when someone's contract expires."}
+                  </div>
+                )}
+                {filteredFreeAgents.map((a: any) => (
+                  <div key={a.contractId} className={`rounded-2xl p-3 flex items-center gap-3 transition-all card-lift animate-fade-in-up ${ui.card} ${ui.cardHover}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-bold truncate ${ui.nameColor}`}>{a.playerName}</div>
+                      <div className={`text-[11px] ${ui.muted}`}>{a.position} · {a.overall} OVR · {a.age} y.o.</div>
+                    </div>
+                    <span className="text-[10px] font-black px-2 py-1 rounded-lg" style={{ color: getRatingColor(a.overall, theme), background: `${getRatingColor(a.overall, theme)}18` }}>
+                      {a.overall}
+                    </span>
+                    <button onClick={() => setSigningAgent(a)}
+                      className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition ${ui.buyBtn}`}>
+                      🆓 {locale === "ru" ? "Подписать" : "Sign"}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -485,6 +545,33 @@ export default function TransfersPage() {
         {/* ── Asking price modal ── */}
         {listingTarget && (
           <AskingPriceModal ui={ui} player={listingTarget} onCancel={() => setListingTarget(null)} onConfirm={handleConfirmListing} copy={copy} />
+        )}
+
+        {/* ── Подписание свободного агента ── */}
+        {signingAgent && (
+          <ContractPanel
+            theme={theme as any}
+            locale={locale as any}
+            isFreeAgent
+            signingClubId={userClub}
+            player={{
+              contractId: signingAgent.contractId,
+              playerId: signingAgent.playerId,
+              playerName: signingAgent.playerName,
+              overall: signingAgent.overall,
+              age: signingAgent.age,
+              currentWage: 0,
+              currentYears: 0,
+              currentRole: signingAgent.squadRole ?? "rotation",
+              happiness: signingAgent.happiness ?? 50,
+            }}
+            onClose={() => setSigningAgent(null)}
+            onSigned={() => {
+              setSigningAgent(null);
+              setToast({ text: locale === "ru" ? `${signingAgent.playerName} подписан!` : `${signingAgent.playerName} signed!`, kind: "ok" });
+              loadAll();
+            }}
+          />
         )}
 
         {/* ── Toast ── */}
