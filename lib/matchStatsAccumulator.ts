@@ -3,6 +3,15 @@
 // была только внутри season/advance (lib/simulateMatchday.ts), кубковые матчи
 // генерировали events/ratings, но они никогда не попадали ни в player_status,
 // ни в player_season_stats. Теперь оба места используют одно и то же.
+//
+// competitionType: дисквалификации (жёлтые/красные) теперь СКОПИРОВАНЫ по
+// турниру — красная карточка в Лиге чемпионов даёт status="suspended" с
+// competition_type="continental" и блокирует только матчи ЛЧ. Травмы
+// (competition_type = null) остаются глобальными — травмированный не может
+// играть нигде, это реалистично. Раньше всё это было одним глобальным
+// счётчиком matches_out без разделения по турниру, и матч ЛЮБОГО турнира
+// декрементил дисквалификацию любого другого — красная в ЛЧ гасилась
+// ближайшим лиговым туром.
 import { supabase } from "./supabase";
 
 export const YELLOW_THRESHOLDS = [{ count: 5, ban: 1 }, { count: 10, ban: 2 }, { count: 15, ban: 3 }];
@@ -10,7 +19,8 @@ export const YELLOW_THRESHOLDS = [{ count: 5, ban: 1 }, { count: 10, ban: 2 }, {
 export const rowKeyOf = (row: any) => row.player_id || row.player_name;
 
 export interface StatusUpdateAcc {
-  playerId: string; playerName: string; status: string; matches_out: number; yellow_cards: number; existing?: any;
+  playerId: string; playerName: string; status: string; matches_out: number; yellow_cards: number;
+  competitionType: string | null; existing?: any;
 }
 export interface SeasonStatAcc {
   playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; assists: number; yellow_cards: number; red_cards: number;
@@ -19,19 +29,37 @@ export interface SeasonStatAcc {
 export function accumulateCardsAndInjuries(
   events: any[], side: "home" | "away", clubId: string, statusRows: any[],
   statusUpdates: Record<string, StatusUpdateAcc>,
+  competitionType: string,
 ) {
   const yellowsThisMatch: Record<string, number> = {};
   for (const e of events) {
     if (e.team !== side || !e.player) continue;
     const pid = e.playerId ?? e.player;
-    const key = `${clubId}::${pid}`;
-    const existingRow = statusRows.find((r: any) => r.club_id === clubId && rowKeyOf(r) === pid);
 
-    if (e.type === "yellow") {
+    if (e.type === "yellow" || e.type === "red") {
+      // Дисквалификация за карточки — скопирована по турниру
+      const scope = competitionType;
+      const key = `${clubId}::${pid}::${scope}`;
+      const existingRow = statusRows.find((r: any) => r.club_id === clubId && rowKeyOf(r) === pid && r.competition_type === scope);
+
+      if (e.type === "red") {
+        const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
+        statusUpdates[key] = {
+          playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1),
+          yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0,
+          competitionType: scope, existing: existingRow,
+        };
+        continue;
+      }
+
       yellowsThisMatch[pid] = (yellowsThisMatch[pid] ?? 0) + 1;
       if (yellowsThisMatch[pid] === 2) {
         const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-        statusUpdates[key] = { playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+        statusUpdates[key] = {
+          playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1),
+          yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0,
+          competitionType: scope, existing: existingRow,
+        };
         continue;
       }
       const prevYellow = statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0;
@@ -42,17 +70,21 @@ export function accumulateCardsAndInjuries(
         playerId: pid, playerName: e.player,
         status: crossed ? "suspended" : (statusUpdates[key]?.status ?? existingRow?.status ?? "none"),
         matches_out: crossed ? Math.max(prevOut, crossed.ban) : prevOut,
-        yellow_cards: newTotal, existing: existingRow,
+        yellow_cards: newTotal, competitionType: scope, existing: existingRow,
       };
     }
-    if (e.type === "red") {
-      const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-      statusUpdates[key] = { playerId: pid, playerName: e.player, status: "suspended", matches_out: Math.max(prevOut, 1), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
-    }
+
     if (e.type === "injury") {
+      // Травма — глобальная (competition_type = null), блокирует все турниры сразу
+      const key = `${clubId}::${pid}::injury`;
+      const existingRow = statusRows.find((r: any) => r.club_id === clubId && rowKeyOf(r) === pid && r.competition_type === null);
       const weeks = Math.floor(Math.random() * 3) + 1;
       const prevOut = statusUpdates[key]?.matches_out ?? existingRow?.matches_out ?? 0;
-      statusUpdates[key] = { playerId: pid, playerName: e.player, status: "injured", matches_out: Math.max(prevOut, weeks), yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0, existing: existingRow };
+      statusUpdates[key] = {
+        playerId: pid, playerName: e.player, status: "injured", matches_out: Math.max(prevOut, weeks),
+        yellow_cards: statusUpdates[key]?.yellow_cards ?? existingRow?.yellow_cards ?? 0,
+        competitionType: null, existing: existingRow,
+      };
     }
   }
 }
@@ -100,11 +132,13 @@ export async function persistStatusAndStats(
     if (upd.existing) {
       writes.push(supabase.from("player_status").update({
         player_id: upd.playerId, status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
+        competition_type: upd.competitionType,
       }).eq("id", upd.existing.id));
     } else {
       writes.push(supabase.from("player_status").insert({
         season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
         status: upd.status, matches_out: upd.matches_out, yellow_cards: upd.yellow_cards,
+        competition_type: upd.competitionType,
       }));
     }
   }
@@ -131,5 +165,26 @@ export async function persistStatusAndStats(
     }
   }
 
+  await Promise.all(writes);
+}
+
+// ── Декремент matches_out ПОСЛЕ обработки тура — вызывать отдельно для
+// каждого контекста турнира. competitionType=null декрементирует ТОЛЬКО
+// травмы (глобальные), competitionType="league"/"continental"/... —
+// декрементирует ТОЛЬКО дисквалификации именно этого турнира. Раньше
+// декремент был только в lib/simulateMatchday.ts и трогал вообще все
+// статусы разом — красная в кубке гасилась ближайшим лиговым туром.
+export async function decrementMatchesOut(seasonId: string, clubIds: string[], competitionType: string | null) {
+  let query = supabase.from("player_status").select("*").eq("season_id", seasonId).in("club_id", clubIds).gt("matches_out", 0);
+  query = competitionType === null ? query.is("competition_type", null) : query.eq("competition_type", competitionType);
+  const { data: rows } = await query;
+  if (!rows?.length) return;
+
+  const writes = rows.map((row: any) => {
+    const newOut = row.matches_out - 1;
+    return supabase.from("player_status").update({
+      matches_out: newOut, status: newOut <= 0 ? "none" : row.status,
+    }).eq("id", row.id);
+  });
   await Promise.all(writes);
 }

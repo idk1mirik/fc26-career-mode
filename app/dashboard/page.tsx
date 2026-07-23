@@ -3,12 +3,9 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Zap } from "lucide-react";
 import DashboardLayout from "@/app/lib/DashboardLayout";
-import {
-  LayoutDashboard, Users, Trophy, CalendarDays,
-  ArrowRightLeft, Coins, ChevronRight, Zap, Star, Shield,
-} from "lucide-react";
-import { getLeagueTheme, getOverallColor } from "@/constants/themes";
+import { getLeagueTheme } from "@/constants/themes";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 import { getClubLogo } from "@/data/clublogos";
@@ -19,14 +16,6 @@ import { getThemeCopy } from "@/lib/i18n";
 import { MatchReportModal } from "@/components/MatchReportModal";
 import { HelpHint } from "@/components/HelpHint";
 import React from "react";
-
-const NAV = [
-  { label: "Overview",     icon: LayoutDashboard, href: "/dashboard" },
-  { label: "Squad",        icon: Users,           href: "/squad" },
-  { label: "Transfers",    icon: ArrowRightLeft,  href: "/transfers" },
-  { label: "Fixtures",     icon: CalendarDays,    href: "/fixtures" },
-  { label: "League Table", icon: Trophy,          href: "/table" },
-];
 
 const GLOBAL_UI = {
   classic: {
@@ -101,8 +90,10 @@ const GLOBAL_UI = {
 };
 
 // ─── STANDINGS TABLE ──────────────────────────────────────────────────────────
-function StandingsTable({ standings, userClub, ui, theme, glowColor }: {
-  standings: any[]; userClub: string; ui: any; theme: string; glowColor: string;
+import { getZoneColor } from "@/lib/europeanZones";
+
+function StandingsTable({ standings, userClub, ui, theme, glowColor, leagueName }: {
+  standings: any[]; userClub: string; ui: any; theme: string; glowColor: string; leagueName?: string;
 }) {
   if (!standings.length) return (
     <div className={`text-center py-8 ${ui.muted} text-sm`}>No standings yet</div>
@@ -129,7 +120,7 @@ function StandingsTable({ standings, userClub, ui, theme, glowColor }: {
             return (
               <tr key={row.club_id}
                 className={`transition-colors ${ui.tableRow} ${isUser ? ui.highlight : ""}`}>
-                <td className={`py-2.5 pl-2 font-black text-xs ${i < 4 ? "text-emerald-400" : i > standings.length - 4 ? "text-red-400" : ui.muted}`}>{i + 1}</td>
+                <td className={`py-2.5 pl-2 font-black text-xs ${ui.muted}`} style={getZoneColor(i, leagueName || "", standings.length) ? { color: getZoneColor(i, leagueName || "", standings.length)! } : undefined}>{i + 1}</td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-2">
                     <img src={getClubLogo(row.club_id)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
@@ -152,13 +143,34 @@ function StandingsTable({ standings, userClub, ui, theme, glowColor }: {
 }
 
 // ─── MATCH RESULT ROW ─────────────────────────────────────────────────────────
+function getRatingColorDash(r: number): string {
+  if (r >= 8.5) return "#22c55e";
+  if (r >= 7.0) return "#84cc16";
+  if (r >= 6.0) return "#eab308";
+  if (r >= 5.0) return "#f97316";
+  return "#ef4444";
+}
+
 function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userClub: string; ui: any; theme: string; onOpenReport?: (fix: any) => void }) {
   const isUser = fix.home_club === userClub || fix.away_club === userClub;
   const played = fix.played;
   const clickable = played && onOpenReport;
+
+  let form: "W" | "D" | "L" | null = null;
+  if (isUser && played) {
+    const isHome = fix.home_club === userClub;
+    const gf = isHome ? fix.home_goals : fix.away_goals;
+    const ga = isHome ? fix.away_goals : fix.home_goals;
+    form = gf > ga ? "W" : gf < ga ? "L" : "D";
+  }
+  const formColor = form === "W" ? "#22c55e" : form === "L" ? "#ef4444" : "#94a3b8";
+
   return (
     <div onClick={() => clickable && onOpenReport(fix)}
       className={`flex items-center gap-2 py-2.5 px-3 rounded-xl transition-colors ${ui.tableRow} ${isUser ? ui.highlight : ""} ${clickable ? "cursor-pointer" : ""}`}>
+      {form && (
+        <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black text-white shrink-0" style={{ background: formColor }}>{form}</span>
+      )}
       <div className="flex items-center gap-1.5 flex-1 justify-end">
         <span className={`text-sm font-bold truncate max-w-[100px] ${ui.text}`}>{fix.home_club}</span>
         <img src={getClubLogo(fix.home_club)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
@@ -170,6 +182,7 @@ function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userCl
         <img src={getClubLogo(fix.away_club)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
         <span className={`text-sm font-bold truncate max-w-[100px] ${ui.text}`}>{fix.away_club}</span>
       </div>
+      {form && <span className="w-5 shrink-0" />}
     </div>
   );
 }
@@ -207,9 +220,11 @@ export default function DashboardPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [seasonFinished, setSeasonFinished] = useState(false);
   const [seasonTrophies, setSeasonTrophies] = useState<any[]>([]);
+  const [allCompetitionResults, setAllCompetitionResults] = useState<any[]>([]);
   const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
+  const [seasonPlayerStats, setSeasonPlayerStats] = useState<any[]>([]);
   const [unavailableNames, setUnavailableNames] = useState<Set<string>>(new Set());
   const [simulatingCup, setSimulatingCup] = useState(false);
 
@@ -234,13 +249,21 @@ export default function DashboardPage() {
   const userClub    = selectedClub?.name || "";
 
   useEffect(() => {
+    if (!seasonId || !userClub) return;
+    fetch(`/api/season-stats?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setSeasonPlayerStats(data.stats ?? []); }).catch(() => {});
+  }, [seasonId, userClub]);
+
+  useEffect(() => {
     if (!seasonFinished || !seasonId) return;
     fetch(`/api/competitions?seasonId=${seasonId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
-        const won = (data.competitions ?? []).filter((c: any) => c.status === "finished" && c.winner_club === userClub);
-        setSeasonTrophies(won);
+        const finished = (data.competitions ?? []).filter((c: any) => c.status === "finished" && c.winner_club);
+        setSeasonTrophies(finished.filter((c: any) => c.winner_club === userClub));
+        setAllCompetitionResults(finished);
       }).catch(() => {});
   }, [seasonFinished, seasonId, userClub]);
 
@@ -360,7 +383,10 @@ export default function DashboardPage() {
         if (!ignoreDate && d.matchDate && d.matchDate > currentDateStr) continue; // дата ещё не наступила
         await fetch("/api/cup/advance", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ competitionId: d.competitionId, userClubId: userClub }),
+          body: JSON.stringify({
+            competitionId: d.competitionId, userClubId: userClub, userTactic: tactic,
+            userLineup: Object.values(lineup || {}).filter(Boolean),
+          }),
         });
         advancedAny = true;
       }
@@ -380,7 +406,18 @@ export default function DashboardPage() {
       while (!finished && iterations < SAFETY_CAP) {
         const res = await fetch("/api/season/advance", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ seasonId, userClubId: userClub }), // без lineup/tactic — авто-пилот
+          // Раньше здесь ничего не передавалось ("автопилот"), и сервер на
+          // КАЖДЫЙ матч заново собирал "топ-11 по общему рейтингу" вместо
+          // реального сохранённого состава — из-за этого статистика при
+          // авто-прокрутке была совсем не похожа на то, что получилось бы
+          // при ручной игре (другой стартовый состав, другая логика матча).
+          // Теперь передаём тот же lineup/tactic, что и при ручной игре —
+          // сервер сам подставит замены только на недоступные позиции.
+          body: JSON.stringify({
+            seasonId, userClubId: userClub, userTactic: tactic,
+            userCustomTactic: tactic === "Custom" ? customTactic : undefined,
+            userLineup: Object.values(lineup || {}).filter(Boolean),
+          }),
         });
         const data = await res.json();
         if (!res.ok) { setApiError(data.error || "Season sim stopped early."); break; }
@@ -482,13 +519,34 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="flex justify-center gap-2 mb-6">
+            <div className="flex justify-center gap-2 mb-4">
               <img src={getClubLogo(sortedStandings[0]?.club_id || "")} className="w-10 h-10 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
               <div className="text-left">
-                <div className={`text-[10px] uppercase ${ui.muted}`}>League Champion</div>
+                <div className={`text-[10px] uppercase ${ui.muted}`}>{locale === "ru" ? "Чемпион лиги" : "League Champion"}</div>
                 <div className={`text-sm font-black ${ui.text}`}>{sortedStandings[0]?.club_id}</div>
               </div>
             </div>
+
+            {/* Победители ВСЕХ турниров сезона — раньше тут был виден только
+                результат своей лиги и трофеи, выигранные лично пользователем. */}
+            {allCompetitionResults.length > 0 && (
+              <div className={`text-left rounded-2xl p-4 mb-6 ${ui.card}`}>
+                <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>
+                  {locale === "ru" ? "Победители сезона" : "Season winners"}
+                </div>
+                <div className="space-y-2">
+                  {allCompetitionResults.map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between text-sm">
+                      <span className={ui.muted}>{c.name}</span>
+                      <span className={`font-bold flex items-center gap-1.5 ${c.winner_club === userClub ? "text-emerald-400" : ui.text}`}>
+                        <img src={getClubLogo(c.winner_club)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                        {c.winner_club}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <button onClick={handleStartNewSeason} disabled={startingNewSeason}
               className={`w-full py-4 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-transform hover:scale-[1.02] ${ui.btnPrimary}`}>
@@ -678,9 +736,9 @@ export default function DashboardPage() {
                         {simulating ? copy.dashSimulating : copy.dashSimulate}
                       </button>
                       <button onClick={simulateWholeSeason} disabled={simulating || simulatingSeason || seasonFinished}
-                        title="AI plays every remaining match this season, including yours"
-                        className={`px-4 py-3 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl`}
-                        style={{ background: "rgba(255,255,255,0.06)", color: ui.text.includes("white") ? "#fff" : undefined }}>
+                        title={locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours"}
+                        className="px-4 py-3 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl border transition-transform hover:scale-[1.03]"
+                        style={{ borderColor: `${glowColor}40`, color: glowColor, background: `${glowColor}0d` }}>
                         ⏩ {simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season")}
                       </button>
                     </div>
@@ -692,9 +750,11 @@ export default function DashboardPage() {
                   )}
                   {!lineupValid && (
                     <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                      ⚠️ You need {MIN_LINEUP_SIZE} available players to play ({lineupCount}/{MIN_LINEUP_SIZE} available).
-                    {unavailableInLineup.length > 0 && <> Unavailable: <b>{unavailableInLineup.join(", ")}</b>.</>}
-                    {" "}<Link href="/squad" className="underline">Set up your Squad →</Link>
+                      ⚠️ {locale === "ru"
+                        ? `Нужно ${MIN_LINEUP_SIZE} доступных игроков для матча (доступно ${lineupCount}/${MIN_LINEUP_SIZE}).`
+                        : `You need ${MIN_LINEUP_SIZE} available players to play (${lineupCount}/${MIN_LINEUP_SIZE} available).`}
+                    {unavailableInLineup.length > 0 && <> {locale === "ru" ? "Недоступны" : "Unavailable"}: <b>{unavailableInLineup.join(", ")}</b>.</>}
+                    {" "}<Link href="/squad" className="underline">{locale === "ru" ? "Настроить состав →" : "Set up your Squad →"}</Link>
                     </div>
                   )}
                 {/* Choose lineup for this matchday */}
@@ -726,29 +786,33 @@ export default function DashboardPage() {
               );
             })()}
 
-            {/* Last results */}
-            {showResults && lastResults.length > 0 && (
-              <div className={`p-5 ${ui.card} animate-fade-in-up fade-in`}>
-                <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday - 1} — ${copy.dashMatchdayResults}` : `Matchday ${matchday - 1} ${copy.dashMatchdayResults}`}</div>
-                <div className="space-y-1">
-                  {lastResults.map((r, i) => (
-                    <MatchRow key={i} fix={{ ...r, home_club: r.home, away_club: r.away, played: true, home_goals: r.homeGoals, away_goals: r.awayGoals, events: r.events }} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Last results + upcoming — раньше шли друг под другом на всю
+                ширину даже на широких экранах; места хватает на 2 колонки. */}
+            {(showResults && lastResults.length > 0) || currentFixtures.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {showResults && lastResults.length > 0 && (
+                  <div className={`p-5 ${ui.card} animate-fade-in-up`}>
+                    <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday - 1} — ${copy.dashMatchdayResults}` : `Matchday ${matchday - 1} ${copy.dashMatchdayResults}`}</div>
+                    <div className="space-y-1">
+                      {lastResults.map((r, i) => (
+                        <MatchRow key={i} fix={{ ...r, home_club: r.home, away_club: r.away, played: true, home_goals: r.homeGoals, away_goals: r.awayGoals, events: r.events }} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            {/* Current matchday fixtures */}
-            {currentFixtures.length > 0 && (
-              <div className={`p-5 ${ui.card} animate-fade-in-up`}>
-                <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday} — ${copy.dashUpcoming}` : `Matchday ${matchday} — ${copy.dashUpcoming}`}</div>
-                <div className="space-y-1">
-                  {currentFixtures.map((f, i) => (
-                    <MatchRow key={i} fix={f} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
-                  ))}
-                </div>
+                {currentFixtures.length > 0 && (
+                  <div className={`p-5 ${ui.card} animate-fade-in-up`}>
+                    <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday} — ${copy.dashUpcoming}` : `Matchday ${matchday} — ${copy.dashUpcoming}`}</div>
+                    <div className="space-y-1">
+                      {currentFixtures.map((f, i) => (
+                        <MatchRow key={i} fix={f} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* RIGHT: standings */}
@@ -761,9 +825,45 @@ export default function DashboardPage() {
               {!seasonId ? (
                 <div className={`${ui.muted} text-sm text-center py-4`}>Start a career to see standings</div>
               ) : (
-                <StandingsTable standings={standings} userClub={userClub} ui={ui} theme={theme} glowColor={glowColor} />
+                <StandingsTable standings={standings} userClub={userClub} ui={ui} theme={theme} glowColor={glowColor} leagueName={selectedLeague?.name || selectedClub?.league} />
               )}
             </div>
+
+            {/* Top performer этого сезона — раньше на дашборде вообще не
+                было ни одной сводки по игрокам, только таблица клубов. */}
+            {(() => {
+              const eligible = seasonPlayerStats.filter((p: any) => p.matches_played >= 2);
+              const topScorer = [...eligible].sort((a, b) => b.goals - a.goals)[0];
+              const topRated = [...eligible].sort((a, b) => (b.total_rating / b.matches_played) - (a.total_rating / a.matches_played))[0];
+              if (!topScorer && !topRated) return null;
+              return (
+                <div className={`p-5 mt-5 ${ui.card} animate-fade-in-up`}>
+                  <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? "Лидеры сезона" : "Season leaders"}</div>
+                  <div className="space-y-3">
+                    {topScorer && topScorer.goals > 0 && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base shrink-0">⚽</span>
+                          <span className={`text-sm font-bold truncate ${ui.text}`}>{topScorer.player_name}</span>
+                        </div>
+                        <span className={`text-sm font-display font-black shrink-0 ${ui.muted}`}>{topScorer.goals} {locale === "ru" ? "гол." : "G"}</span>
+                      </div>
+                    )}
+                    {topRated && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base shrink-0">⭐</span>
+                          <span className={`text-sm font-bold truncate ${ui.text}`}>{topRated.player_name}</span>
+                        </div>
+                        <span className="text-sm font-display font-black shrink-0" style={{ color: getRatingColorDash(topRated.total_rating / topRated.matches_played) }}>
+                          {(topRated.total_rating / topRated.matches_played).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
         </div>

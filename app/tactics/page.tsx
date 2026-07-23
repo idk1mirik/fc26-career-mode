@@ -174,13 +174,13 @@ export default function TacticsPage() {
               <div className={`mt-5 pt-4 border-t ${theme === "classic" ? "border-white/[0.06]" : theme === "aurora" ? "border-pink-100" : "border-purple-900/30"}`}>
                 <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.tacticsImpact}</div>
                 <div className="space-y-1.5">
-                  {current.pressing >= 8 && <div className={`text-xs ${ui.muted}`}>⚡ High pressing — more turnovers, tiring on stamina</div>}
-                  {current.defensiveLine <= 3 && <div className={`text-xs ${ui.muted}`}>🛡️ Deep block — harder to score against</div>}
-                  {current.tempo >= 8 && <div className={`text-xs ${ui.muted}`}>🏃 High tempo — more chances created</div>}
-                  {current.attackingWidth >= 8 && <div className={`text-xs ${ui.muted}`}>↔️ Wide play — more crossing opportunities</div>}
-                  {current.buildUpSpeed >= 8 && <div className={`text-xs ${ui.muted}`}>🎯 Direct — effective counters and long balls</div>}
-                  {current.passingRisk <= 3 && <div className={`text-xs ${ui.muted}`}>🔒 Safe passing — less possession lost</div>}
-                  {current.passingRisk >= 8 && <div className={`text-xs ${ui.muted}`}>🎲 Risky passing — high reward, high risk</div>}
+                  {current.pressing >= 8 && <div className={`text-xs ${ui.muted}`}>⚡ {locale === "ru" ? "Высокий прессинг — больше отборов, но устаёт команда" : "High pressing — more turnovers, tiring on stamina"}</div>}
+                  {current.defensiveLine <= 3 && <div className={`text-xs ${ui.muted}`}>🛡️ {locale === "ru" ? "Низкий блок — сложнее забить в ваши ворота" : "Deep block — harder to score against"}</div>}
+                  {current.tempo >= 8 && <div className={`text-xs ${ui.muted}`}>🏃 {locale === "ru" ? "Высокий темп — больше созданных моментов" : "High tempo — more chances created"}</div>}
+                  {current.attackingWidth >= 8 && <div className={`text-xs ${ui.muted}`}>↔️ {locale === "ru" ? "Игра шире — больше навесов и подключений флангов" : "Wide play — more crossing opportunities"}</div>}
+                  {current.buildUpSpeed >= 8 && <div className={`text-xs ${ui.muted}`}>🎯 {locale === "ru" ? "Прямолинейно — эффективные контратаки и длинные передачи" : "Direct — effective counters and long balls"}</div>}
+                  {current.passingRisk <= 3 && <div className={`text-xs ${ui.muted}`}>🔒 {locale === "ru" ? "Надёжный пас — меньше потерь мяча" : "Safe passing — less possession lost"}</div>}
+                  {current.passingRisk >= 8 && <div className={`text-xs ${ui.muted}`}>🎲 {locale === "ru" ? "Рискованный пас — высокий риск, высокая награда" : "Risky passing — high reward, high risk"}</div>}
                 </div>
               </div>
             </div>

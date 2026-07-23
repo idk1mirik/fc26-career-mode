@@ -32,7 +32,8 @@ export interface SimulateMatchdayResult {
 }
 
 export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayOptions = {}): Promise<SimulateMatchdayResult> {
-  const { userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = opts;
+  const { userClubId, userHomeGoals, userAwayGoals, userTactic } = opts;
+  let userLineup = opts.userLineup;
 
   const { data: season, error: sErr } = await supabase.from("seasons").select("*").eq("id", seasonId).single();
   if (sErr || !season) return { error: "Season not found", status: 404 };
@@ -63,18 +64,56 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   const unavailableByClub: Record<string, Set<string>> = {};
   for (const c of allClubs) unavailableByClub[c] = new Set();
   for (const row of statusRows) {
-    if (row.matches_out > 0) unavailableByClub[row.club_id]?.add(rowKeyOf(row));
+    // Игрок недоступен на лиговый матч, если травмирован (competition_type=null,
+    // действует везде) ИЛИ дисквалифицирован именно в лиге. Дисквалификация
+    // в кубке/еврокубке НЕ должна мешать играть в лиге — раньше matches_out
+    // был глобальным полем без разделения по турниру.
+    if (row.matches_out > 0 && (row.competition_type === null || row.competition_type === "league")) {
+      unavailableByClub[row.club_id]?.add(rowKeyOf(row));
+    }
   }
 
   if (userLineup && userClubId) {
     const userUnavail = unavailableByClub[userClubId] ?? new Set();
-    const availableCount = userLineup.filter((p: any) => p && !userUnavail.has(keyOf(p))).length;
-    if (availableCount < 11) {
-      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavail.has(keyOf(p))).map((p: any) => p.name);
-      return {
-        error: `Your lineup has only ${availableCount} available players (need 11). Unavailable: ${unavailableInLineup.join(", ") || "bench too short"}.`,
-        status: 400, availableCount, unavailablePlayers: unavailableInLineup,
-      };
+    const missingSlots = userLineup.filter((p: any) => p && userUnavail.has(keyOf(p)));
+    if (missingSlots.length) {
+      // Автозамена вместо жёсткой ошибки: раньше недоступность ЛЮБОГО игрока
+      // стартового состава останавливала весь тур ошибкой 400 — это работало
+      // для одиночного ручного матча (пользователь мог поправить состав), но
+      // полностью ломало автопрокрутку всего сезона (она просто переставала
+      // передавать userLineup вообще, и сервер каждый раз собирал "топ-11 по
+      // overall" с нуля, теряя реальный состав и тактику пользователя).
+      // Теперь: игроки СТАРТОВОГО состава сохраняют приоритет, недостающие
+      // позиции закрываются лучшим ДОСТУПНЫМ игроком той же позиции со
+      // скамейки; только если такого нет — любым доступным игроком.
+      const squad = playersByClub[userClubId] ?? [];
+      const lineupIds = new Set(userLineup.filter(Boolean).map((p: any) => keyOf(p)));
+      const bench = squad.filter((p: any) => !lineupIds.has(keyOf(p)) && !userUnavail.has(keyOf(p)));
+
+      const usedReplacementIds = new Set<string>();
+      const filledLineup = userLineup.map((p: any) => {
+        if (!p || !userUnavail.has(keyOf(p))) return p;
+        const samePos = bench.filter((b: any) => b.position === p.position && !usedReplacementIds.has(keyOf(b)))
+          .sort((a: any, b: any) => b.overall - a.overall)[0];
+        const anyPos = bench.filter((b: any) => !usedReplacementIds.has(keyOf(b)))
+          .sort((a: any, b: any) => b.overall - a.overall)[0];
+        const replacement = samePos ?? anyPos;
+        if (replacement) usedReplacementIds.add(keyOf(replacement));
+        return replacement ?? null; // скамейка пустая — доигрываем без замены на этой позиции
+      }).filter(Boolean);
+
+      userLineup = filledLineup;
+
+      const availableCount = userLineup.length;
+      if (availableCount < 7) {
+        // Меньше 7 доступных игроков — реалистично отказать матч, это уже
+        // не "нехватка одного-двух", а массовая эпидемия травм/дисквалификаций
+        const unavailableInLineup = missingSlots.map((p: any) => p.name);
+        return {
+          error: `Too many unavailable players (only ${availableCount} left, need at least 7). Unavailable: ${unavailableInLineup.join(", ")}.`,
+          status: 400, availableCount, unavailablePlayers: unavailableInLineup,
+        };
+      }
     }
   }
 
@@ -117,10 +156,11 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
       const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
       const userUnavail = userIsHome ? homeUnavailable : awayUnavailable;
       const cleanLineup = userLineup.filter((p: any) => !userUnavail.has(keyOf(p)));
+      const userCaptainId = standingsRows.find((r: any) => r.club_id === userClubId)?.captain_id ?? null;
 
       const result = userIsHome
-        ? simulateMatch(cleanLineup, oppXI, userTac, oppTac)
-        : simulateMatch(oppXI, cleanLineup, oppTac, userTac);
+        ? simulateMatch(cleanLineup, oppXI, userTac, oppTac, userCaptainId, null)
+        : simulateMatch(oppXI, cleanLineup, oppTac, userTac, null, userCaptainId);
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const homeTactic = getClubTactic(fix.home_club);
@@ -161,8 +201,8 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
       else { d.lost += 1; }
     }
 
-    accumulateCardsAndInjuries(events, "home", fix.home_club, statusRows, statusUpdates);
-    accumulateCardsAndInjuries(events, "away", fix.away_club, statusRows, statusUpdates);
+    accumulateCardsAndInjuries(events, "home", fix.home_club, statusRows, statusUpdates, "league");
+    accumulateCardsAndInjuries(events, "away", fix.away_club, statusRows, statusUpdates, "league");
     accumulateSeasonStats(events, "home", fix.home_club, ratings.home, seasonStatsAccum);
     accumulateSeasonStats(events, "away", fix.away_club, ratings.away, seasonStatsAccum);
   }
@@ -190,13 +230,15 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     }
   }
 
-  // Тик-даун травм/дисквалификаций, которые НЕ были задеты в этом туре —
-  // специфично для лиги (единственное место, где это происходит; кубки
-  // сознательно не тикают счётчик отдельно, чтобы не списывать пропуски вдвое
-  // за одну и ту же неделю, если у клуба в этот же период ещё и кубковый матч).
+  // Тик-даун травм/лиговых дисквалификаций, которые НЕ были задеты в этом
+  // туре. Скоуп: competition_type = null (травма, глобальная) ИЛИ "league"
+  // (дисквалификация именно за карточки в лиге) — кубковые/еврокубковые
+  // дисквалификации здесь НЕ трогаем, у них свой декремент в cup/advance.
   for (const row of statusRows) {
-    const key = `${row.club_id}::${rowKeyOf(row)}`;
-    if (statusUpdates[key]) continue;
+    if (row.competition_type !== null && row.competition_type !== "league") continue;
+    const scope = row.competition_type === null ? "injury" : "league";
+    const key = `${row.club_id}::${rowKeyOf(row)}::${scope}`;
+    if (statusUpdates[key]) continue; // этому статусу только что записали свежее значение — не трогаем повторно
     if (row.matches_out > 0) {
       const newOut = row.matches_out - 1;
       if (newOut <= 0) {

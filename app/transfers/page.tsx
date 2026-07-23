@@ -155,7 +155,6 @@ export default function TransfersPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [recalibrating, setRecalibrating] = useState(false);
   const [toast, setToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [modalPlayer, setModalPlayer] = useState<any | null>(null);
   const [modalClosing, setModalClosing] = useState(false);
@@ -252,19 +251,6 @@ export default function TransfersPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handleRecalibrate = async () => {
-    if (!seasonId) return;
-    setRecalibrating(true);
-    try {
-      const res = await fetch("/api/season/recalibrate-budget", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId }),
-      });
-      if (res.ok) { showToast("Budgets recalculated for all clubs", "ok"); await loadAll(); }
-      else showToast("Recalculation failed", "err");
-    } catch (e) { showToast("Recalculation failed", "err"); }
-    setRecalibrating(false);
-  };
-
   const handleBuy = async (p: any) => {
     if (!seasonId) return;
     setBusyId(p.id);
@@ -290,9 +276,9 @@ export default function TransfersPage() {
         body: JSON.stringify({ seasonId, sellerClubId: userClub, playerId: p.id }),
       });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error ?? "Sale failed", "err"); }
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось продать" : "Sale failed"), "err"); }
       else { showToast(`Quick-sold ${p.name} for ${fmtMoney(data.fee)} (-${data.discountApplied}%)`, "ok"); await loadAll(); }
-    } catch (e) { showToast("Sale failed", "err"); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось продать" : "Sale failed", "err"); }
     setBusyId(null);
   };
 
@@ -307,9 +293,9 @@ export default function TransfersPage() {
         body: JSON.stringify({ seasonId, sellerClubId: userClub, playerId: p.id, askingPrice: price }),
       });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error ?? "Listing failed", "err"); }
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось выставить на продажу" : "Listing failed"), "err"); }
       else { showToast(`${p.name} listed for ${fmtMoney(price)}`, "ok"); await loadAll(); }
-    } catch (e) { showToast("Listing failed", "err"); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось выставить на продажу" : "Listing failed", "err"); }
     setBusyId(null);
   };
 
@@ -322,9 +308,9 @@ export default function TransfersPage() {
         body: JSON.stringify({ seasonId, listingId: listing.id, clubId: userClub }),
       });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error ?? "Failed to cancel", "err"); }
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось отменить" : "Failed to cancel"), "err"); }
       else { showToast(`Listing pulled from the market`, "ok"); await loadAll(); }
-    } catch (e) { showToast("Failed to cancel", "err"); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось отменить" : "Failed to cancel", "err"); }
     setBusyId(null);
   };
 
@@ -337,9 +323,9 @@ export default function TransfersPage() {
         body: JSON.stringify({ seasonId, buyerClubId: userClub, listingId: listing.id }),
       });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error ?? "Purchase failed", "err"); }
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось купить" : "Purchase failed"), "err"); }
       else { showToast(`Signed ${data.playerName} for ${fmtMoney(data.fee)}`, "ok"); await loadAll(); }
-    } catch (e) { showToast("Purchase failed", "err"); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось купить" : "Purchase failed", "err"); }
     setBusyId(null);
   };
 
@@ -359,11 +345,6 @@ export default function TransfersPage() {
                 {budget === null ? "…" : fmtMoney(budget)}
               </span>
             </div>
-            <button onClick={handleRecalibrate} disabled={recalibrating}
-              title="Пересчитать бюджет по текущей формуле цен"
-              className={`px-3 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 ${ui.tabIdle}`}>
-              {recalibrating ? "…" : copy.transfersRecalculate}
-            </button>
           </div>
         </div>
 
@@ -461,7 +442,7 @@ export default function TransfersPage() {
                     <div className="space-y-1.5">
                       {myListings.map((l: any) => (
                         <TransferPlayerRow key={l.id} p={enrichListing(l)}
-                          ui={ui} onOpen={openModal} subLabel="listed by you" priceLabel={fmtMoney(l.asking_price)} theme={theme}
+                          ui={ui} onOpen={openModal} subLabel={locale === "ru" ? "выставлен тобой" : "listed by you"} priceLabel={fmtMoney(l.asking_price)} theme={theme}
                           actions={[{ label: copy.transfersCancel, icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
                       ))}
                     </div>
@@ -517,9 +498,9 @@ export default function TransfersPage() {
                       <span className={ui.nameColor}>
                         <span className="font-black">{t.player_name}</span>{" "}
                         {t.to_club === userClub ? (locale === "ru" ? "подписан из" : "signed from") : (locale === "ru" ? "продан в" : "sold to")}{" "}
-                        {t.to_club === userClub ? (t.from_club ?? "free agent") : t.to_club}
-                        {t.type === "quick_sell" && <span className={ui.muted}> · quick sell</span>}
-                        {t.type === "listing" && <span className={ui.muted}> · market listing</span>}
+                        {t.to_club === userClub ? (t.from_club ?? (locale === "ru" ? "свободный агент" : "free agent")) : t.to_club}
+                        {t.type === "quick_sell" && <span className={ui.muted}> · {locale === "ru" ? "быстрая продажа" : "quick sell"}</span>}
+                        {t.type === "listing" && <span className={ui.muted}> · {locale === "ru" ? "с рынка" : "market listing"}</span>}
                       </span>
                       <span className={`font-black ${ui.muted}`}>{fmtMoney(t.fee)}</span>
                     </div>

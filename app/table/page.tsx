@@ -42,6 +42,8 @@ const THEME_UI = {
   },
 };
 
+import { getZoneColor } from "@/lib/europeanZones";
+
 export default function TablePage() {
   const router = useRouter();
   const themeRaw = useThemeStore(s => s.theme);
@@ -108,7 +110,7 @@ export default function TablePage() {
           {standings.map((row, i) => {
             const isUser = row.club_id === userClub;
             const gd = row.gf - row.ga;
-            const zoneColor = i < 4 ? "#22c55e" : i >= standings.length - 3 ? "#ef4444" : null;
+            const zoneColor = getZoneColor(i, selectedLeague?.name || "", standings.length);
             return (
               <div key={row.club_id}
                 className={`grid items-center px-5 py-4 transition-colors ${ui.rowHover} ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? `${ui.userRow} scale-[1.005]` : ""}`}
@@ -151,10 +153,18 @@ export default function TablePage() {
         </div>
 
         {/* Legend */}
-        <div className={`flex gap-5 mt-5 text-xs font-bold ${ui.muted} items-center`}>
+        <div className={`flex gap-5 mt-5 text-xs font-bold ${ui.muted} items-center flex-wrap`}>
           <span className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-            {copy.tableChampionsLeague}
+            {locale === "ru" ? "Лига чемпионов" : "Champions League"}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+            {locale === "ru" ? "Лига Европы" : "Europa League"}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" />
+            {locale === "ru" ? "Лига конференций" : "Conference League"}
           </span>
           <span className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
@@ -163,8 +173,8 @@ export default function TablePage() {
           <HelpHint id="table-zones" theme={theme as any}
             title={locale === "ru" ? "Зоны таблицы" : "Table zones"}
             text={locale === "ru"
-              ? "Верхние 4 места дают путёвку в еврокубки на следующий сезон, нижние 3 — вылет в низший дивизион."
-              : "Top 4 earn continental qualification for next season, bottom 3 get relegated."} />
+              ? "Число мест в еврокубках зависит от лиги: топ-5 чемпионатов (АПЛ, Ла Лига, Бундеслига, Серия А, Лига 1) получают больше слотов в ЛЧ/ЛЕ/ЛК, чем остальные лиги — как в реальных коэффициентах УЕФА."
+              : "The number of European slots depends on the league: the top-5 leagues (Premier League, La Liga, Bundesliga, Serie A, Ligue 1) get more CL/EL/UECL spots than other leagues — similar to real UEFA coefficients."} />
         </div>
       </div>
     </DashboardLayout>

@@ -9,7 +9,7 @@ import leagues from "@/data/leagues.json";
 import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { applyClubEarning } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
-import { calculateWageDemand } from "@/lib/contracts";
+import { calculateWageDemand, getCareerId } from "@/lib/contracts";
 
 function quickSellMultiplier(ovr: number): number {
   const base = 0.65;
@@ -85,9 +85,10 @@ export async function POST(req: Request) {
     const newWage = (oldContract?.wage_weekly ?? 0) > 0 ? oldContract.wage_weekly : calculateWageDemand(
       { overall: player.overall ?? 70, age: player.age ?? 25 }, { reputationDiscount: 0 }, "rotation"
     );
+    const careerId = oldContract?.career_id ?? await getCareerId(seasonId);
 
     await supabase.from("contracts").insert({
-      season_id: seasonId, career_id: oldContract?.career_id ?? seasonId,
+      season_id: seasonId, career_id: careerId,
       club_id: destinationClub, player_id: playerId, player_name: player.name,
       wage_weekly: newWage, years_left: 3, squad_role: oldContract?.squad_role ?? "rotation",
       release_clause: null, signing_bonus: 0, happiness: 65,

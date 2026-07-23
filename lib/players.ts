@@ -258,8 +258,13 @@ export async function getPlayersByClub(clubName: string, seasonId?: string): Pro
   // Выпускники академии, повышенные в первую команду — это СИНТЕТИЧЕСКИЕ
   // игроки (не из CSV-датасета), поэтому CSV-фильтрация выше их в принципе
   // не видит. Подмешиваем отдельно по статусу "promoted" в youth_prospects.
+  // ВАЖНО: .ilike() вместо .eq() — вызывающий код (например /api/players)
+  // приводит имя клуба к нижнему регистру перед вызовом этой функции, а
+  // club_id в youth_prospects сохранён с оригинальным регистром ("FC
+  // Barcelona"). Точное сравнение .eq() тут просто никогда не совпадало —
+  // из-за этого повышенные игроки физически не появлялись в составе.
   const { data: promotedRows } = await supabase.from("youth_prospects")
-    .select("attrs").eq("season_id", seasonId).eq("club_id", clubName).eq("status", "promoted");
+    .select("attrs").eq("season_id", seasonId).ilike("club_id", clubName).eq("status", "promoted");
   if (promotedRows?.length) {
     squad = [...squad, ...promotedRows.map((r: any) => r.attrs as Player)];
   }

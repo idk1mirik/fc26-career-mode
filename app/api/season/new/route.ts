@@ -4,8 +4,6 @@ import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
 import { createSeasonCompetitions } from "@/lib/createCompetitions";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
-import { getPlayersByClub } from "@/lib/players";
-import { computeInitialBudget } from "@/lib/finance";
 import { progressLeaguePlayers } from "@/lib/progression";
 import { rolloverContracts, createContractsForClub } from "@/lib/contracts";
 import { rolloverAcademy } from "@/lib/academy";
@@ -68,6 +66,26 @@ export async function POST(req: Request) {
   const careerId: string = oldSeason.career_id ?? oldSeasonId;
   await supabase.from("seasons").update({ career_id: careerId }).eq("id", newSeason.id);
 
+  // ── КРИТИЧНЫЙ ПЕРЕНОС: squad_overrides (кто где реально играет после
+  // трансфера/подписания) был привязан к season_id и НИКОГДА не копировался
+  // на новый сезон. Из-за этого при каждом переходе на новый сезон ЛЮБОЙ
+  // трансфер, который произошёл в течение прошлого сезона, "отменялся" —
+  // игрок откатывался к своему изначальному клубу из CSV-датасета (или
+  // пропадал из состава, если исходного клуба у него в новом контексте
+  // не было). Это и была причина "куда пропал Мбаппе". Копируем как есть;
+  // rolloverContracts ниже правильно перебьёт этот перенос для игроков,
+  // чей контракт как раз истёк (они уедут на FREE_AGENT_CLUB).
+  try {
+    const { data: oldOverrides } = await supabase.from("squad_overrides").select("player_id, club_id").eq("season_id", oldSeasonId);
+    if (oldOverrides?.length) {
+      await supabase.from("squad_overrides").insert(
+        oldOverrides.map((o: any) => ({ season_id: newSeason.id, player_id: o.player_id, club_id: o.club_id, updated_at: new Date().toISOString() }))
+      );
+    }
+    const { invalidateOverridesCache } = await import("@/lib/players");
+    invalidateOverridesCache(newSeason.id);
+  } catch (e) { console.error("Squad overrides carry-forward failed", e); }
+
   // Развитие игроков лиги — молодые растут к потенциалу, ветераны угасают.
   // Делаем ДО расчёта бюджетов ниже, чтобы стоимость состава уже учитывала
   // новые overall (иначе бюджет считался бы по вчерашним, ещё не выросшим игрокам).
@@ -89,23 +107,22 @@ export async function POST(req: Request) {
   const fixtures = buildFixtures(clubs, newSeason.id);
   await supabase.from("fixtures").insert(fixtures);
 
-  // ── Бюджет переносится в новый сезон (остаток прошлого + пересчитанный
-  // прирост от роста стоимости состава), а не обнуляется каждый раз ──
+  // ── Бюджет переносится в новый сезон как есть (реальный остаток) — БЕЗ
+  // пересчёта "с нуля" от стоимости состава. Раньше здесь стоял
+  // Math.max(freshBudget, carriedOver), где freshBudget = squadValue * ratio —
+  // и покупка дорогого игрока (например, Мбаппе) УВЕЛИЧИВАЛА squadValue,
+  // а значит и "должный" бюджет на следующий сезон, перебивая Math.max'ом
+  // реально потраченные деньги. Получалось: чем больше тратишь на трансферы,
+  // тем больше "бесплатных" денег появляется в следующем сезоне. computeInitialBudget
+  // корректно использовать только при СОЗДАНИИ новой карьеры (app/api/season/route.ts),
+  // не при переходе между сезонами существующей.
   const { data: oldStandings } = await supabase.from("standings").select("*").eq("season_id", oldSeasonId);
   const oldBudgetByClub: Record<string, number> = Object.fromEntries((oldStandings ?? []).map((r: any) => [r.club_id, r.budget ?? 0]));
 
-  const budgets = await Promise.all(clubs.map(async (c) => {
-    const players = await getPlayersByClub(c, newSeason.id);
-    const squadValue = players.reduce((s, p: any) => s + (p.market_value ?? 0), 0);
-    const avgOverall = players.length ? players.reduce((s, p: any) => s + (p.overall ?? 70), 0) / players.length : 70;
-    const freshBudget = computeInitialBudget(squadValue, avgOverall);
-    const carriedOver = oldBudgetByClub[c] ?? 0;
-    // Берём большее из "рыночного" бюджета по новому составу и перенесённого остатка,
-    // чтобы деньги, заработанные в прошлом сезоне, не сгорали, но и не занижали
-    // бюджет клубов, которые внезапно похорошели по составу.
-    return Math.max(freshBudget, carriedOver);
+  const standingsRows = clubs.map((c) => ({
+    season_id: newSeason.id, club_id: c,
+    budget: Math.max(0, oldBudgetByClub[c] ?? 0), // просто перенесённый остаток, не пересчитанный
   }));
-  const standingsRows = clubs.map((c, i) => ({ season_id: newSeason.id, club_id: c, budget: budgets[i] }));
   await supabase.from("standings").insert(standingsRows);
 
   // ── Реальные финалисты прошлого сезона для Суперкубка (вместо произвольных

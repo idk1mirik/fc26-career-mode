@@ -229,30 +229,50 @@ export default function FixturesPage() {
         )}
 
         {view === "standings" && activeComp && activeComp.phase === "league_phase" && (
-          <div className={`rounded-2xl overflow-hidden p-4 animate-fade-in-up ${ui.card}`}>
-            <div className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 text-[9px] uppercase tracking-widest mb-1.5 px-1 ${ui.muted}`}>
+          <div className={`rounded-2xl overflow-hidden animate-fade-in-up ${ui.card}`}>
+            <div className={`grid text-[10px] uppercase tracking-widest font-bold ${ui.muted} px-5 py-4 border-b ${ui.divider}`}
+              style={{ gridTemplateColumns: "40px 1fr 44px 44px 44px 44px 50px 50px 55px 60px" }}>
               <span>#</span><span>{locale === "ru" ? "Клуб" : "Club"}</span>
               <span className="text-center">{locale === "ru" ? "И" : "P"}</span>
+              <span className="text-center">{locale === "ru" ? "В" : "W"}</span>
+              <span className="text-center">{locale === "ru" ? "Н" : "D"}</span>
+              <span className="text-center">{locale === "ru" ? "П" : "L"}</span>
+              <span className="text-center">{locale === "ru" ? "ЗМ" : "GF"}</span>
+              <span className="text-center">{locale === "ru" ? "ПМ" : "GA"}</span>
               <span className="text-center">{locale === "ru" ? "РМ" : "GD"}</span>
               <span className="text-center font-black">{locale === "ru" ? "О" : "Pts"}</span>
             </div>
-            <div className="space-y-0.5 max-h-96 overflow-y-auto">
-              {(standingsByComp[activeComp.id] ?? []).map((s: any, i: number) => (
+            {(standingsByComp[activeComp.id] ?? []).map((s: any, i: number) => {
+              const directQ = i < 8, playoffQ = i >= 8 && i < 24;
+              return (
                 <div key={s.club}
-                  className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 items-center text-xs py-1 px-1 rounded-md ${s.club === userClub ? ui.highlight : ""}`}>
-                  <span className={`font-black ${i < 8 ? "text-emerald-400" : i < 24 ? "" : "opacity-40"}`}>{i + 1}</span>
-                  <span className="font-bold truncate flex items-center gap-1.5">
-                    <img src={getClubLogo(s.club)} className="w-3.5 h-3.5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                  className={`grid items-center px-5 py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${s.club === userClub ? ui.highlight : ""}`}
+                  style={{ gridTemplateColumns: "40px 1fr 44px 44px 44px 44px 50px 50px 55px 60px" }}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-6 rounded-full shrink-0" style={{ backgroundColor: directQ ? "#22c55e" : playoffQ ? "#3b82f6" : "transparent" }} />
+                    <span className={`text-sm font-black font-display ${ui.muted}`}>{i + 1}</span>
+                  </div>
+                  <span className="text-[15px] font-bold truncate flex items-center gap-2">
+                    <img src={getClubLogo(s.club)} className="w-6 h-6 object-contain shrink-0" alt="" onError={e => (e.currentTarget.style.display = "none")} />
                     {s.club}
                   </span>
-                  <span className="text-center">{s.played}</span>
-                  <span className="text-center">{s.gd > 0 ? `+${s.gd}` : s.gd}</span>
-                  <span className="text-center font-black">{s.points}</span>
+                  <span className={`text-sm text-center ${ui.muted}`}>{s.played}</span>
+                  <span className={`text-sm text-center ${ui.muted}`}>{s.won}</span>
+                  <span className={`text-sm text-center ${ui.muted}`}>{s.drawn}</span>
+                  <span className={`text-sm text-center ${ui.muted}`}>{s.lost}</span>
+                  <span className={`text-sm text-center ${ui.muted}`}>{s.gf}</span>
+                  <span className={`text-sm text-center ${ui.muted}`}>{s.ga}</span>
+                  <span className={`text-sm text-center font-bold ${s.gd > 0 ? "text-emerald-400" : s.gd < 0 ? "text-red-400" : ui.muted}`}>{s.gd > 0 ? `+${s.gd}` : s.gd}</span>
+                  <span className="text-lg font-display font-black text-center">{s.points}</span>
                 </div>
-              ))}
-              {(standingsByComp[activeComp.id] ?? []).length === 0 && (
-                <div className={`text-center py-6 text-sm ${ui.muted}`}>{copy.fixturesNoMatches}</div>
-              )}
+              );
+            })}
+            {(standingsByComp[activeComp.id] ?? []).length === 0 && (
+              <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.fixturesNoMatches}</div>
+            )}
+            <div className={`flex gap-5 px-5 py-3.5 border-t ${ui.divider} text-[11px] font-bold ${ui.muted}`}>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />{locale === "ru" ? "Напрямую в плей-офф" : "Direct to knockout"}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />{locale === "ru" ? "Playoff-раунд" : "Playoff round"}</span>
             </div>
           </div>
         )}

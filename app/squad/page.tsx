@@ -134,13 +134,13 @@ function pickBest(players: any[], positions: string[], used: Set<string>): any |
 }
 
 // ─── PITCH SLOT ───────────────────────────────────────────────────────────────
-const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot, theme }: {
+const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot, theme, captainId }: {
   slot: string; player: any | null; x: number; y: number; glowColor: string;
   onSlotClick: (slot: string, player: any | null) => void;
   isCustom?: boolean; customPos?: string;
   onPickPosition?: (slot: string) => void;
   onDeleteCustomSlot?: (slot: string) => void;
-  theme?: string;
+  theme?: string; captainId?: string | null;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const realPos = isCustom ? (customPos || "CM") : (POS_PRIORITY[slot]?.[0] ?? slot);
@@ -164,6 +164,10 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
             {player && !imgErr
               ? <img src={getPlayerPhoto(player.name)} alt={player.name} className="w-16 h-16 object-contain" onError={() => setImgErr(true)} />
               : <div className="w-full h-full flex items-center justify-center text-white/30 text-lg">{player ? "👤" : "+"}</div>}
+            {player && captainId && (player.id ?? player.name) === captainId && (
+              <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow"
+                style={{ background: "#eab308", color: "#000" }}>C</div>
+            )}
           </div>
           {/* Delete custom slot btn — always visible on custom empty slots */}
           {isCustom && onDeleteCustomSlot && !player && (
@@ -196,12 +200,12 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
 });
 
 // ─── PLAYER ROW ───────────────────────────────────────────────────────────────
-const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating, theme }: {
+const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating, theme, captainId }: {
   p: any; ui: typeof THEME_UI["classic"]; onOpen: (p: any) => void; isXI?: boolean; onAddToLineup?: (p: any) => void;
   emptySlots?: { slot: string; label: string }[];
   status?: { status: string; matches_out: number; yellow_cards: number } | null;
   avgRating?: number | null;
-  theme?: string;
+  theme?: string; captainId?: string | null;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [showSlots, setShowSlots] = useState(false);
@@ -227,6 +231,9 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
         <div className="flex-1 min-w-0">
           <div className={`font-black text-sm truncate ${ui.nameColor}`}>
             {p.name}
+            {captainId && (p.id ?? p.name) === captainId && (
+              <span className="ml-1.5 text-[9px] font-black px-1 py-0.5 rounded" style={{ background: "rgba(234,179,8,0.15)", color: "#eab308" }}>C</span>
+            )}
             {isXI && <span className="ml-2 text-[9px] font-black text-emerald-400 uppercase">XI</span>}
             {isUnavailable && (
               <span className="ml-2 text-[9px] font-black text-red-400 uppercase">
@@ -295,21 +302,24 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
 
 // ─── NAME / CONFIRM MODALS ─────────────────────────────────────────────────────
 // ─── SLOT ACTION MENU ──────────────────────────────────────────────────────────
-function SlotActionMenu({ player, slot, onView, onSwap, onRemove, onClose, theme }: {
+function SlotActionMenu({ player, slot, onView, onSwap, onRemove, onClose, theme, locale = "en", isCaptain, onToggleCaptain }: {
   player: any; slot: string;
   onView: () => void; onSwap: () => void; onRemove: () => void; onClose: () => void;
-  theme: string;
+  theme: string; locale?: string; isCaptain?: boolean; onToggleCaptain?: () => void;
 }) {
   const isDark = theme !== "aurora";
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        className="w-full max-w-xs rounded-2xl overflow-hidden"
+        className="w-full max-w-xs rounded-2xl overflow-hidden animate-modal-pop"
         style={{ background: isDark ? "#0d1117" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #fce7f3" }}>
         <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #fce7f3" }}>
           <img src={getPlayerPhoto(player.name)} alt="" className="w-10 h-10 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
           <div>
-            <div className={`text-sm font-black ${isDark ? "text-white" : "text-pink-950"}`}>{player.name}</div>
+            <div className={`text-sm font-black flex items-center gap-1.5 ${isDark ? "text-white" : "text-pink-950"}`}>
+              {player.name}
+              {isCaptain && <span className="text-[10px] font-black px-1.5 py-0.5 rounded" style={{ background: "rgba(234,179,8,0.15)", color: "#eab308" }}>C</span>}
+            </div>
             <div className={`text-[10px] ${isDark ? "text-white/40" : "text-pink-900/40"}`}>{slot}</div>
           </div>
         </div>
@@ -317,19 +327,31 @@ function SlotActionMenu({ player, slot, onView, onSwap, onRemove, onClose, theme
           style={{ color: isDark ? "#fff" : "#500724" }}
           onMouseEnter={e => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.04)" : "#fdf2f8"}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-          <span>👁</span><span className="text-sm font-bold">View Player</span>
+          <span>👁</span><span className="text-sm font-bold">{locale === "ru" ? "Открыть карточку" : "View Player"}</span>
         </button>
         <button onClick={onSwap} className="w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors"
           style={{ color: isDark ? "#fff" : "#500724" }}
           onMouseEnter={e => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.04)" : "#fdf2f8"}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-          <span>🔄</span><span className="text-sm font-bold">Swap Position</span>
+          <span>🔄</span><span className="text-sm font-bold">{locale === "ru" ? "Сменить позицию" : "Swap Position"}</span>
         </button>
+        {onToggleCaptain && (
+          <button onClick={onToggleCaptain} className="w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors"
+            style={{ color: "#eab308" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(234,179,8,0.08)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+            <span>©</span><span className="text-sm font-bold">
+              {isCaptain
+                ? (locale === "ru" ? "Снять капитанство" : "Remove Captain")
+                : (locale === "ru" ? "Сделать капитаном" : "Make Captain")}
+            </span>
+          </button>
+        )}
         <button onClick={onRemove} className="w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors"
           style={{ color: "#ef4444" }}
           onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.08)"}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-          <span>✕</span><span className="text-sm font-bold">Remove from XI</span>
+          <span>✕</span><span className="text-sm font-bold">{locale === "ru" ? "Убрать из состава" : "Remove from XI"}</span>
         </button>
       </div>
     </div>
@@ -410,6 +432,7 @@ export default function SquadPage() {
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const seasonId       = useCareerStore(s => s.seasonId);
+  const locale = useCareerStore(s => s.locale) || "en";
   const savedLineup    = useCareerStore(s => s.lineup);
   const savedFormation = useCareerStore(s => s.formation);
   const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
@@ -427,6 +450,7 @@ export default function SquadPage() {
   const [modalPlayer, setModalPlayer]   = useState<any>(null);
   const [modalClosing, setModalClosing] = useState(false);
   const [clubContracts, setClubContracts] = useState<any[]>([]);
+  const [captainId, setCaptainId] = useState<string | null>(null);
   const [contractPanelPlayer, setContractPanelPlayer] = useState<any>(null);
   const [tab, setTab]                   = useState<"lineup"|"squad">("lineup");
   const [lineup, setLineup]             = useState<Record<string, any>>({});
@@ -494,6 +518,9 @@ export default function SquadPage() {
 
       fetch(`/api/contracts?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
         .then(r => r.ok ? r.json() : null).then(data => { if (data) setClubContracts(data.contracts ?? []); }).catch(() => {});
+
+      fetch(`/api/squad/captain?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setCaptainId(data.captainId ?? null); }).catch(() => {});
     }
   }, [hydrated, selectedClub, seasonId]);
 
@@ -514,6 +541,19 @@ export default function SquadPage() {
   }
 
   // Сохранение происходит только вручную через кнопку Save Lineup
+  const handleSetCaptain = useCallback(async (player: any) => {
+    if (!seasonId || !selectedClub) return;
+    const newCaptainId = player.id ?? player.name;
+    const isRemoving = captainId === newCaptainId;
+    setCaptainId(isRemoving ? null : newCaptainId); // оптимистично, без ожидания ответа сервера
+    try {
+      await fetch("/api/squad/captain", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, clubId: selectedClub.name, playerId: isRemoving ? null : newCaptainId }),
+      });
+    } catch { /* откат не критичен — при следующей загрузке подтянется актуальное значение */ }
+  }, [seasonId, selectedClub, captainId]);
+
   const handleSaveLineup = useCallback(() => {
     if (formation === "Custom") {
       setShowNamePrompt(true);
@@ -643,7 +683,7 @@ export default function SquadPage() {
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="mb-5">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>Squad</div>
+          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{locale === "ru" ? "Состав" : "Squad"}</div>
           <h1 className="text-2xl font-black">{selectedClub?.name} — {players.length} Players</h1>
         </div>
 
@@ -652,7 +692,7 @@ export default function SquadPage() {
           {(["lineup","squad"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${tab === t ? ui.tabActive : ui.tabIdle}`}>
-              {t === "lineup" ? "⚽ Starting XI" : "👥 Full Squad"}
+              {t === "lineup" ? (locale === "ru" ? "⚽ Стартовый состав" : "⚽ Starting XI") : (locale === "ru" ? "👥 Полный состав" : "👥 Full Squad")}
             </button>
           ))}
         </div>
@@ -751,6 +791,7 @@ export default function SquadPage() {
                     customPos={customPositions[slot]}
                     onPickPosition={s => setEditingSlot(s)}
                     theme={theme}
+                    captainId={captainId}
                     onDeleteCustomSlot={s => {
                       setCustomSlots(prev => prev.filter(cs => cs.slot !== s));
                       setLineup(prev => { const n = {...prev}; delete n[s]; return n; });
@@ -802,7 +843,7 @@ export default function SquadPage() {
             {/* Right: bench */}
             <div className="lg:w-80">
               <div className={`text-[10px] uppercase tracking-widest font-black mb-3 ${ui.muted}`}>
-                Bench ({players.filter(p => !startingIds.has(p.id ?? p.name)).length})
+                {locale === "ru" ? "Скамейка" : "Bench"} ({players.filter(p => !startingIds.has(p.id ?? p.name)).length})
               </div>
               <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
                 {players
@@ -812,7 +853,7 @@ export default function SquadPage() {
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                       onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
                       status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
-                      avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} />
+                      avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} captainId={captainId} />
                   ))}
               </div>
             </div>
@@ -822,15 +863,21 @@ export default function SquadPage() {
         {/* ── SQUAD TAB ── */}
         {tab === "squad" && (
           <div>
-            <div className="flex gap-3 mb-5 flex-wrap">
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+            <div className="flex gap-3 mb-5 flex-wrap items-center">
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder={locale === "ru" ? "Поиск..." : "Search..."}
                 className={`px-4 py-2 text-sm outline-none rounded-xl ${ui.input}`} />
-              <select value={sort} onChange={e => setSort(e.target.value as any)}
-                className={`px-4 py-2 text-sm outline-none cursor-pointer rounded-xl ${ui.input}`}>
-                <option value="overall">Sort: OVR</option>
-                <option value="name">Sort: Name</option>
-                <option value="age">Sort: Age</option>
-              </select>
+              <div className="flex gap-1.5">
+                {([
+                  ["overall", locale === "ru" ? "ОВР" : "OVR"],
+                  ["name", locale === "ru" ? "Имя" : "Name"],
+                  ["age", locale === "ru" ? "Возраст" : "Age"],
+                ] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => setSort(key)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all ${sort === key ? ui.tabActive : ui.tabIdle}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {["Goalkeepers","Defenders","Midfielders","Attackers","Others"].map(group => {
@@ -846,7 +893,7 @@ export default function SquadPage() {
                         isXI={startingIds.has(p.id ?? p.name)}
                         onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
                         status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
-                        avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} />
+                        avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} captainId={captainId} />
                     ))}
                   </div>
                 </div>
@@ -922,7 +969,9 @@ export default function SquadPage() {
 
       {actionSlot && lineup[actionSlot] && (
         <SlotActionMenu
-          player={lineup[actionSlot]} slot={actionSlot} theme={theme}
+          player={lineup[actionSlot]} slot={actionSlot} theme={theme} locale={locale}
+          isCaptain={captainId === (lineup[actionSlot]?.id ?? lineup[actionSlot]?.name)}
+          onToggleCaptain={() => { handleSetCaptain(lineup[actionSlot]); setActionSlot(null); }}
           onView={() => { openModal(lineup[actionSlot]); setActionSlot(null); }}
           onSwap={() => { setSwapSlot(actionSlot); setActionSlot(null); }}
           onRemove={() => {

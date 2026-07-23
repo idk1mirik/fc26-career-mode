@@ -36,7 +36,9 @@ const CAL_KEY_BY_NAME: Record<string, "champions_league" | "europa_league" | "co
 };
 
 export async function POST(req: Request) {
-  const { competitionId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup } = await req.json();
+  const body = await req.json();
+  const { competitionId, userClubId, userHomeGoals, userAwayGoals, userTactic } = body;
+  let userLineup = body.userLineup;
 
   const { data: comp } = await supabase.from("competitions").select("*").eq("id", competitionId).single();
   if (!comp || comp.status === "finished") return Response.json({ error: "Competition not found or finished" }, { status: 404 });
@@ -76,7 +78,11 @@ export async function POST(req: Request) {
 
   const unavailableByClub: Record<string, Set<string>> = {};
   for (const c of allClubs) unavailableByClub[c] = new Set();
-  for (const row of statusRows) unavailableByClub[row.club_id]?.add(rowKeyOf(row));
+  for (const row of statusRows) {
+    if (row.competition_type === null || row.competition_type === comp.type) {
+      unavailableByClub[row.club_id]?.add(rowKeyOf(row));
+    }
+  }
 
   const ratingCache: Record<string, number> = {};
   const getRating = (clubId: string) => {
@@ -89,13 +95,37 @@ export async function POST(req: Request) {
 
   if (userLineup && userClubId) {
     const userUnavailable = unavailableByClub[userClubId] ?? new Set();
-    const availableCount = userLineup.filter((p: any) => p && !userUnavailable.has(keyOf(p))).length;
-    if (availableCount < 11) {
-      const unavailableInLineup = userLineup.filter((p: any) => p && userUnavailable.has(keyOf(p))).map((p: any) => p.name);
-      return Response.json({
-        error: `Your lineup has only ${availableCount} available players (need 11). Unavailable: ${unavailableInLineup.join(", ") || "bench too short"}.`,
-        availableCount, unavailablePlayers: unavailableInLineup,
-      }, { status: 400 });
+    const missingSlots = userLineup.filter((p: any) => p && userUnavailable.has(keyOf(p)));
+    if (missingSlots.length) {
+      // Та же автозамена, что и в lib/simulateMatchday.ts — раньше жёсткая
+      // ошибка на недоступного игрока останавливала автопрокрутку сезона
+      // на кубковых турах (а до этого кубковый автопилот вообще не получал
+      // userLineup, см. фикс в app/dashboard/page.tsx: advanceDueCups).
+      const squad = playersByClub[userClubId] ?? [];
+      const lineupIds = new Set(userLineup.filter(Boolean).map((p: any) => keyOf(p)));
+      const bench = squad.filter((p: any) => !lineupIds.has(keyOf(p)) && !userUnavailable.has(keyOf(p)));
+
+      const usedReplacementIds = new Set<string>();
+      const filledLineup = userLineup.map((p: any) => {
+        if (!p || !userUnavailable.has(keyOf(p))) return p;
+        const samePos = bench.filter((b: any) => b.position === p.position && !usedReplacementIds.has(keyOf(b)))
+          .sort((a: any, b: any) => b.overall - a.overall)[0];
+        const anyPos = bench.filter((b: any) => !usedReplacementIds.has(keyOf(b)))
+          .sort((a: any, b: any) => b.overall - a.overall)[0];
+        const replacement = samePos ?? anyPos;
+        if (replacement) usedReplacementIds.add(keyOf(replacement));
+        return replacement ?? null;
+      }).filter(Boolean);
+
+      userLineup = filledLineup;
+
+      if (userLineup.length < 7) {
+        const unavailableInLineup = missingSlots.map((p: any) => p.name);
+        return Response.json({
+          error: `Too many unavailable players (only ${userLineup.length} left, need at least 7). Unavailable: ${unavailableInLineup.join(", ")}.`,
+          availableCount: userLineup.length, unavailablePlayers: unavailableInLineup,
+        }, { status: 400 });
+      }
     }
   }
 
@@ -123,10 +153,12 @@ export async function POST(req: Request) {
       const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
       const userUnavail = userIsHome ? homeUnavailable : awayUnavailable;
       const cleanUserLineup = userLineup.filter((p: any) => !userUnavail.has(keyOf(p)));
+      const { data: userStanding } = await supabase.from("standings").select("captain_id").eq("season_id", comp.season_id).eq("club_id", userClubId).maybeSingle();
+      const userCaptainId = userStanding?.captain_id ?? null;
 
       const result = userIsHome
-        ? simulateMatch(cleanUserLineup, oppXI, userTac, oppTac)
-        : simulateMatch(oppXI, cleanUserLineup, oppTac, userTac);
+        ? simulateMatch(cleanUserLineup, oppXI, userTac, oppTac, userCaptainId, null)
+        : simulateMatch(oppXI, cleanUserLineup, oppTac, userTac, null, userCaptainId);
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const hr = getRating(fix.home_club);
@@ -168,13 +200,36 @@ export async function POST(req: Request) {
       fixtureId: fix.id, tieId: fix.tie_id ?? null, leg: fix.leg ?? null,
     });
 
-    accumulateCardsAndInjuries(events, "home", fix.home_club, statusRows, statusUpdates);
-    accumulateCardsAndInjuries(events, "away", fix.away_club, statusRows, statusUpdates);
+    accumulateCardsAndInjuries(events, "home", fix.home_club, statusRows, statusUpdates, comp.type);
+    accumulateCardsAndInjuries(events, "away", fix.away_club, statusRows, statusUpdates, comp.type);
     accumulateSeasonStats(events, "home", fix.home_club, ratings.home, seasonStatsAccum);
     accumulateSeasonStats(events, "away", fix.away_club, ratings.away, seasonStatsAccum);
   }
 
   await Promise.all([Promise.all(fixtureWrites), persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum)]);
+
+  // Тик-даун травм (глобально) и дисквалификаций именно этого турнира —
+  // раньше кубковые туры вообще не декрементили matches_out, из-за чего
+  // дисквалификация в кубке никогда сама не заканчивалась естественным
+  // путём (только если её попутно погасит лиговый тур — не та причина).
+  try {
+    const { data: tickRows } = await supabase.from("player_status")
+      .select("*").eq("season_id", comp.season_id).in("club_id", allClubs).gt("matches_out", 0);
+    const tickWrites = (tickRows ?? [])
+      .filter((row: any) => row.competition_type === null || row.competition_type === comp.type)
+      .filter((row: any) => {
+        const scope = row.competition_type === null ? "injury" : comp.type;
+        const key = `${row.club_id}::${rowKeyOf(row)}::${scope}`;
+        return !statusUpdates[key]; // не трогаем то, что только что записали свежим значением в этом же туре
+      })
+      .map((row: any) => {
+        const newOut = row.matches_out - 1;
+        return newOut <= 0
+          ? supabase.from("player_status").delete().eq("id", row.id)
+          : supabase.from("player_status").update({ matches_out: newOut }).eq("id", row.id);
+      });
+    await Promise.all(tickWrites);
+  } catch (e) { console.error("Cup suspension tick-down failed", e); }
 
   // ════════════════════════════════════════════════════════════════════════
   // НОВЫЙ ФОРМАТ: лиг-фаза → плей-офф с двумя ногами

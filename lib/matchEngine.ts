@@ -27,7 +27,7 @@ function calcXG(attack: number, midfield: number, oppDef: number, oppGK: number,
 // Считаем среднее качество линии И её "глубину" (число игроков) — больше защитников
 // даёт бонус к стойкости обороны, больше форвардов — бонус к остроте атаки.
 // Это делает формацию (5-3-2 vs 3-4-3 итд) реально влияющей на матч, не только состав игроков.
-function teamStr(players: any[]) {
+function teamStr(players: any[], captainId?: string | null) {
   const byPos = (positions: string[]) => {
     const g = players.filter(p => positions.includes(p.position));
     const avg = g.length ? g.reduce((s, p) => s + p.overall, 0) / g.length : 70;
@@ -39,19 +39,20 @@ function teamStr(players: any[]) {
   const mid = byPos(["CM","CAM","CDM","LM","RM"]);
   const def = byPos(["CB","LB","RB","LWB","RWB"]);
 
-  // Бонус за количество игроков в линии: каждый игрок сверх "стандартных" 3 защ / 3 атк
-  // даёт небольшой плюс к этой линии (но с падающей отдачей — 8 защитников не x2.6 крепче чем 3).
   const depthBonus = (count: number, standard: number) => Math.sqrt(Math.max(0, count - standard)) * 2.5;
-
-  // Штраф если линия почти пуста (например 0 чистых форвардов в супер-оборонительной схеме —
-  // атака идёт только за счёт полузащиты, заметно слабее)
   const emptyPenalty = (count: number) => count === 0 ? 0.85 : count === 1 ? 0.95 : 1.0;
 
+  // Бонус капитанства — небольшой (не должен решать исход матча сам по себе):
+  // если капитан реально в старте, вся команда играет чуть собраннее.
+  // Эквивалент примерно +0.8 к среднему рейтингу линии — заметно на длинной
+  // дистанции сезона, но не превращает слабую команду в сильную за один матч.
+  const captainBonus = captainId && players.some(p => (p.id ?? p.name) === captainId) ? 0.8 : 0;
+
   return {
-    attack:   (atk.avg + depthBonus(atk.count, 2)) * emptyPenalty(atk.count),
-    midfield: mid.avg,
-    defense:  (def.avg + depthBonus(def.count, 3)) * (def.count === 0 ? 0.7 : 1.0),
-    gk:       gk ? (gk.gk_diving + gk.gk_reflexes + gk.gk_handling) / 3 : 70,
+    attack:   (atk.avg + depthBonus(atk.count, 2)) * emptyPenalty(atk.count) + captainBonus,
+    midfield: mid.avg + captainBonus,
+    defense:  (def.avg + depthBonus(def.count, 3)) * (def.count === 0 ? 0.7 : 1.0) + captainBonus,
+    gk:       (gk ? (gk.gk_diving + gk.gk_reflexes + gk.gk_handling) / 3 : 70) + captainBonus * 0.5,
     attackCount: atk.count, defenseCount: def.count,
   };
 }
@@ -59,10 +60,11 @@ function teamStr(players: any[]) {
 // Симуляция с реальными игроками и тактикой
 export function simulateMatch(
   homePlayers: any[], awayPlayers: any[],
-  homeTactic = "Balanced", awayTactic = "Balanced"
+  homeTactic = "Balanced", awayTactic = "Balanced",
+  homeCaptainId?: string | null, awayCaptainId?: string | null,
 ): MatchResult {
-  const homeStr = teamStr(homePlayers);
-  const awayStr = teamStr(awayPlayers);
+  const homeStr = teamStr(homePlayers, homeCaptainId);
+  const awayStr = teamStr(awayPlayers, awayCaptainId);
   const homeMod = getTacticModifiers(homeTactic, awayTactic);
   const awayMod = getTacticModifiers(awayTactic, homeTactic);
 

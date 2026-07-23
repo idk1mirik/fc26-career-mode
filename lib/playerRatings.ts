@@ -97,6 +97,7 @@ export function generateMatchRatings(
       const pKey = keyOf(p);
       const sideEvents = events.filter((e: any) => e.team === side && (eventKey(e, "player") === pKey || eventKey(e, "player2") === pKey));
       const goals = sideEvents.filter((e: any) => e.type === "goal" && eventKey(e, "player") === pKey).length;
+      const assists = events.filter((e: any) => e.team === side && e.type === "goal" && (e.assistPlayerId ?? e.assistPlayer) === (p.id ?? p.name)).length;
       const yellow = sideEvents.some((e: any) => e.type === "yellow" && eventKey(e, "player") === pKey);
       const red = sideEvents.some((e: any) => e.type === "red" && eventKey(e, "player") === pKey);
       const subOutEvent = sideEvents.find((e: any) => e.type === "substitution" && eventKey(e, "player") === pKey);
@@ -127,7 +128,7 @@ export function generateMatchRatings(
       const stats: PlayerMatchStats = {
         name: p.name, position: p.position,
         goals,
-        assists: !isGK && Math.random() < 0.15 * minuteFactor && goals === 0 ? 1 : 0,
+        assists,
         keyPasses: (isMid || isAttacker) ? Math.floor(Math.random() * 3 * minuteFactor) : 0,
         saves: isGK ? Math.floor(Math.random() * 5 * minuteFactor) : 0,
         tackles: (isDef || isMid) ? Math.floor(Math.random() * 4 * minuteFactor) : 0,

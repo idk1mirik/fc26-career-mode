@@ -9,6 +9,7 @@
 "use client";
 import { useState } from "react";
 import { getClubLogo } from "@/data/clublogos";
+import { getPlayerPhoto } from "@/lib/images";
 
 const EVENT_ICON: Record<string, string> = {
   goal: "⚽", yellow: "🟨", red: "🟥", substitution: "🔁", injury: "🩹",
@@ -21,6 +22,25 @@ function dnfBadge(stats: any) {
     return stats.redCard ? "🟥" : "↩";
   }
   return null;
+}
+
+// Разбор рейтинга по категориям — считается из РЕАЛЬНЫХ полей статистики
+// игрока (голы/ассисты+пасы/защитные действия/дисциплина), в отличие от
+// декоративных значений "как бы похоже на SofaScore" — тут за каждым
+// делением реально стоит цифра из lib/playerRatings.ts.
+function buildRatingBreakdown(stats: any): { label: string; value: number; color: string }[] {
+  if (!stats) return [];
+  const clamp = (v: number) => Math.max(4, Math.min(100, v));
+  const attack = clamp((stats.goals ?? 0) * 45 + 15);
+  const creativity = clamp((stats.assists ?? 0) * 35 + (stats.keyPasses ?? 0) * 15 + 10);
+  const defense = clamp((stats.tackles ?? 0) * 12 + (stats.interceptions ?? 0) * 12 + (stats.saves ?? 0) * 18 + 10);
+  const discipline = clamp(100 - (stats.mistakes ?? 0) * 30);
+  return [
+    { label: "Attack", value: attack, color: "#ef4444" },
+    { label: "Creativity", value: creativity, color: "#3b82f6" },
+    { label: "Defense", value: defense, color: "#22c55e" },
+    { label: "Discipline", value: discipline, color: "#eab308" },
+  ];
 }
 
 export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any; theme: string; onClose: () => void; copy: any }) {
@@ -82,6 +102,9 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
                 <div className="flex-1">
                   <div className={`text-sm font-bold ${ui.text}`}>
                     {e.type === "substitution" ? `${e.player2} ↔ ${e.player}` : e.player}
+                    {e.type === "goal" && e.assistPlayer && (
+                      <span className={`font-normal ${ui.muted}`}> ({e.assistPlayer})</span>
+                    )}
                   </div>
                   <div className={`text-[10px] ${ui.muted} capitalize`}>
                     {e.team === "home" ? fix.home_club : fix.away_club} · {e.type}
@@ -146,35 +169,71 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
         )}
 
         {selectedRatingPlayer && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setSelectedRatingPlayer(null)}>
-            <div className={`w-full max-w-xs rounded-2xl p-5 ${ui.card} animate-fade-in-up`} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-sm font-black ${ui.text}`}>{selectedRatingPlayer.name}</span>
-                <span className="text-lg font-black px-2 py-0.5 rounded-md" style={{ color: ratingColor(selectedRatingPlayer.rating), background: `${ratingColor(selectedRatingPlayer.rating)}18` }}>
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }} onClick={() => setSelectedRatingPlayer(null)}>
+            <div className={`w-full max-w-sm rounded-3xl p-6 max-h-[85vh] overflow-y-auto ${ui.card} animate-modal-pop`} onClick={e => e.stopPropagation()}>
+              {/* Header — фото, имя, крупный рейтинг */}
+              <div className="flex items-center gap-3 mb-5">
+                <img src={getPlayerPhoto(selectedRatingPlayer.name)} alt="" className="w-14 h-14 object-contain rounded-full shrink-0"
+                  style={{ background: `${ratingColor(selectedRatingPlayer.rating)}12`, border: `2px solid ${ratingColor(selectedRatingPlayer.rating)}40` }}
+                  onError={e => (e.currentTarget.style.display = "none")} />
+                <div className="flex-1 min-w-0">
+                  <div className={`text-base font-black truncate ${ui.text}`}>{selectedRatingPlayer.name}</div>
+                  {selectedRatingPlayer.stats?.minutesPlayed != null && selectedRatingPlayer.stats.minutesPlayed < 90 && (
+                    <div className={`text-[11px] ${ui.muted}`}>
+                      {selectedRatingPlayer.stats.redCard ? "🟥" : "↩"} {selectedRatingPlayer.stats.redCard ? "Sent off" : "Substituted"} · {selectedRatingPlayer.stats.minutesPlayed}'
+                    </div>
+                  )}
+                </div>
+                <span className="text-xl font-display font-black px-3 py-1.5 rounded-xl shrink-0" style={{ color: ratingColor(selectedRatingPlayer.rating), background: `${ratingColor(selectedRatingPlayer.rating)}18` }}>
                   {selectedRatingPlayer.rating.toFixed(1)}
                 </span>
               </div>
-              {selectedRatingPlayer.stats?.minutesPlayed != null && selectedRatingPlayer.stats.minutesPlayed < 90 && (
-                <div className={`text-[10px] mb-2 ${ui.muted}`}>
-                  {selectedRatingPlayer.stats.redCard ? "🟥 Sent off" : "↩ Substituted"} · {selectedRatingPlayer.stats.minutesPlayed}' played
+
+              {/* Минуты — отдельной строкой, как в SofaScore */}
+              <div className={`flex items-center gap-2.5 mb-5 pb-5 border-b ${ui.divider}`}>
+                <span className="text-base">⏱</span>
+                <span className={`text-sm flex-1 ${ui.muted}`}>{copy.dashMinutesPlayed ?? "Minutes played"}</span>
+                <span className={`text-sm font-black ${ui.text}`}>{selectedRatingPlayer.stats?.minutesPlayed ?? 90}'</span>
+              </div>
+
+              {/* Разбор рейтинга — реальные категории на основе фактических статов
+                  (голы/ассисты+пасы/защита/дисциплина), не выдуманные значения */}
+              <div className="mb-5">
+                <div className={`text-[10px] uppercase tracking-widest font-black mb-3 ${ui.muted}`}>
+                  {copy.dashRatingBreakdown ?? "Rating breakdown"}
                 </div>
-              )}
-              <div className="space-y-1.5">
+                <div className="space-y-3">
+                  {buildRatingBreakdown(selectedRatingPlayer.stats).map(({ label, value, color }) => (
+                    <div key={label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-bold ${ui.text}`}>{label}</span>
+                      </div>
+                      <div className={`h-1.5 rounded-full ${ui.badge}`}>
+                        <div className="h-1.5 rounded-full transition-all" style={{ width: `${value}%`, background: color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Компактные плашки статистики */}
+              <div className="grid grid-cols-4 gap-2">
                 {[
-                  ["Goals", selectedRatingPlayer.stats?.goals],
-                  ["Assists", selectedRatingPlayer.stats?.assists],
-                  ["Key Passes", selectedRatingPlayer.stats?.keyPasses],
-                  ["Saves", selectedRatingPlayer.stats?.saves],
-                  ["Tackles", selectedRatingPlayer.stats?.tackles],
-                  ["Interceptions", selectedRatingPlayer.stats?.interceptions],
-                  ["Mistakes", selectedRatingPlayer.stats?.mistakes],
-                  ["Minutes", selectedRatingPlayer.stats?.minutesPlayed],
-                ].filter(([, v]) => v !== undefined).map(([label, value]) => (
-                  <div key={label as string} className={`flex items-center justify-between text-xs ${ui.muted}`}>
-                    <span>{label}</span>
-                    <span className={`font-bold ${ui.text}`}>{value as any}</span>
-                  </div>
-                ))}
+                  { key: "goals", label: "G", icon: "⚽" },
+                  { key: "assists", label: "A", icon: "🎯" },
+                  { key: "keyPasses", label: "KP", icon: "🔑" },
+                  { key: "saves", label: "SV", icon: "🧤" },
+                  { key: "tackles", label: "TK", icon: "🛡" },
+                  { key: "interceptions", label: "INT", icon: "✋" },
+                  { key: "mistakes", label: "MIS", icon: "⚠️" },
+                ].filter(s => (selectedRatingPlayer.stats?.[s.key] ?? undefined) !== undefined && !(s.key === "saves" && !selectedRatingPlayer.stats?.saves) && !(s.key === "mistakes" && !selectedRatingPlayer.stats?.mistakes))
+                  .map(s => (
+                    <div key={s.key} className={`flex flex-col items-center gap-1 py-2.5 rounded-xl ${ui.tableRow}`}>
+                      <span className="text-sm">{s.icon}</span>
+                      <span className={`text-base font-display font-black ${ui.text}`}>{selectedRatingPlayer.stats[s.key]}</span>
+                      <span className={`text-[8px] uppercase font-black tracking-widest ${ui.muted}`}>{s.label}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>

@@ -206,10 +206,11 @@ export default function AcademyPage() {
               const gemGap = p.potential - p.overall;
               return (
                 <div key={p.id}
-                  className={`rounded-2xl p-4 transition-all card-lift animate-fade-in-up ${ui.card} ${ui.cardHover}`}
-                  style={{ animationDelay: `${i * 40}ms` }}>
+                  className={`rounded-2xl p-4 transition-all card-lift animate-fade-in-up cursor-pointer ${ui.card} ${ui.cardHover}`}
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  onClick={() => setViewPlayer(p.attrs)}>
                   <div className="flex items-start justify-between mb-3">
-                    <div className="min-w-0 cursor-pointer" onClick={() => setViewPlayer(p.attrs)}>
+                    <div className="min-w-0">
                       <div className="font-black text-sm truncate">{p.name}</div>
                       <div className={`text-[11px] ${ui.muted}`}>{p.position} · {p.age} {locale === "ru" ? "лет" : "y.o."}</div>
                     </div>
@@ -231,7 +232,7 @@ export default function AcademyPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                     <button onClick={() => handlePromote(p)} disabled={busyId === p.id}
                       className={`flex-1 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition disabled:opacity-40 ${ui.primaryBtn}`}>
                       <TrendingUp size={13} /> {locale === "ru" ? "В команду" : "Promote"}

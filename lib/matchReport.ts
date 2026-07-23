@@ -8,6 +8,8 @@ export interface MatchEvent {
   player2?: string;
   playerId?: string;   // стабильный id — используется для трекинга травм/дисквалификаций/статистики
   player2Id?: string;
+  assistPlayer?: string;   // только для type === "goal" — кто отдал голевую передачу
+  assistPlayerId?: string;
 }
 
 function pick<T>(arr: T[]): T | undefined {
@@ -153,6 +155,17 @@ export function generateMatchEvents(
   }
 
   // ── 4. Голы — скорер выбирается только из тех, кто на поле именно в минуту гола ──
+  // Ассист — реальный игрок, отдавший пас на гол (раньше assists считались
+  // независимым случайным броском для КАЖДОГО игрока отдельно от голов —
+  // из-за этого игрок мог получить "ассист" в матче, где его команда вообще
+  // не забила. Теперь ассист — партнёр по команде, физически на поле в
+  // минуту гола, отдельно от самого автора гола, не у каждого гола есть).
+  function pickAssist(onPitch: any[], scorer: any) {
+    if (Math.random() > 0.65) return null;
+    const candidates = onPitch.filter((p: any) => keyOf(p) !== keyOf(scorer));
+    return pick(candidates) ?? null;
+  }
+
   const homeGoalCount: Record<string, number> = {};
   for (let i = 0; i < homeGoals; i++) {
     const minute = randomMinute();
@@ -160,7 +173,11 @@ export function generateMatchEvents(
     const weighted = onPitch.map((p: any) => ({ ...p, _penalty: Math.pow(0.45, homeGoalCount[keyOf(p)] ?? 0) }));
     const scorer = pickWeightedScorer(weighted.filter((p: any) => p._penalty > 0.1)) ?? pick(onPitch) ?? pick(homeStarters);
     if (scorer) homeGoalCount[keyOf(scorer)] = (homeGoalCount[keyOf(scorer)] ?? 0) + 1;
-    events.push({ minute, type: "goal", team: "home", player: scorer?.name ?? "Unknown", playerId: scorer?.id });
+    const assist = scorer ? pickAssist(onPitch, scorer) : null;
+    events.push({
+      minute, type: "goal", team: "home", player: scorer?.name ?? "Unknown", playerId: scorer?.id,
+      ...(assist ? { assistPlayer: assist.name, assistPlayerId: assist.id } : {}),
+    });
   }
   const awayGoalCount: Record<string, number> = {};
   for (let i = 0; i < awayGoals; i++) {
@@ -169,7 +186,11 @@ export function generateMatchEvents(
     const weighted = onPitch.map((p: any) => ({ ...p, _penalty: Math.pow(0.45, awayGoalCount[keyOf(p)] ?? 0) }));
     const scorer = pickWeightedScorer(weighted.filter((p: any) => p._penalty > 0.1)) ?? pick(onPitch) ?? pick(awayStarters);
     if (scorer) awayGoalCount[keyOf(scorer)] = (awayGoalCount[keyOf(scorer)] ?? 0) + 1;
-    events.push({ minute, type: "goal", team: "away", player: scorer?.name ?? "Unknown", playerId: scorer?.id });
+    const assist = scorer ? pickAssist(onPitch, scorer) : null;
+    events.push({
+      minute, type: "goal", team: "away", player: scorer?.name ?? "Unknown", playerId: scorer?.id,
+      ...(assist ? { assistPlayer: assist.name, assistPlayerId: assist.id } : {}),
+    });
   }
 
   // ── 5. Жёлтые карточки — тоже только среди тех, кто на поле в эту минуту ──

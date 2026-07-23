@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { invalidateOverridesCache } from "@/lib/players";
 import { chargeClub, applyClubEarning } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
-import { calculateWageDemand } from "@/lib/contracts";
+import { calculateWageDemand, getCareerId } from "@/lib/contracts";
 
 export async function POST(req: Request) {
   const { seasonId, buyerClubId, listingId } = await req.json();
@@ -62,9 +62,10 @@ export async function POST(req: Request) {
     const newWage = (oldContract?.wage_weekly ?? 0) > 0 ? oldContract.wage_weekly : calculateWageDemand(
       { overall: 75, age: 25 }, { reputationDiscount: 0 }, "rotation"
     );
+    const careerId = oldContract?.career_id ?? await getCareerId(seasonId);
 
     await supabase.from("contracts").insert({
-      season_id: seasonId, career_id: oldContract?.career_id ?? seasonId,
+      season_id: seasonId, career_id: careerId,
       club_id: buyerClubId, player_id: listing.player_id, player_name: listing.player_name,
       wage_weekly: newWage, years_left: 3, squad_role: oldContract?.squad_role ?? "rotation",
       release_clause: null, signing_bonus: 0, happiness: 65,

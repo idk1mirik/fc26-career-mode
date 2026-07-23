@@ -1,14 +1,15 @@
 // components/HelpHint.tsx
 // Куда ставить: fc26_career_mode/components/HelpHint.tsx
 //
-// Маленький "?"-значок рядом с элементом управления — при клике показывает
-// короткую подсказку, что эта штука делает. Один раз показанные подсказки
-// запоминаются в localStorage (не участвует в артефактах Claude — это
-// обычный запущенный сайт, localStorage тут работает штатно), поэтому
-// значок в первый раз на странице может сам чуть пульсировать, привлекая
-// внимание, а после первого просмотра — просто спокойная иконка.
+// v2 — раньше подсказка была position:absolute внутри обычного потока
+// разметки, и на карточках с overflow/transform (много где: card-lift,
+// animate-fade-in-up и т.д.) она обрезалась или пряталась под соседними
+// элементами. Теперь рендерится через React Portal прямо в <body> с
+// координатами, вычисленными от реальной позиции кнопки на экране —
+// гарантированно поверх всего, независимо от родителей.
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 type ThemeKey = "classic" | "aurora" | "maleficent";
 
@@ -33,6 +34,8 @@ const DOT_STYLES: Record<ThemeKey, { dot: string; dotNew: string; popover: strin
   },
 };
 
+const POPOVER_W = 224; // w-56
+
 export function HelpHint({
   id, title, text, theme = "classic", side = "bottom",
 }: {
@@ -44,22 +47,48 @@ export function HelpHint({
 }) {
   const s = DOT_STYLES[theme];
   const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState(true); // по умолчанию "не новое", пока не проверили localStorage
-  const ref = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(true);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    try {
-      setSeen(localStorage.getItem(`fc26-hint-seen:${id}`) === "1");
-    } catch { /* localStorage недоступен (SSR/приватный режим) — просто не подсвечиваем как новое */ }
+    try { setSeen(localStorage.getItem(`fc26-hint-seen:${id}`) === "1"); } catch {}
   }, [id]);
+
+  const computePosition = useCallback(() => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    let top = r.bottom + 8, left = r.left + r.width / 2 - POPOVER_W / 2;
+    if (side === "top") top = r.top - 8;
+    if (side === "left") { top = r.top + r.height / 2; left = r.left - POPOVER_W - 8; }
+    if (side === "right") { top = r.top + r.height / 2; left = r.right + 8; }
+    left = Math.max(8, Math.min(left, window.innerWidth - POPOVER_W - 8));
+    setCoords({ top, left });
+  }, [side]);
+
+  useEffect(() => {
+    if (!open) return;
+    computePosition();
+    const onScroll = () => computePosition();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open, computePosition]);
 
   useEffect(() => {
     if (!open) return;
     const onClickAway = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false);
     };
-    window.addEventListener("mousedown", onClickAway);
-    return () => window.removeEventListener("mousedown", onClickAway);
+    const t = setTimeout(() => window.addEventListener("mousedown", onClickAway), 0);
+    return () => { clearTimeout(t); window.removeEventListener("mousedown", onClickAway); };
   }, [open]);
 
   const handleOpen = () => {
@@ -70,26 +99,28 @@ export function HelpHint({
     }
   };
 
-  const posClass = {
-    bottom: "top-full mt-2 left-1/2 -translate-x-1/2",
-    top: "bottom-full mb-2 left-1/2 -translate-x-1/2",
-    left: "right-full mr-2 top-1/2 -translate-y-1/2",
-    right: "left-full ml-2 top-1/2 -translate-y-1/2",
-  }[side];
+  const transform =
+    side === "top" ? "translate(0, -100%)" :
+    side === "left" ? "translate(0, -50%)" :
+    side === "right" ? "translate(0, -50%)" : "none";
 
   return (
-    <div className="relative inline-block" ref={ref}>
-      <button type="button" onClick={handleOpen}
-        className={`w-4 h-4 rounded-full text-[10px] font-black flex items-center justify-center transition ${seen ? s.dot : `${s.dotNew} animate-soft-pulse`}`}
+    <>
+      <button ref={btnRef} type="button" onClick={handleOpen}
+        className={`w-4 h-4 rounded-full text-[10px] font-black flex items-center justify-center transition shrink-0 ${seen ? s.dot : `${s.dotNew} animate-soft-pulse`}`}
         aria-label="help">
         ?
       </button>
-      {open && (
-        <div className={`absolute z-[1200] w-56 rounded-xl p-3 text-xs animate-fade-in ${posClass} ${s.popover}`}>
+      {mounted && open && coords && createPortal(
+        <div
+          className={`fixed z-[2000] w-56 rounded-xl p-3 text-xs animate-fade-in ${s.popover}`}
+          style={{ top: coords.top, left: coords.left, transform }}
+          onClick={e => e.stopPropagation()}>
           <div className={`${s.title} mb-1`}>{title}</div>
           <div className={s.text}>{text}</div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }

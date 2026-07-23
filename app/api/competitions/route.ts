@@ -1,9 +1,9 @@
 import { supabase } from "@/lib/supabase";
 
 function computeLeaguePhaseStandings(fixtures: any[], leaguePhaseRounds: number) {
-  const table = new Map<string, { club: string; played: number; points: number; gf: number; ga: number }>();
+  const table = new Map<string, { club: string; played: number; won: number; drawn: number; lost: number; points: number; gf: number; ga: number }>();
   const ensure = (c: string) => {
-    if (!table.has(c)) table.set(c, { club: c, played: 0, points: 0, gf: 0, ga: 0 });
+    if (!table.has(c)) table.set(c, { club: c, played: 0, won: 0, drawn: 0, lost: 0, points: 0, gf: 0, ga: 0 });
     return table.get(c)!;
   };
   for (const f of fixtures) {
@@ -12,9 +12,9 @@ function computeLeaguePhaseStandings(fixtures: any[], leaguePhaseRounds: number)
     h.played++; a.played++;
     h.gf += f.home_goals ?? 0; h.ga += f.away_goals ?? 0;
     a.gf += f.away_goals ?? 0; a.ga += f.home_goals ?? 0;
-    if ((f.home_goals ?? 0) > (f.away_goals ?? 0)) h.points += 3;
-    else if ((f.home_goals ?? 0) < (f.away_goals ?? 0)) a.points += 3;
-    else { h.points += 1; a.points += 1; }
+    if ((f.home_goals ?? 0) > (f.away_goals ?? 0)) { h.points += 3; h.won++; a.lost++; }
+    else if ((f.home_goals ?? 0) < (f.away_goals ?? 0)) { a.points += 3; a.won++; h.lost++; }
+    else { h.points += 1; a.points += 1; h.drawn++; a.drawn++; }
   }
   return [...table.values()]
     .map(s => ({ ...s, gd: s.gf - s.ga }))
