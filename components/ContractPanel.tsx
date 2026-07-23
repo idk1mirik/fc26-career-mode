@@ -9,7 +9,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { CONTRACTS_COPY } from "@/lib/i18nContracts";
-import { calculateWageDemand, type SquadRole } from "@/lib/contracts";
+import { calculateWageDemand, type SquadRole } from "@/lib/contractsShared";
 import type { Locale } from "@/lib/i18n";
 import { HelpHint } from "@/components/HelpHint";
 
