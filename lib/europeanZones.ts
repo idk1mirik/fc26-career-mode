@@ -5,10 +5,18 @@
 // (ЛЧ/ЛЕ/ЛК/вылет) использовалась и на полной странице таблицы, и в
 // компактном виджете на дашборде — раньше там были рассинхронизированные
 // версии (дашборд всё ещё красил жёстко "топ-4 зелёным" для любой лиги).
-const BIG5 = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1"];
+// Точные названия топ-5 лиг из data/leagues.json — бренд-суффиксы разные
+// у каждой ("LALIGA EA SPORTS", "Ligue 1 McDonald's", "Serie A Enilive"),
+// поэтому просто ключевые слова ловили и вторые дивизионы ("LALIGA
+// HYPERMOTION", "Bundesliga 2") и чужие лиги с похожим названием
+// ("Ö. Bundesliga" — австрийская). Точный список надёжнее нечёткого совпадения.
+const BIG5_EXACT = ["Premier League", "LALIGA EA SPORTS", "Ligue 1 McDonald's", "Bundesliga", "Serie A Enilive"];
+function isBig5League(leagueName: string): boolean {
+  return BIG5_EXACT.includes(leagueName);
+}
 
 export function getQualificationZones(leagueName: string, totalClubs: number) {
-  const isBig5 = BIG5.includes(leagueName);
+  const isBig5 = isBig5League(leagueName);
   const cl = isBig5 ? 5 : 2;
   const el = isBig5 ? 2 : 1;
   const uecl = isBig5 ? 1 : 1;

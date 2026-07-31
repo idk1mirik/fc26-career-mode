@@ -325,7 +325,7 @@ export async function createContractsForClub(
     // выглядя как "куда все топ-игроки делись". Плюс добавлен небольшой
     // случайный разброс — иначе игроки одного возраста истекают строго
     // синхронно волнами каждый N-й сезон.
-    years_left: p.age >= 33 ? 1 : p.age >= 30 ? rand2(1, 2) : p.age <= 21 ? rand2(3, 4) : rand2(2, 3),
+    years_left: p.age >= 33 ? 1 : p.age >= 30 ? rand2(1, 2) : p.age <= 21 ? rand2(2, 4) : rand2(1, 4),
     squad_role: p.overall >= 82 ? "star" : p.overall >= 76 ? "important" : p.age <= 20 ? "prospect" : "rotation",
     release_clause: null, signing_bonus: 0, happiness: 70,
     wants_renewal: false, transfer_listed: false,

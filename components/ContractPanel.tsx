@@ -9,7 +9,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { CONTRACTS_COPY } from "@/lib/i18nContracts";
-import { calculateWageDemand, type SquadRole } from "@/lib/contractsShared";
+import { calculateWageDemand, type SquadRole } from "@/lib/contracts";
 import type { Locale } from "@/lib/i18n";
 import { HelpHint } from "@/components/HelpHint";
 
@@ -106,10 +106,23 @@ export function ContractPanel({
   const s = PANEL_STYLES[theme];
   const ru = locale === "ru";
 
-  const [wage, setWage] = useState(player.currentWage);
+  const [role, setRole] = useState<SquadRole>(player.currentRole);
+
+  // Рыночная оценка — считаем ДО инициализации слайдера зарплаты. У
+  // свободных агентов currentWage всегда 0 (контракт истёк) — раньше
+  // слайдер стартовал именно с 0, и для дорогого игрока (высокий overall)
+  // это означало предложение в разы ниже рынка. За 3 раунда переговоров
+  // такой разрыв не всегда успевал сойтись, особенно если сам двигал
+  // ползунок вручную не туда — со стороны выглядело как "не могу подписать
+  // никого дороже определённого рейтинга". Теперь стартуем с честной
+  // рыночной цифры, а не с нуля.
+  const initialMarketWage = calculateWageDemand(
+    { overall: player.overall, age: player.age, avgRatingLastSeason: player.avgRatingLastSeason },
+    { reputationDiscount: clubReputationDiscount }, player.currentRole
+  );
+  const [wage, setWage] = useState(player.currentWage > 0 ? player.currentWage : initialMarketWage);
   const [years, setYears] = useState(player.currentYears || 2);
   const [bonus, setBonus] = useState(0);
-  const [role, setRole] = useState<SquadRole>(player.currentRole);
 
   const [negotiation, setNegotiation] = useState<any>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);

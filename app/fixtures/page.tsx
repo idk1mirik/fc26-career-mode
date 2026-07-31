@@ -338,7 +338,7 @@ export default function FixturesPage() {
       </div>
 
       {reportFix && (
-        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} onClose={() => setReportFix(null)} />
+        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} locale={locale} onClose={() => setReportFix(null)} />
       )}
     </DashboardLayout>
   );

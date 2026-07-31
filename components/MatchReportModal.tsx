@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { getClubLogo } from "@/data/clublogos";
 import { getPlayerPhoto } from "@/lib/images";
+import { MatchPitch } from "@/components/MatchPitch";
 
 const EVENT_ICON: Record<string, string> = {
   goal: "⚽", yellow: "🟨", red: "🟥", substitution: "🔁", injury: "🩹",
@@ -28,25 +29,27 @@ function dnfBadge(stats: any) {
 // игрока (голы/ассисты+пасы/защитные действия/дисциплина), в отличие от
 // декоративных значений "как бы похоже на SofaScore" — тут за каждым
 // делением реально стоит цифра из lib/playerRatings.ts.
-function buildRatingBreakdown(stats: any): { label: string; value: number; color: string }[] {
+function buildRatingBreakdown(stats: any, locale: string = "en"): { label: string; value: number; color: string }[] {
   if (!stats) return [];
   const clamp = (v: number) => Math.max(4, Math.min(100, v));
   const attack = clamp((stats.goals ?? 0) * 45 + 15);
   const creativity = clamp((stats.assists ?? 0) * 35 + (stats.keyPasses ?? 0) * 15 + 10);
   const defense = clamp((stats.tackles ?? 0) * 12 + (stats.interceptions ?? 0) * 12 + (stats.saves ?? 0) * 18 + 10);
   const discipline = clamp(100 - (stats.mistakes ?? 0) * 30);
+  const ru = locale === "ru";
   return [
-    { label: "Attack", value: attack, color: "#ef4444" },
-    { label: "Creativity", value: creativity, color: "#3b82f6" },
-    { label: "Defense", value: defense, color: "#22c55e" },
-    { label: "Discipline", value: discipline, color: "#eab308" },
+    { label: ru ? "Атака" : "Attack", value: attack, color: "#ef4444" },
+    { label: ru ? "Созидание" : "Creativity", value: creativity, color: "#3b82f6" },
+    { label: ru ? "Оборона" : "Defense", value: defense, color: "#22c55e" },
+    { label: ru ? "Дисциплина" : "Discipline", value: discipline, color: "#eab308" },
   ];
 }
 
-export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; ui: any; theme: string; onClose: () => void; copy: any }) {
+export function MatchReportModal({ fix, ui, theme, onClose, copy, locale = "en" }: { fix: any; ui: any; theme: string; onClose: () => void; copy: any; locale?: string }) {
   const events = fix.events ?? [];
   const ratings = fix.ratings ?? { home: [], away: [] };
   const [tab, setTab] = useState<"events" | "ratings">("events");
+  const [ratingsView, setRatingsView] = useState<"pitch" | "list">("pitch");
   const [selectedRatingPlayer, setSelectedRatingPlayer] = useState<any>(null);
 
   const ratingColor = (r: number) => {
@@ -94,7 +97,7 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
 
         {tab === "events" && (
           <div className="space-y-2">
-            {events.length === 0 && <div className={`text-center text-sm ${ui.muted} py-4`}>No events recorded</div>}
+            {events.length === 0 && <div className={`text-center text-sm ${ui.muted} py-4`}>{locale === "ru" ? "Событий не зафиксировано" : "No events recorded"}</div>}
             {events.map((e: any, i: number) => (
               <div key={i} className={`flex items-center gap-3 py-2 px-3 rounded-xl animate-fade-in-up ${ui.tableRow}`} style={{ animationDelay: `${Math.min(i * 25, 400)}ms` }}>
                 <span className={`text-xs font-black w-8 ${ui.muted}`}>{e.minute}'</span>
@@ -117,38 +120,72 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
 
         {tab === "ratings" && (
           <div className="space-y-5">
+            <div className="flex gap-2">
+              <button onClick={() => setRatingsView("pitch")}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${ratingsView === "pitch" ? ui.tabActive : ui.tabIdle}`}>
+                🏟 {locale === "ru" ? "Поле" : "Pitch"}
+              </button>
+              <button onClick={() => setRatingsView("list")}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${ratingsView === "list" ? ui.tabActive : ui.tabIdle}`}>
+                📋 {locale === "ru" ? "Список" : "List"}
+              </button>
+            </div>
+
+            {ratingsView === "pitch" && (
+              <MatchPitch
+                homePlayers={(ratings.home ?? []).filter((p: any) => !p.subbedIn)}
+                awayPlayers={(ratings.away ?? []).filter((p: any) => !p.subbedIn)}
+                homeClub={fix.home_club} awayClub={fix.away_club}
+                getRatingColor={ratingColor} getClubLogo={getClubLogo}
+                onSelectPlayer={setSelectedRatingPlayer}
+              />
+            )}
+
             {[{ label: fix.home_club, list: ratings.home ?? [] }, { label: fix.away_club, list: ratings.away ?? [] }].map(({ label, list }) => {
               const starters = list.filter((p: any) => !p.subbedIn);
               const subs = list.filter((p: any) => p.subbedIn);
+              if (ratingsView === "pitch" && subs.length === 0) return null; // в режиме поля стартовые уже показаны на самом поле
               return (
                 <div key={label}>
-                  <div className={`text-[10px] uppercase tracking-widest font-black mb-2 flex items-center gap-1.5 ${ui.muted}`}>
-                    <img src={getClubLogo(label)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                    {label}
-                  </div>
+                  {ratingsView === "list" && (
+                    <div className={`text-[10px] uppercase tracking-widest font-black mb-2 flex items-center gap-1.5 ${ui.muted}`}>
+                      <img src={getClubLogo(label)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                      {label}
+                    </div>
+                  )}
 
-                  <div className="grid grid-cols-3 gap-1.5 mb-2">
-                    {starters.length === 0 && <div className={`text-xs col-span-3 ${ui.muted}`}>No data</div>}
-                    {starters.map((p: any, i: number) => {
-                      const dnf = dnfBadge(p.stats);
-                      return (
-                        <button key={i} onClick={() => setSelectedRatingPlayer(p)}
-                          className={`flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors card-lift ${ui.tableRow}`}>
-                          <span className={`text-[11px] font-bold truncate ${ui.text} flex items-center gap-1`}>
-                            {p.name}
-                            {dnf && <span className="text-[9px] opacity-70" title={p.stats?.minutesPlayed ? `${p.stats.minutesPlayed}'` : ""}>{dnf}</span>}
-                          </span>
-                          <span className="text-xs font-black px-1.5 py-0.5 rounded-md shrink-0 ml-1" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
-                            {p.rating.toFixed(1)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {ratingsView === "list" && (
+                    <div className="grid grid-cols-3 gap-1.5 mb-2">
+                      {starters.length === 0 && <div className={`text-xs col-span-3 ${ui.muted}`}>{locale === "ru" ? "Нет данных" : "No data"}</div>}
+                      {starters.map((p: any, i: number) => {
+                        const dnf = dnfBadge(p.stats);
+                        return (
+                          <button key={i} onClick={() => setSelectedRatingPlayer(p)}
+                            className={`flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors card-lift ${ui.tableRow}`}>
+                            <span className={`text-[11px] font-bold truncate ${ui.text} flex items-center gap-1`}>
+                              {p.name}
+                              {dnf && <span className="text-[9px] opacity-70" title={p.stats?.minutesPlayed ? `${p.stats.minutesPlayed}'` : ""}>{dnf}</span>}
+                            </span>
+                            <span className="text-xs font-black px-1.5 py-0.5 rounded-md shrink-0 ml-1" style={{ color: ratingColor(p.rating), background: `${ratingColor(p.rating)}18` }}>
+                              {p.rating.toFixed(1)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {subs.length > 0 && (
                     <div>
-                      <div className={`text-[9px] uppercase tracking-widest mb-1 ${ui.muted}`}>Substitutes</div>
+                      <div className={`text-[9px] uppercase tracking-widest mb-1 ${ui.muted}`}>
+                        {ratingsView === "pitch" && (
+                          <span className="flex items-center gap-1.5 mb-1">
+                            <img src={getClubLogo(label)} className="w-3.5 h-3.5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                            {label} — {locale === "ru" ? "Замены" : "Substitutes"}
+                          </span>
+                        )}
+                        {ratingsView === "list" && (locale === "ru" ? "Замены" : "Substitutes")}
+                      </div>
                       <div className="grid grid-cols-3 gap-1.5">
                         {subs.map((p: any, i: number) => (
                           <button key={i} onClick={() => setSelectedRatingPlayer(p)}
@@ -180,7 +217,7 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
                   <div className={`text-base font-black truncate ${ui.text}`}>{selectedRatingPlayer.name}</div>
                   {selectedRatingPlayer.stats?.minutesPlayed != null && selectedRatingPlayer.stats.minutesPlayed < 90 && (
                     <div className={`text-[11px] ${ui.muted}`}>
-                      {selectedRatingPlayer.stats.redCard ? "🟥" : "↩"} {selectedRatingPlayer.stats.redCard ? "Sent off" : "Substituted"} · {selectedRatingPlayer.stats.minutesPlayed}'
+                      {selectedRatingPlayer.stats.redCard ? "🟥" : "↩"} {selectedRatingPlayer.stats.redCard ? (locale === "ru" ? "Удалён" : "Sent off") : (locale === "ru" ? "Заменён" : "Substituted")} · {selectedRatingPlayer.stats.minutesPlayed}'
                     </div>
                   )}
                 </div>
@@ -192,7 +229,7 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
               {/* Минуты — отдельной строкой, как в SofaScore */}
               <div className={`flex items-center gap-2.5 mb-5 pb-5 border-b ${ui.divider}`}>
                 <span className="text-base">⏱</span>
-                <span className={`text-sm flex-1 ${ui.muted}`}>{copy.dashMinutesPlayed ?? "Minutes played"}</span>
+                <span className={`text-sm flex-1 ${ui.muted}`}>{locale === "ru" ? "Сыграно минут" : "Minutes played"}</span>
                 <span className={`text-sm font-black ${ui.text}`}>{selectedRatingPlayer.stats?.minutesPlayed ?? 90}'</span>
               </div>
 
@@ -200,10 +237,10 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy }: { fix: any; 
                   (голы/ассисты+пасы/защита/дисциплина), не выдуманные значения */}
               <div className="mb-5">
                 <div className={`text-[10px] uppercase tracking-widest font-black mb-3 ${ui.muted}`}>
-                  {copy.dashRatingBreakdown ?? "Rating breakdown"}
+                  {locale === "ru" ? "Разбор рейтинга" : "Rating breakdown"}
                 </div>
                 <div className="space-y-3">
-                  {buildRatingBreakdown(selectedRatingPlayer.stats).map(({ label, value, color }) => (
+                  {buildRatingBreakdown(selectedRatingPlayer.stats, locale).map(({ label, value, color }) => (
                     <div key={label}>
                       <div className="flex items-center justify-between mb-1">
                         <span className={`text-xs font-bold ${ui.text}`}>{label}</span>

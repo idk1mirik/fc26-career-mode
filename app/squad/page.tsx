@@ -922,7 +922,7 @@ export default function SquadPage() {
         return (
           <ContractPanel
             theme={theme as any}
-            locale="en"
+            locale={locale as any}
             seasonId={seasonId ?? undefined}
             clubId={selectedClub?.name}
             player={{

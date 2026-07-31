@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Zap } from "lucide-react";
@@ -358,6 +358,9 @@ export default function DashboardPage() {
   // прогресс по ходу дела.
   const [simulatingSeason, setSimulatingSeason] = useState(false);
   const [seasonSimProgress, setSeasonSimProgress] = useState<{ done: number; matchday: number } | null>(null);
+  const [simPaused, setSimPaused] = useState(false);
+  const simPausedRef = useRef(false);
+  const simStopRef = useRef(false);
 
   // При автопромотке лиги кубки раньше вообще не трогались — их fixtures
   // просто копились неигранными. Теперь после каждого лигового тура ещё
@@ -394,16 +397,26 @@ export default function DashboardPage() {
     }
   };
 
+  const simSleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
   const simulateWholeSeason = async () => {
     if (!seasonId || simulating || simulatingSeason) return;
     setSimulatingSeason(true);
     setApiError(null);
     setSeasonSimProgress({ done: 0, matchday });
+    simPausedRef.current = false;
+    simStopRef.current = false;
+    setSimPaused(false);
     try {
       let finished = false;
       let iterations = 0;
       const SAFETY_CAP = 80; // больше, чем матчей в самом длинном реалистичном календаре
       while (!finished && iterations < SAFETY_CAP) {
+        // Пауза — крутимся тут, пока не отожмут "Продолжить" или не остановят совсем.
+        // Не выходим из цикла молча: проверяем стоп и во время паузы тоже.
+        while (simPausedRef.current && !simStopRef.current) await simSleep(200);
+        if (simStopRef.current) break;
+
         const res = await fetch("/api/season/advance", {
           method: "POST", headers: { "Content-Type": "application/json" },
           // Раньше здесь ничего не передавалось ("автопилот"), и сервер на
@@ -427,18 +440,40 @@ export default function DashboardPage() {
 
         await advanceDueCups(getLeagueMatchdayDate(data.nextMatchday));
 
+        // Живое обновление — раньше таблица/результаты обновлялись только
+        // ОДИН раз в самом конце, и вся автопрокрутка выглядела как "экран
+        // просто завис на N секунд". Теперь таблица и тур реально видно,
+        // как они меняются по ходу симуляции — плюс небольшая пауза между
+        // турами, чтобы это ощущалось как течение времени, а не рывок.
+        await loadData(seasonId);
         if (finished) setSeasonFinished(true);
+        if (!finished && !simStopRef.current) await simSleep(320);
       }
-      // Лига закончилась, но у кубков (особенно еврокубков — их плей-офф
-      // может ещё продолжаться) могли остаться недоигранные раунды с датами
-      // ПОСЛЕ последнего тура лиги. Дальше календарь всё равно не двигается
-      // сам по себе — доигрываем всё, что осталось, не дожидаясь дат.
-      await advanceDueCups("9999-12-31", true);
+      if (!simStopRef.current) {
+        // Лига закончилась, но у кубков (особенно еврокубков — их плей-офф
+        // может ещё продолжаться) могли остаться недоигранные раунды с датами
+        // ПОСЛЕ последнего тура лиги. Дальше календарь всё равно не двигается
+        // сам по себе — доигрываем всё, что осталось, не дожидаясь дат.
+        await advanceDueCups("9999-12-31", true);
+      }
       await loadData(seasonId);
       await loadCalendar(seasonId, userClub);
     } catch (e) { console.error(e); setApiError("Network error during season simulation."); }
     setSimulatingSeason(false);
     setSeasonSimProgress(null);
+    simPausedRef.current = false;
+    simStopRef.current = false;
+    setSimPaused(false);
+  };
+
+  const toggleSimPause = () => {
+    simPausedRef.current = !simPausedRef.current;
+    setSimPaused(simPausedRef.current);
+  };
+  const stopSim = () => {
+    simStopRef.current = true;
+    simPausedRef.current = false;
+    setSimPaused(false);
   };
 
   // Текущий и следующий тур
@@ -744,8 +779,41 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   {simulatingSeason && (
-                    <div className="mb-3 px-3 py-2 rounded-xl text-xs font-bold" style={{ background: "rgba(59,130,246,0.10)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.25)" }}>
-                      ⏳ {locale === "ru" ? `Автосимуляция остатка сезона — ИИ играет все матчи, включая твои. Тур ${seasonSimProgress?.matchday ?? matchday}… не закрывай вкладку.` : `Auto-simulating the rest of the season — AI is playing every match, including yours. Matchday ${seasonSimProgress?.matchday ?? matchday}… this can take a bit, don't close the tab.`}
+                    <div className="mb-3 p-4 rounded-2xl animate-fade-in-up" style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)" }}>
+                      <div className="flex items-center justify-between gap-3 mb-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${simPaused ? "" : "animate-soft-pulse"}`} style={{ background: simPaused ? "#f59e0b" : "#3b82f6" }} />
+                          <div className="min-w-0">
+                            <div className="text-xs font-black" style={{ color: "#60a5fa" }}>
+                              {simPaused
+                                ? (locale === "ru" ? "На паузе" : "Paused")
+                                : (locale === "ru" ? "Автосимуляция" : "Auto-simulating")}
+                            </div>
+                            <div className={`text-[11px] font-bold ${ui.muted}`}>
+                              {locale === "ru" ? "Тур" : "Matchday"} {seasonSimProgress?.matchday ?? matchday}
+                              {" · "}{new Date(getLeagueMatchdayDate(seasonSimProgress?.matchday ?? matchday) + "T00:00:00").toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={toggleSimPause}
+                            className="px-3 py-2 rounded-xl text-xs font-black transition-transform hover:scale-105"
+                            style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>
+                            {simPaused ? "▶" : "⏸"}
+                          </button>
+                          <button onClick={stopSim}
+                            className="px-3 py-2 rounded-xl text-xs font-black transition-transform hover:scale-105"
+                            style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444" }}>
+                            ⏹ {locale === "ru" ? "Стоп" : "Stop"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(59,130,246,0.12)" }}>
+                        <div className="h-1.5 rounded-full animate-shimmer" style={{
+                          width: `${Math.min(100, Math.round(((seasonSimProgress?.matchday ?? matchday) / Math.max(1, ((selectedLeague?.clubs?.length ?? 20) - 1) * 2)) * 100))}%`,
+                          background: "linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6)",
+                        }} />
+                      </div>
                     </div>
                   )}
                   {!lineupValid && (
@@ -870,7 +938,7 @@ export default function DashboardPage() {
       </div>
 
       {reportFix && (
-        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} onClose={() => setReportFix(null)} />
+        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} locale={locale} onClose={() => setReportFix(null)} />
       )}
     </main>
     </DashboardLayout>
