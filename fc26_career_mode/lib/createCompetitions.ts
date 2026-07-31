@@ -1,0 +1,150 @@
+// lib/createCompetitions.ts — создаёт все турниры сезона с реальными составами 2025/26
+import { supabase } from "@/lib/supabase";
+import leagues from "@/data/leagues.json";
+import {
+  DOMESTIC_CUPS, SUPER_CUPS, CHAMPIONS_LEAGUE, EUROPA_LEAGUE, CONFERENCE_LEAGUE,
+  CHAMPIONS_LEAGUE_CLUBS_2025, EUROPA_LEAGUE_CLUBS_2025, CONFERENCE_LEAGUE_CLUBS_2025,
+  TOP5_LEAGUES, generateKnockoutRound1, getClubLeague,
+  LEAGUE_PHASE_CONFIG, generateLeaguePhaseSchedule,
+} from "@/lib/competitions";
+import { getEuroCupRoundDate, getDomesticCupRoundDate, getSuperCupDate, getSuperCupRoundDate, getLeaguePhaseMatchdayDate } from "@/lib/seasonCalendar";
+
+export async function createSeasonCompetitions(
+  seasonId: string, leagueName: string,
+  prevSeasonFinalists?: { leagueChampion?: string; leagueRunnerUp?: string; cupWinner?: string; cupRunnerUp?: string }
+) {
+  const created: any[] = [];
+
+  // ── 1. Внутренний кубок ──
+  const cupDef = DOMESTIC_CUPS[leagueName];
+  if (cupDef) {
+    const league = (leagues as any[]).find(l => l.name === leagueName);
+    const clubs: string[] = league?.clubs?.map((c: any) => c.id) ?? [];
+
+    const { data: comp } = await supabase.from("competitions").insert({
+      season_id: seasonId, type: cupDef.type, name: cupDef.name, format: cupDef.format,
+      prize_winner: cupDef.prizeWinner, prize_runner: cupDef.prizeRunner, prize_participation: cupDef.prizeParticipation,
+    }).select().single();
+
+    if (comp && clubs.length >= 2) {
+      const { pairs, byeTeam } = generateKnockoutRound1(clubs);
+      const matchDate = getDomesticCupRoundDate(1);
+      const rows: any[] = pairs.map(p => ({
+        competition_id: comp.id, round: 1, round_name: "Round 1",
+        home_club: p.home, away_club: p.away, match_date: matchDate,
+      }));
+      if (byeTeam) {
+        // Нечётное число клубов в кубке страны — раньше один клуб просто
+        // "терялся" без матча. Теперь у него бай: он мгновенно проходит раунд.
+        rows.push({
+          competition_id: comp.id, round: 1, round_name: "Round 1",
+          home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
+          played: true, winner_club: byeTeam, is_bye: true,
+        });
+      }
+      await supabase.from("cup_fixtures").insert(rows);
+      created.push({ name: cupDef.name, id: comp.id });
+    }
+  }
+
+  // ── 2. Евро-кубки — РЕАЛЬНЫЕ составы сезона 2025/26 ──
+  // Только клуб игрока должен быть в одном из этих списков, чтобы видеть себя в кубке;
+  // но турнир создаётся всегда для топ-5 лиг, чтобы AI-клубы тоже играли в нём.
+  if (TOP5_LEAGUES.includes(leagueName)) {
+    const euroComps: [typeof CHAMPIONS_LEAGUE, string[], "champions_league" | "europa_league" | "conference_league"][] = [
+      [CHAMPIONS_LEAGUE, CHAMPIONS_LEAGUE_CLUBS_2025, "champions_league"],
+      [EUROPA_LEAGUE, EUROPA_LEAGUE_CLUBS_2025, "europa_league"],
+      [CONFERENCE_LEAGUE, CONFERENCE_LEAGUE_CLUBS_2025, "conference_league"],
+    ];
+
+    for (const [def, clubList, calKey] of euroComps) {
+      if (clubList.length < 2) continue;
+      const phaseConfig = LEAGUE_PHASE_CONFIG[def.name];
+
+      const { data: comp } = await supabase.from("competitions").insert({
+        season_id: seasonId, type: def.type, name: def.name, format: def.format,
+        prize_winner: def.prizeWinner, prize_runner: def.prizeRunner, prize_participation: def.prizeParticipation,
+        phase: "league_phase", league_phase_rounds: phaseConfig?.games ?? 0,
+      }).select().single();
+
+      if (comp && phaseConfig) {
+        // Единая жеребьёвка перед стартом сезона: каждому клубу сразу
+        // назначаются N разных соперников на весь групповой этап (реальный
+        // формат УЕФА с 2024/25 — не однокруговой knockout с 1-го раунда,
+        // как было раньше).
+        const schedule = generateLeaguePhaseSchedule(clubList, phaseConfig.games, getClubLeague);
+        const rows: any[] = [];
+        schedule.forEach((roundPairs, idx) => {
+          const md = idx + 1;
+          const matchDate = getLeaguePhaseMatchdayDate(calKey, md);
+          for (const p of roundPairs) {
+            rows.push({
+              competition_id: comp.id, round: md, round_name: `League Phase`,
+              matchday_label: `MD${md}`, home_club: p.home, away_club: p.away, match_date: matchDate,
+            });
+          }
+        });
+        await supabase.from("cup_fixtures").insert(rows);
+        created.push({ name: def.name, id: comp.id });
+      }
+    }
+  }
+
+  // ── 3. Суперкубок ──
+  const superDef = SUPER_CUPS[leagueName];
+  if (superDef) {
+    const league = (leagues as any[]).find(l => l.name === leagueName);
+    const clubs: string[] = league?.clubs?.map((c: any) => c.id) ?? [];
+
+    if (superDef.format === "semis_final" && clubs.length >= 4) {
+      // Испанский формат: 4 команды, 2 полуфинала + финал.
+      // Реальная расстановка: чемпион и вице-чемпион лиги + победитель и финалист кубка
+      // прошлого сезона. В 1-м сезоне карьеры этих данных ещё нет — берём первые 4
+      // клуба лиги как единственно возможный плейсхолдер.
+      const seeded = [
+        prevSeasonFinalists?.leagueChampion,
+        prevSeasonFinalists?.leagueRunnerUp,
+        prevSeasonFinalists?.cupWinner,
+        prevSeasonFinalists?.cupRunnerUp,
+      ].filter((c): c is string => !!c && clubs.includes(c));
+      const fallback = clubs.filter(c => !seeded.includes(c));
+      const four = [...new Set([...seeded, ...fallback])].slice(0, 4);
+
+      const { data: comp } = await supabase.from("competitions").insert({
+        season_id: seasonId, type: superDef.type, name: superDef.name, format: superDef.format,
+        prize_winner: superDef.prizeWinner, prize_runner: superDef.prizeRunner, prize_participation: superDef.prizeParticipation,
+      }).select().single();
+
+      if (comp) {
+        const semiDate = getSuperCupRoundDate(1);
+        await supabase.from("cup_fixtures").insert([
+          { competition_id: comp.id, round: 1, round_name: "Semi-final", home_club: four[0], away_club: four[1], match_date: semiDate },
+          { competition_id: comp.id, round: 1, round_name: "Semi-final", home_club: four[2], away_club: four[3], match_date: semiDate },
+        ]);
+        created.push({ name: superDef.name, id: comp.id });
+      }
+    } else if (clubs.length >= 2) {
+      // Стандартный формат: 1 матч — чемпион лиги против обладателя кубка
+      // прошлого сезона (а не первые 2 клуба списка лиги, как было раньше).
+      const home = prevSeasonFinalists?.leagueChampion && clubs.includes(prevSeasonFinalists.leagueChampion)
+        ? prevSeasonFinalists.leagueChampion : clubs[0];
+      const away = prevSeasonFinalists?.cupWinner && clubs.includes(prevSeasonFinalists.cupWinner) && prevSeasonFinalists.cupWinner !== home
+        ? prevSeasonFinalists.cupWinner : clubs.find(c => c !== home) ?? clubs[1];
+
+      const { data: comp } = await supabase.from("competitions").insert({
+        season_id: seasonId, type: superDef.type, name: superDef.name, format: superDef.format,
+        prize_winner: superDef.prizeWinner, prize_runner: superDef.prizeRunner, prize_participation: 0,
+      }).select().single();
+
+      if (comp) {
+        await supabase.from("cup_fixtures").insert({
+          competition_id: comp.id, round: 1, round_name: "Final",
+          home_club: home, away_club: away, match_date: getSuperCupDate(leagueName),
+        });
+        created.push({ name: superDef.name, id: comp.id });
+      }
+    }
+  }
+
+  return created;
+}
