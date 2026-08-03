@@ -225,6 +225,7 @@ export default function DashboardPage() {
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
   const [seasonPlayerStats, setSeasonPlayerStats] = useState<any[]>([]);
+  const [clubContracts, setClubContracts] = useState<any[]>([]);
   const [unavailableNames, setUnavailableNames] = useState<Set<string>>(new Set());
   const [simulatingCup, setSimulatingCup] = useState(false);
 
@@ -253,6 +254,10 @@ export default function DashboardPage() {
     fetch(`/api/season-stats?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setSeasonPlayerStats(data.stats ?? []); }).catch(() => {});
+
+    fetch(`/api/contracts?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setClubContracts(data.contracts ?? []); }).catch(() => {});
   }, [seasonId, userClub]);
 
   useEffect(() => {
@@ -676,6 +681,34 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Предупреждение о скором конце сезона, если есть непродлённые
+            контракты в последнем году — раньше игроки просто пропадали в
+            свободные агенты без единого предупреждения. */}
+        {(() => {
+          const totalMatchdays = Math.max(1, ((selectedLeague?.clubs?.length ?? 20) - 1) * 2);
+          const nearSeasonEnd = matchday >= totalMatchdays - 5;
+          const expiring = clubContracts.filter((c: any) => c.years_left <= 1);
+          if (!nearSeasonEnd || !expiring.length) return null;
+          return (
+            <div className="mb-6 p-4 rounded-2xl flex items-center justify-between gap-3 flex-wrap animate-fade-in-up" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">⚠️</span>
+                <div>
+                  <div className="text-xs font-black" style={{ color: "#f59e0b" }}>
+                    {locale === "ru" ? `Сезон скоро закончится — ${expiring.length} контракт(ов) истекает` : `Season ending soon — ${expiring.length} contract(s) expiring`}
+                  </div>
+                  <div className={`text-[11px] ${ui.muted}`}>
+                    {locale === "ru" ? "Непродлённые игроки уйдут бесплатно в свободные агенты" : "Unrenewed players leave for free as free agents"}: {expiring.map((c: any) => c.player_name).join(", ")}
+                  </div>
+                </div>
+              </div>
+              <Link href="/squad" className="px-3 py-2 rounded-xl text-xs font-black shrink-0" style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>
+                {locale === "ru" ? "К составу →" : "Go to Squad →"}
+              </Link>
+            </div>
+          );
+        })()}
+
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
 
           {/* LEFT: fixtures + simulate */}
@@ -779,12 +812,12 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   {simulatingSeason && (
-                    <div className="mb-3 p-4 rounded-2xl animate-fade-in-up" style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)" }}>
+                    <div className="mb-3 p-4 rounded-2xl animate-fade-in-up" style={{ background: `${glowColor}12`, border: `1px solid ${glowColor}30` }}>
                       <div className="flex items-center justify-between gap-3 mb-2.5">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${simPaused ? "" : "animate-soft-pulse"}`} style={{ background: simPaused ? "#f59e0b" : "#3b82f6" }} />
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${simPaused ? "" : "animate-soft-pulse"}`} style={{ background: simPaused ? "#f59e0b" : glowColor }} />
                           <div className="min-w-0">
-                            <div className="text-xs font-black" style={{ color: "#60a5fa" }}>
+                            <div className="text-xs font-black" style={{ color: glowColor }}>
                               {simPaused
                                 ? (locale === "ru" ? "На паузе" : "Paused")
                                 : (locale === "ru" ? "Автосимуляция" : "Auto-simulating")}
@@ -798,7 +831,7 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2 shrink-0">
                           <button onClick={toggleSimPause}
                             className="px-3 py-2 rounded-xl text-xs font-black transition-transform hover:scale-105"
-                            style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>
+                            style={{ background: `${glowColor}20`, color: glowColor }}>
                             {simPaused ? "▶" : "⏸"}
                           </button>
                           <button onClick={stopSim}
@@ -808,10 +841,10 @@ export default function DashboardPage() {
                           </button>
                         </div>
                       </div>
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(59,130,246,0.12)" }}>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${glowColor}18` }}>
                         <div className="h-1.5 rounded-full animate-shimmer" style={{
                           width: `${Math.min(100, Math.round(((seasonSimProgress?.matchday ?? matchday) / Math.max(1, ((selectedLeague?.clubs?.length ?? 20) - 1) * 2)) * 100))}%`,
-                          background: "linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6)",
+                          background: `linear-gradient(90deg, ${glowColor}, ${glowColor}cc, ${glowColor})`,
                         }} />
                       </div>
                     </div>

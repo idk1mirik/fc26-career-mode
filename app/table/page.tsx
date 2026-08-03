@@ -42,7 +42,7 @@ const THEME_UI = {
   },
 };
 
-import { getZoneColor } from "@/lib/europeanZones";
+import { getZoneColor, cupWinnerGetsBonusELSpot, continentalWinnerGetsBonusSpot } from "@/lib/europeanZones";
 
 export default function TablePage() {
   const router = useRouter();
@@ -51,6 +51,9 @@ export default function TablePage() {
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const [standings, setStandings] = useState<any[]>([]);
+  const [domesticCupWinner, setDomesticCupWinner] = useState<string | null>(null);
+  const [clWinner, setClWinner] = useState<string | null>(null);
+  const [elWinner, setElWinner] = useState<string | null>(null);
   const [hydrated, setHydrated]   = useState(false);
 
   useEffect(() => {
@@ -68,6 +71,18 @@ export default function TablePage() {
     if (!hydrated || !seasonId) return;
     fetch(`/api/standings?seasonId=${seasonId}`)
       .then(r => r.json()).then(setStandings).catch(() => {});
+
+    fetch(`/api/competitions?seasonId=${seasonId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const comps = data?.competitions ?? [];
+        const cup = comps.find((c: any) => c.type === "domestic_cup" && c.status === "finished" && c.winner_club);
+        setDomesticCupWinner(cup?.winner_club ?? null);
+        const cl = comps.find((c: any) => c.name === "Champions League" && c.status === "finished" && c.winner_club);
+        setClWinner(cl?.winner_club ?? null);
+        const el = comps.find((c: any) => c.name === "Europa League" && c.status === "finished" && c.winner_club);
+        setElWinner(el?.winner_club ?? null);
+      }).catch(() => {});
   }, [hydrated, seasonId]);
 
   const userClub = selectedClub?.name || "";
@@ -132,6 +147,24 @@ export default function TablePage() {
                   <span className={`text-[15px] font-bold truncate ${isUser ? ui.userText : ""}`}>
                     {row.club_id}
                     {isUser && <span className={`ml-1.5 text-[9px] font-black uppercase tracking-widest ${ui.userText} opacity-70`}>{locale === "ru" ? "твой клуб" : "you"}</span>}
+                    {row.club_id === domesticCupWinner && cupWinnerGetsBonusELSpot(domesticCupWinner, standings, selectedLeague?.name || "") && (
+                      <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
+                        title={locale === "ru" ? "Победитель кубка страны — бонусное место в Лиге Европы" : "Domestic cup winner — bonus Europa League spot"}>
+                        🏆 {locale === "ru" ? "ЛЕ" : "EL"}
+                      </span>
+                    )}
+                    {row.club_id === clWinner && continentalWinnerGetsBonusSpot(clWinner, "cl", standings, selectedLeague?.name || "") && (
+                      <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}
+                        title={locale === "ru" ? "Победитель Лиги чемпионов — сохраняет место в ЛЧ" : "Champions League winner — retains CL spot"}>
+                        🏆 {locale === "ru" ? "ЛЧ" : "UCL"}
+                      </span>
+                    )}
+                    {row.club_id === elWinner && continentalWinnerGetsBonusSpot(elWinner, "el", standings, selectedLeague?.name || "") && (
+                      <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
+                        title={locale === "ru" ? "Победитель Лиги Европы — бонусное место в ЛЕ" : "Europa League winner — bonus EL spot"}>
+                        🏆 {locale === "ru" ? "ЛЕ" : "UEL"}
+                      </span>
+                    )}
                   </span>
                 </div>
 

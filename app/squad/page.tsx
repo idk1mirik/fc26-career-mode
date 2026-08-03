@@ -687,6 +687,44 @@ export default function SquadPage() {
           <h1 className="text-2xl font-black">{selectedClub?.name} — {players.length} Players</h1>
         </div>
 
+        {/* Истекающие контракты — раньше игроки просто пропадали в свободные
+            агенты без единого предупреждения ("потерял половину состава").
+            Контракты в этой игре считаются сезонами, не месяцами — поэтому
+            предупреждаем начиная с последнего года (years_left <= 1), что
+            ближе всего к аналогу "за несколько месяцев до истечения". */}
+        {(() => {
+          const expiring = clubContracts.filter((c: any) => c.years_left <= 1);
+          if (!expiring.length) return null;
+          return (
+            <div className="mb-5 p-4 rounded-2xl animate-fade-in-up" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-base">⚠️</span>
+                <span className="text-xs font-black" style={{ color: "#f59e0b" }}>
+                  {locale === "ru" ? `Истекающие контракты (${expiring.length})` : `Expiring Contracts (${expiring.length})`}
+                </span>
+                <HelpHint id="expiring-contracts" theme={theme as any}
+                  title={locale === "ru" ? "Истекающие контракты" : "Expiring contracts"}
+                  text={locale === "ru"
+                    ? "У этих игроков остался последний год контракта. Продли сейчас — иначе в конце сезона они уйдут в свободные агенты бесплатно."
+                    : "These players are in the final year of their deal. Renew now — otherwise they leave for free as free agents at season's end."} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {expiring.map((c: any) => {
+                  const player = players.find(p => (p.id ?? p.name) === c.player_id);
+                  return (
+                    <button key={c.id} onClick={() => player && setContractPanelPlayer(player)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-transform hover:scale-105"
+                      style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
+                      {c.player_name}
+                      <span className="opacity-60">{locale === "ru" ? "· продлить" : "· renew"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Tabs */}
         <div className="flex gap-2 mb-5">
           {(["lineup","squad"] as const).map(t => (

@@ -169,29 +169,37 @@ export function loadAllPlayers(): Promise<Player[]> {
 // сезона, если он был куплен/продан в ходе карьеры. Без seasonId функция
 // работает как раньше (чистый состав из CSV, без трансферов) — это нужно
 // для мест, где сезон ещё не выбран (общий список игроков, лендинг и т.п.).
-let overridesCache: Record<string, { byId: Map<string, string> }> = {};
-
+//
+// ВАЖНО: раньше здесь стоял in-memory кэш (overridesCache), инвалидируемый
+// вручную после записи. На serverless (Vercel) это не работает надёжно —
+// разные запросы часто обслуживаются РАЗНЫМИ "тёплыми" инстансами с
+// независимой памятью процесса. Покупка игрока писала в БД и сбрасывала
+// кэш только в СВОЁМ инстансе; другой инстанс (например, обслуживающий
+// следующий заход на /squad) продолжал отдавать старый закэшированный
+// состав, пока сам не перезапустится — на практике это совпадало со сменой
+// сезона. Отсюда и баг "зимний трансфер вступает в силу только летом".
+// squad_overrides — лёгкая таблица, читать её без кэша на каждый вызов
+// приемлемо по цене и радикально надёжнее.
 async function getOverridesForSeason(seasonId: string): Promise<Map<string, string>> {
-  if (overridesCache[seasonId]) return overridesCache[seasonId].byId;
   const { supabase } = await import("./supabase");
   const { data } = await supabase.from("squad_overrides").select("player_id, club_id").eq("season_id", seasonId);
-  const byId = new Map<string, string>((data ?? []).map((r: any) => [r.player_id, r.club_id]));
-  overridesCache[seasonId] = { byId };
-  return byId;
+  return new Map<string, string>((data ?? []).map((r: any) => [r.player_id, r.club_id]));
 }
 
-// Вызывать после любой записи в squad_overrides (трансфер), иначе следующий
-// getPlayersByClub в этом же процессе отдаст устаревший состав.
+// Сохранена для обратной совместимости вызовов из API-роутов (сейчас no-op —
+// кэша, который нужно было бы сбрасывать, больше нет).
 export function invalidateOverridesCache(seasonId: string) {
-  delete overridesCache[seasonId];
+  // no-op: см. комментарий выше getOverridesForSeason
 }
 
 // ── Прогресс/старение: у игрока может быть накопленный оверолл, отличный от
 // того, что зашит в CSV — если он рос/деградировал по ходу карьеры. career_id
 // связывает все сезоны ОДНОЙ карьеры клуба (season/new копирует его вперёд),
 // player_progression хранит текущий оверолл для (career_id, player_id).
+//
+// career_id для конкретного season_id не меняется после создания — этот
+// кэш безопасен (в худшем случае лишний запрос, никогда не устаревшие данные).
 let careerIdCache: Record<string, string> = {};
-let progressionCache: Record<string, Map<string, { overall: number; potential: number | null }>> = {};
 
 async function getCareerIdForSeason(seasonId: string): Promise<string> {
   if (careerIdCache[seasonId]) return careerIdCache[seasonId];
@@ -202,19 +210,21 @@ async function getCareerIdForSeason(seasonId: string): Promise<string> {
   return careerId;
 }
 
+// player_progression, в отличие от career_id выше, МЕНЯЕТСЯ на каждой смене
+// сезона (progressLeaguePlayers). Кэш в памяти процесса здесь — та же
+// проблема, что была с squad_overrides (см. getOverridesForSeason): на
+// serverless разные запросы могут попасть в разные "тёплые" инстансы, и
+// устаревший overall/potential мог показываться, пока инстанс не
+// перезапустится. Читаем без кэша.
 async function getProgressionForCareer(careerId: string): Promise<Map<string, { overall: number; potential: number | null }>> {
-  if (progressionCache[careerId]) return progressionCache[careerId];
   const { supabase } = await import("./supabase");
   const { data } = await supabase.from("player_progression").select("player_id, overall, potential").eq("career_id", careerId);
-  const map = new Map((data ?? []).map((r: any) => [r.player_id, { overall: r.overall, potential: r.potential ?? null }]));
-  progressionCache[careerId] = map;
-  return map;
+  return new Map((data ?? []).map((r: any) => [r.player_id, { overall: r.overall, potential: r.potential ?? null }]));
 }
 
-// Вызывать после записи в player_progression (прогресс на новый сезон),
-// иначе следующий getPlayersByClub в этом же процессе отдаст старые overall.
+// Сохранена для обратной совместимости вызовов из API-роутов (сейчас no-op).
 export function invalidateProgressionCache(careerId: string) {
-  delete progressionCache[careerId];
+  // no-op: см. комментарий выше getProgressionForCareer
 }
 
 function applyProgression(p: Player, prog: { overall: number; potential: number | null }): Player {
