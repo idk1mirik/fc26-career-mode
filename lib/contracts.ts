@@ -1,31 +1,19 @@
 // lib/contracts.ts
 // Куда ставить: fc26_career_mode/lib/contracts.ts
 //
-// Модуль контрактов и переговоров. Стиль и паттерны намеренно повторяют
-// уже существующие lib/finance.ts и lib/progression.ts проекта:
-// - supabase как единственный источник правды (никакого Django-бэкенда);
-// - "тик" функции, которые дергаются из season/advance и progression,
-//   а не отдельным сервером/кроном;
-// - никаких гарантированных исходов — есть шум и диапазоны, как в progression.ts.
+// КЛИЕНТСКИ-БЕЗОПАСНАЯ часть модуля контрактов — ContractPanel.tsx (клиентский
+// компонент) импортирует отсюда. Ничего в этом файле, даже транзитивно, не
+// должно трогать lib/players.ts (он использует Node fs/path — при сборке для
+// браузера это валит билд: "Module not found: Can't resolve 'fs'").
+// Серверные функции (которые обогащают данные из lib/players.ts —
+// getFreeAgents, finalizeFreeAgentSigning, releasePlayer) вынесены в
+// lib/contracts-server.ts — импортировать их можно только из API-роутов.
 import { supabase } from "./supabase";
 
 export type SquadRole = "star" | "important" | "rotation" | "prospect" | "backup";
 
-// Свободные агенты — не отдельная таблица, а специальное значение club_id
-// в той же таблице contracts. Так переиспользуется вся уже написанная
-// инфраструктура (переговоры, wage_weekly, happiness) без дублирования
-// логики под "контракт без клуба".
 export const FREE_AGENT_CLUB = "__FREE_AGENT__";
 
-// ── Настоящий career_id сезона (корень цепочки сезонов карьеры) ──────────
-// ВАЖНО: раньше в трансферных роутах при отсутствии старого контракта
-// (частый случай — у большинства клубов в игре контрактов вообще нет,
-// см. season/route.ts, контракты создаются только для клубов лиги
-// пользователя) career_id ошибочно брался как `?? seasonId` — то есть
-// текущий сезон выдавался за "корень карьеры". Из-за этого при следующем
-// rolloverContracts (который фильтрует контракты по правильному career_id)
-// такой контракт просто не находился и терялся навсегда — "Мбаппе исчез"
-// был именно этим багом.
 export async function getCareerId(seasonId: string): Promise<string> {
   const { data } = await supabase.from("seasons").select("career_id").eq("id", seasonId).maybeSingle();
   return data?.career_id ?? seasonId;
@@ -43,7 +31,7 @@ export interface Contract {
   release_clause: number | null;
   signing_bonus: number;
   squad_role: SquadRole;
-  happiness: number; // 0-100
+  happiness: number;
   wants_renewal: boolean;
   transfer_listed: boolean;
 }
@@ -65,19 +53,16 @@ export interface Negotiation {
   deadline_matchday: number | null;
 }
 
-const ROLE_MULTIPLIER: Record<SquadRole, number> = {
+export const ROLE_MULTIPLIER: Record<SquadRole, number> = {
   star: 1.4, important: 1.15, rotation: 0.9, prospect: 0.75, backup: 0.7,
 };
 
-const MAX_NEGOTIATION_ROUNDS = 3;
-function rand2(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+export const MAX_NEGOTIATION_ROUNDS = 3;
+export function rand2(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
-// ── Сколько игрок хочет получать (аналог value-формул из lib/players.ts) ──
-// Не даёт единственно верного числа — используется как "якорь" для переговоров,
-// реальная зарплата всегда чуть шумит вокруг него по ходу торга.
 export function calculateWageDemand(
   player: { overall: number; age: number; avgRatingLastSeason?: number },
-  club: { reputationDiscount?: number }, // 0..0.15, топ-клубу проще уговорить
+  club: { reputationDiscount?: number },
   squadRole: SquadRole
 ): number {
   let base = player.overall * player.overall * 0.8;
@@ -94,7 +79,6 @@ export function calculateWageDemand(
   return Math.max(500, Math.round(base / 500) * 500);
 }
 
-// ── Отступные — по умолчанию не выставляются, только если клуб явно просит ──
 export function calculateReleaseClause(marketValue: number, squadRole: SquadRole): number {
   const roleFactor: Record<SquadRole, number> = {
     star: 2.2, important: 1.8, rotation: 1.4, prospect: 1.6, backup: 1.2,
@@ -102,7 +86,6 @@ export function calculateReleaseClause(marketValue: number, squadRole: SquadRole
   return Math.round((marketValue * roleFactor[squadRole]) / 100_000) * 100_000;
 }
 
-// ── Создание контракта при подписании игрока (после трансфера или в старте карьеры) ──
 export async function createContract(params: {
   seasonId: string; careerId: string; clubId: string;
   playerId: string; playerName: string;
@@ -123,29 +106,22 @@ export async function createContract(params: {
   return data as Contract;
 }
 
-// ── Один раунд переговоров ──
-// Возвращает новое состояние переговоров; статус "agreed"/"rejected" — конечный.
 export function resolveNegotiationRound(
   neg: Negotiation,
   player: { overall: number; age: number; avgRatingLastSeason?: number },
   club: { reputationDiscount?: number }
 ): Negotiation {
   const demand = calculateWageDemand(player, club, neg.club_offer.role);
-  const gap = (neg.club_offer.wage - demand) / demand; // отрицательное = предложили меньше хотелки
+  const gap = (neg.club_offer.wage - demand) / demand;
 
-  // Клуб предложил достаточно (или больше) — соглашается сразу
   if (gap >= -0.1) {
     return { ...neg, status: "agreed" };
   }
 
-  // Последний раунд — либо соглашается на то, что есть (если разрыв терпимый),
-  // либо срывает переговоры
   if (neg.round >= MAX_NEGOTIATION_ROUNDS) {
     return { ...neg, status: gap < -0.3 ? "rejected" : "agreed" };
   }
 
-  // Встречное предложение — где-то между текущим оффером клуба и хотелкой игрока,
-  // с небольшим шумом, чтобы не быть идеально предсказуемым
   const noise = 1 + (Math.random() - 0.5) * 0.06;
   const counterWage = Math.round(((neg.club_offer.wage + demand) / 2) * noise / 100) * 100;
 
@@ -156,7 +132,6 @@ export function resolveNegotiationRound(
   };
 }
 
-// ── Запуск/продолжение переговоров через supabase ──
 export async function startOrContinueNegotiation(
   contractId: string,
   clubOffer: NegotiationOffer,
@@ -200,7 +175,6 @@ export async function startOrContinueNegotiation(
   }
 }
 
-// ── Финализация: применяем условия agreed-переговоров к контракту ──
 export async function finalizeAgreedNegotiation(negotiationId: string) {
   const { data: neg } = await supabase.from("negotiations").select("*").eq("id", negotiationId).single();
   if (!neg || neg.status !== "agreed") return null;
@@ -216,10 +190,6 @@ export async function finalizeAgreedNegotiation(negotiationId: string) {
   return data as Contract;
 }
 
-// ── Еженедельная выплата зарплат (вызывать из lib/simulateMatchday.ts) ──
-// Отличается от chargeClub() в finance.ts тем, что НЕ блокирует уход в минус —
-// зарплата платится всегда, а превышение бюджета — уже сигнал для менеджера
-// продавать/увольнять, а не технический сбой транзакции.
 export async function payWeeklyWages(seasonId: string, clubIds: string[]) {
   const { data: contracts } = await supabase.from("contracts")
     .select("club_id, wage_weekly").eq("season_id", seasonId).in("club_id", clubIds);
@@ -242,17 +212,6 @@ export async function payWeeklyWages(seasonId: string, clubIds: string[]) {
   await Promise.all(writes);
 }
 
-// ── Перенос контрактов на новый сезон (вызывать из season/new вместе с
-// progressLeaguePlayers) ──
-// ВАЖНО: contracts, как и standings/player_status в этом проекте, привязаны
-// к конкретному season_id. Поэтому переход на новый сезон = НОВЫЙ season_id,
-// и контракты нужно не мутировать на месте, а скопировать вперёд под новый
-// season_id с уменьшенным years_left — иначе на второй сезон карьеры они
-// просто "исчезают" (GET /api/contracts?seasonId=новый ничего не найдёт).
-//
-// Игроки с истёкшим контрактом (years_left доходит до 0) в новый сезон НЕ
-// переносятся — возвращаются отдельным списком expired, чтобы вызывающий
-// код (season/new/route.ts) мог закинуть их в пул свободных агентов.
 export async function rolloverContracts(
   careerId: string, oldSeasonId: string, newSeasonId: string
 ): Promise<{ expired: Contract[]; carried: number; freedAgents: number }> {
@@ -268,10 +227,6 @@ export async function rolloverContracts(
     const newYears = c.years_left - 1;
     if (newYears <= 0) {
       expired.push({ ...c, years_left: 0 });
-      // Контракт кончился — игрок реально уходит из состава клуба, а не
-      // просто "пропадает из таблицы". Заводим ему FREE_AGENT-контракт в
-      // новом сезоне и переносим squad_overrides на сентинел клуба —
-      // getPlayersByClub() сам перестанет отдавать его старому клубу.
       toInsert.push({
         season_id: newSeasonId, career_id: careerId, club_id: FREE_AGENT_CLUB,
         player_id: c.player_id, player_name: c.player_name,
@@ -307,10 +262,6 @@ export async function rolloverContracts(
   return { expired, carried: toInsert.length - expired.length, freedAgents: expired.length };
 }
 
-// ── Массовое создание контрактов для клуба (старт новой карьеры / бэкафилл) ──
-// players — можно передать уже загруженный список (см. интеграцию в
-// season/route.ts, где players для клуба и так уже загружаются для бюджета,
-// повторный getPlayersByClub не нужен).
 export async function createContractsForClub(
   seasonId: string, careerId: string, clubId: string, players: any[]
 ) {
@@ -318,115 +269,24 @@ export async function createContractsForClub(
     season_id: seasonId, career_id: careerId, club_id: clubId,
     player_id: p.id ?? p.name, player_name: p.name,
     wage_weekly: p.wage > 0 ? p.wage : Math.max(500, Math.round((p.overall * p.overall * 0.3) / 500) * 500),
-    // Раньше здесь стояло "p.age >= 30 ? 1 : ...", и ВСЕ игроки 30+ получали
-    // ровно 1 год контракта. Топ-рейтинговые игроки в датасете часто именно
-    // в этом возрасте (пик формы = высокий overall) — в итоге контракты
-    // массово и ОДНОВРЕМЕННО истекали ровно после первого же сезона,
-    // выглядя как "куда все топ-игроки делись". Плюс добавлен небольшой
-    // случайный разброс — иначе игроки одного возраста истекают строго
-    // синхронно волнами каждый N-й сезон.
     years_left: p.age >= 33 ? 1 : p.age >= 30 ? rand2(1, 2) : p.age <= 21 ? rand2(2, 4) : rand2(1, 4),
     squad_role: p.overall >= 82 ? "star" : p.overall >= 76 ? "important" : p.age <= 20 ? "prospect" : "rotation",
     release_clause: null, signing_bonus: 0, happiness: 70,
     wants_renewal: false, transfer_listed: false,
   }));
   if (!rows.length) return;
-  // upsert, чтобы можно было безопасно перевызвать (например, если часть
-  // клубов уже получила контракты, а запрос упал на середине списка)
   const { error } = await supabase.from("contracts")
     .upsert(rows, { onConflict: "season_id,club_id,player_id", ignoreDuplicates: true });
   if (error) throw error;
 }
 
-// ── Довольство игрока — небольшой износ/восстановление за сезон ──
-// Дергается вместе с advanceContractYears. Не рейтинг за матчи (это уже
-// считает playerRatings.ts) — а долгосрочное отношение к клубу.
 export function driftHappiness(current: number, playedMinutesShare: number, clubFinishedTopHalf: boolean): number {
   let delta = 0;
-  // Мало игрового времени по сравнению с ожиданиями по роли — недоволен
   if (playedMinutesShare < 0.3) delta -= 8;
   else if (playedMinutesShare > 0.7) delta += 4;
 
   delta += clubFinishedTopHalf ? 3 : -3;
-  delta += Math.round((Math.random() - 0.5) * 6); // немного шума, как в progression.ts
+  delta += Math.round((Math.random() - 0.5) * 6);
 
   return Math.max(0, Math.min(100, current + delta));
-}
-
-// ── Список свободных агентов сезона, обогащённый статами игрока из CSV ──
-// (в contracts хранится только id/имя — overall/возраст/позиция берём
-// из общего датасета игроков, как это уже делает /api/contracts/tick).
-export async function getFreeAgents(seasonId: string) {
-  const { data: rows } = await supabase.from("contracts")
-    .select("*").eq("season_id", seasonId).eq("club_id", FREE_AGENT_CLUB);
-  if (!rows?.length) return [];
-
-  const { loadAllPlayers } = await import("./players");
-  const all = await loadAllPlayers();
-  const byId = new Map(all.map(p => [p.id, p]));
-
-  return rows.map((c: any) => {
-    const p = byId.get(c.player_id);
-    return {
-      contractId: c.id, playerId: c.player_id, playerName: c.player_name,
-      overall: p?.overall ?? 65, age: p?.age ?? 27, position: p?.position ?? "?",
-      potential: p?.potential ?? p?.overall ?? 65, marketValue: p?.market_value ?? 0,
-      happiness: c.happiness, squadRole: c.squad_role as SquadRole,
-    };
-  }).sort((a, b) => b.overall - a.overall);
-}
-
-// ── Подписание свободного агента: контракт переезжает на club_id покупателя
-// + squad_overrides переносится, чтобы игрок реально появился в составе. ──
-export async function finalizeFreeAgentSigning(negotiationId: string, buyerClubId: string) {
-  const { data: neg } = await supabase.from("negotiations").select("*").eq("id", negotiationId).single();
-  if (!neg || neg.status !== "agreed") return null;
-
-  const offer = neg.club_offer as NegotiationOffer;
-  const { data: contract } = await supabase.from("contracts").select("*").eq("id", neg.contract_id).single();
-  if (!contract || contract.club_id !== FREE_AGENT_CLUB) return null;
-
-  const { data, error } = await supabase.from("contracts").update({
-    club_id: buyerClubId, wage_weekly: offer.wage, years_left: offer.years,
-    squad_role: offer.role, signing_bonus: offer.bonus, happiness: 75,
-    wants_renewal: false, transfer_listed: false, updated_at: new Date().toISOString(),
-  }).eq("id", neg.contract_id).select().single();
-  if (error) throw error;
-
-  await supabase.from("squad_overrides").upsert(
-    { season_id: contract.season_id, player_id: contract.player_id, club_id: buyerClubId, updated_at: new Date().toISOString() },
-    { onConflict: "season_id,player_id" }
-  );
-
-  const { invalidateOverridesCache } = await import("./players");
-  invalidateOverridesCache(contract.season_id);
-
-  return data as Contract;
-}
-
-// ── Досрочное расторжение контракта (release) — клуб отпускает игрока
-// посреди сезона, без покупателя. Игрок сразу становится свободным агентом
-// и пропадает из состава клуба. Используется, когда контракт мешает (например,
-// нужно освободить место в бюджете или в составе), а продать некому. ──
-export async function releasePlayer(seasonId: string, clubId: string, playerId: string) {
-  const { data: contract } = await supabase.from("contracts")
-    .select("*").eq("season_id", seasonId).eq("club_id", clubId).eq("player_id", playerId).maybeSingle();
-  if (!contract) return null;
-
-  const { error } = await supabase.from("contracts").update({
-    club_id: FREE_AGENT_CLUB, wage_weekly: 0, years_left: 0,
-    happiness: Math.max(30, contract.happiness - 20), // отпустили посреди контракта — неприятно
-    wants_renewal: false, transfer_listed: true, updated_at: new Date().toISOString(),
-  }).eq("id", contract.id);
-  if (error) throw error;
-
-  await supabase.from("squad_overrides").upsert(
-    { season_id: seasonId, player_id: playerId, club_id: FREE_AGENT_CLUB, updated_at: new Date().toISOString() },
-    { onConflict: "season_id,player_id" }
-  );
-
-  const { invalidateOverridesCache } = await import("./players");
-  invalidateOverridesCache(seasonId);
-
-  return true;
 }

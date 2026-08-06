@@ -2,7 +2,7 @@
 // Куда ставить: fc26_career_mode/app/api/contracts/free-agents/route.ts
 //
 // GET /api/contracts/free-agents?seasonId=...
-import { getFreeAgents } from "@/lib/contracts";
+import { getFreeAgents } from "@/lib/contracts-server";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

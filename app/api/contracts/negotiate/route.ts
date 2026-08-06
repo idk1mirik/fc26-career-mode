@@ -13,7 +13,8 @@
 //                            // тогда финализация не просто обновит контракт на
 //                            // месте, а переедет на club_id этого клуба
 // }
-import { startOrContinueNegotiation, finalizeAgreedNegotiation, finalizeFreeAgentSigning } from "@/lib/contracts";
+import { startOrContinueNegotiation, finalizeAgreedNegotiation } from "@/lib/contracts";
+import { finalizeFreeAgentSigning } from "@/lib/contracts-server";
 
 export async function POST(req: Request) {
   const body = await req.json();

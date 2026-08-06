@@ -5,7 +5,7 @@
 // body: { seasonId, clubId, playerId }
 // Отпускает игрока посреди сезона без покупателя — он сразу становится
 // свободным агентом и пропадает из состава клуба.
-import { releasePlayer } from "@/lib/contracts";
+import { releasePlayer } from "@/lib/contracts-server";
 
 export async function POST(req: Request) {
   const { seasonId, clubId, playerId } = await req.json();

@@ -5,16 +5,10 @@ const BASE =
 function normalizeName(name: string) {
   return name
     .toLowerCase()
-    // Эти буквы — ОТДЕЛЬНЫЕ код-поинты Юникода, а не "базовая буква +
-    // комбинируемая диакритика", поэтому .normalize("NFD") ниже их не
-    // разбирает и не убирает. Без явной замены здесь они просто выпадают
-    // как "непонятный символ" в шаге replace(/[^a-z0-9]+/) — например,
-    // польская "ł" (Zagłębie Lubin, Widzew Łódź) превращала слаг в
-    // "zag-ebie-lubin" вместо нормального имени файла.
-    .replace(/ł/g, "l") // польская — была причиной бага с логотипами
+    .replace(/ł/g, "l") // польская — Zagłębie Lubin/Widzew Łódź без этого ломались
     .replace(/ø/g, "o").replace(/æ/g, "ae").replace(/ß/g, "ss")
     .replace(/ı/g, "i").replace(/ð/g, "d").replace(/þ/g, "th")
-    .replace(/đ/g, "d") // сербская/хорватская/вьетнамская Đ/đ — та же природа, что и ł
+    .replace(/đ/g, "d")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
