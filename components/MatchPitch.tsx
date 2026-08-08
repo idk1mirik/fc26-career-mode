@@ -31,15 +31,22 @@ export function MatchPitch({
   getClubLogo: (club: string) => string;
   onSelectPlayer?: (p: any) => void;
 }) {
-  function layout(players: any[], flip: boolean) {
+  function layout(players: any[], isHome: boolean) {
     const groups: Record<string, any[]> = { GK: [], DEF: [], MID: [], ATT: [] };
     for (const p of players) groups[groupOf(p.position)].push(p);
-    const order = flip ? ["ATT", "MID", "DEF", "GK"] : ["GK", "DEF", "MID", "ATT"];
-    const yFor = { GK: 6, DEF: 30, MID: 55, ATT: 80 };
+    // Домашняя команда внизу поля (герб тоже внизу-слева): вратарь ближе к
+    // низу (y~92), атака ближе к центру (y~58). Гостевая — сверху (герб
+    // сверху-слева): вратарь ближе к верху (y~8), атака ближе к центру
+    // (y~42). Раньше это было перепутано местами — вратарь домашней
+    // команды рисовался наверху при гербе внизу, и наоборот для гостей.
+    const order = ["GK", "DEF", "MID", "ATT"];
+    const yForHome = { GK: 92, DEF: 74, MID: 58, ATT: 42 };
+    const yForAway = { GK: 8, DEF: 26, MID: 42, ATT: 58 };
+    const yFor = isHome ? yForHome : yForAway;
     const rows: { p: any; x: number; y: number }[] = [];
     for (const key of order) {
       const line = groups[key as keyof typeof groups];
-      const y = flip ? 100 - yFor[key as keyof typeof yFor] : yFor[key as keyof typeof yFor];
+      const y = yFor[key as keyof typeof yFor];
       line.forEach((p, i) => {
         const x = line.length === 1 ? 50 : 12 + (i * (76 / Math.max(1, line.length - 1)));
         rows.push({ p, x, y });
@@ -48,8 +55,8 @@ export function MatchPitch({
     return rows;
   }
 
-  const homeLayout = layout(homePlayers, false);
-  const awayLayout = layout(awayPlayers, true);
+  const homeLayout = layout(homePlayers, true);
+  const awayLayout = layout(awayPlayers, false);
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden" style={{ aspectRatio: "3/4", background: "linear-gradient(180deg, #1a4d2e 0%, #163d25 50%, #1a4d2e 100%)" }}>

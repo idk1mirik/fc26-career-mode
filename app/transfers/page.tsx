@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useMemo, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import DashboardLayout from "@/app/lib/DashboardLayout";
@@ -206,6 +206,34 @@ export default function TransfersPage() {
   }, [seasonId, userClub]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Поиск по рынку — раньше фильтровал только уже загруженный список (по
+  // умолчанию сервер присылает ограниченную репрезентативную выборку, а не
+  // вообще всех игроков — присылать все 16000+ разом накладно). Теперь при
+  // вводе 2+ символов уходит отдельный запрос на сервер С этим текстом —
+  // сервер при активном поиске отдаёт ВСЕХ подходящих без ограничения.
+  const marketSearchMounted = useRef(false);
+  useEffect(() => {
+    if (!marketSearchMounted.current) { marketSearchMounted.current = true; return; } // loadAll уже загрузил рынок при монтировании
+    const q = search.trim();
+    if (!seasonId || !userClub) return;
+    if (q.length < 2) {
+      if (q.length === 0) {
+        fetch(`/api/transfers/market?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data) setMarket(data.players ?? []); })
+          .catch(() => {});
+      }
+      return;
+    }
+    const t = setTimeout(() => {
+      fetch(`/api/transfers/market?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}&search=${encodeURIComponent(q)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setMarket(data.players ?? []); })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search, seasonId, userClub]);
 
   const filteredMarket = useMemo(() => {
     const q = search.toLowerCase().trim();
