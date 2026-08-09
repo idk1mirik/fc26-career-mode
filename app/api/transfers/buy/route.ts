@@ -8,7 +8,7 @@ import { checkTransferWindow } from "@/lib/transferWindow";
 import { calculateWageDemand, getCareerId } from "@/lib/contracts";
 
 export async function POST(req: Request) {
-  const { seasonId, buyerClubId, playerId } = await req.json();
+  const { seasonId, buyerClubId, playerId, terms } = await req.json();
   if (!seasonId || !buyerClubId || !playerId) {
     return Response.json({ error: "seasonId, buyerClubId and playerId required" }, { status: 400 });
   }
@@ -29,9 +29,16 @@ export async function POST(req: Request) {
   }
 
   const fee = player.market_value;
-  const charged = await chargeClub(seasonId, buyerClubId, fee);
+  // Полный контракт (см. TransferSigningModal) добавляет подписной бонус и
+  // комиссию агента поверх суммы трансфера — раньше списывалась только fee.
+  const signingBonus = Math.max(0, Number(terms?.signingBonus) || 0);
+  const agentFee = Math.max(0, Number(terms?.agentFee) || 0);
+  const totalCost = fee + signingBonus + agentFee;
+
+  const charged = await chargeClub(seasonId, buyerClubId, totalCost);
   if (!charged) return Response.json({ error: "Insufficient budget" }, { status: 400 });
 
+  // Продающему клубу — только сама сумма трансфера (бонус и комиссия — расходы покупателя, не доход продавца)
   await applyClubEarning(seasonId, currentClub, fee, "transfer_sale");
 
   await supabase.from("squad_overrides").upsert(
@@ -61,7 +68,7 @@ export async function POST(req: Request) {
     await supabase.from("contracts").delete()
       .eq("season_id", seasonId).eq("club_id", currentClub).eq("player_id", playerId);
 
-    const newWage = (oldContract?.wage_weekly ?? 0) > 0 ? oldContract.wage_weekly : calculateWageDemand(
+    const newWage = terms?.wageWeekly > 0 ? terms.wageWeekly : (oldContract?.wage_weekly ?? 0) > 0 ? oldContract.wage_weekly : calculateWageDemand(
       { overall: player.overall, age: player.age }, { reputationDiscount: 0 }, "rotation"
     );
     const careerId = oldContract?.career_id ?? await getCareerId(seasonId);
@@ -69,11 +76,15 @@ export async function POST(req: Request) {
     await supabase.from("contracts").insert({
       season_id: seasonId, career_id: careerId,
       club_id: buyerClubId, player_id: playerId, player_name: player.name,
-      wage_weekly: newWage, years_left: 3, squad_role: oldContract?.squad_role ?? "rotation",
-      release_clause: null, signing_bonus: 0, happiness: 65, // чуть ниже нейтрали — обвыкается в новом клубе
+      wage_weekly: newWage, years_left: terms?.yearsLeft ?? 3, squad_role: terms?.squadRole ?? oldContract?.squad_role ?? "rotation",
+      release_clause: null, signing_bonus: signingBonus, agent_fee: agentFee,
+      goal_bonus: terms?.goalBonus ?? 0, appearance_bonus: terms?.appearanceBonus ?? 0,
+      buyback_clause: terms?.buybackClause ?? false, buyback_price: terms?.buybackPrice ?? null, buyback_club: terms?.buybackClause ? currentClub : null,
+      initial_payment_pct: terms?.initialPaymentPct ?? 100, additional_terms: terms?.additionalTerms || null,
+      happiness: 65, // чуть ниже нейтрали — обвыкается в новом клубе
       wants_renewal: false, transfer_listed: false,
     });
   } catch (e) { console.error("Contract transfer failed", e); }
 
-  return Response.json({ success: true, player: { ...player, team: buyerClubId }, fee, fromClub: currentClub });
+  return Response.json({ success: true, player: { ...player, team: buyerClubId }, fee, totalCost, fromClub: currentClub });
 }

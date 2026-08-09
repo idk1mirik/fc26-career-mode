@@ -14,6 +14,9 @@ interface CareerState {
   tactic:          string;
   customTactic:    any;
   locale:          "en" | "ru";
+  lineupConfirmed: boolean;
+  tacticConfirmed: boolean;
+  favoritePlayerIds: string[];
   setSelectedClub:   (club: any)              => void;
   setSelectedLeague: (league: any)            => void;
   setSeasonId:       (id: string)             => void;
@@ -26,6 +29,9 @@ interface CareerState {
   setTactic:         (t: string)              => void;
   setCustomTactic:   (c: any)                 => void;
   setLocale:         (l: "en" | "ru")          => void;
+  confirmLineup:     ()                        => void;
+  confirmTactic:     ()                        => void;
+  toggleFavorite:    (playerId: string)         => void;
   resetCareer:       ()                       => void;
 }
 
@@ -43,14 +49,17 @@ export const useCareerStore = create<CareerState>()(
       tactic:         "Balanced",
       customTactic:   { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
       locale:         "en",
+      lineupConfirmed: false,
+      tacticConfirmed: false,
+      favoritePlayerIds: [],
       setSelectedClub:   (club)    => set({ selectedClub: club }),
       setSelectedLeague: (league)  => set({ selectedLeague: league }),
       setSeasonId:       (id)      => set({ seasonId: id }),
       setMatchday:       (day)     => set({ matchday: day }),
-      setLineup:         (lineup)  => set({ lineup }),
+      setLineup:         (lineup)  => set({ lineup, lineupConfirmed: false }),
       setLineupForFormation: (formation, lineup) => set(state => ({
         lineupsByFormation: { ...state.lineupsByFormation, [formation]: lineup },
-        lineup,
+        lineup, lineupConfirmed: false,
       })),
       saveCustomFormation: (name, slots, positions, lineup) => set(state => ({
         customFormations: { ...state.customFormations, [name]: { slots, positions, lineup } },
@@ -60,15 +69,23 @@ export const useCareerStore = create<CareerState>()(
         delete next[name];
         return { customFormations: next };
       }),
-      setFormation:      (f)       => set({ formation: f }),
-      setTactic:         (t)       => set({ tactic: t }),
-      setCustomTactic:   (c)       => set({ customTactic: c }),
+      setFormation:      (f)       => set({ formation: f, lineupConfirmed: false }),
+      setTactic:         (t)       => set({ tactic: t, tacticConfirmed: false }),
+      setCustomTactic:   (c)       => set({ customTactic: c, tacticConfirmed: false }),
       setLocale:         (l)       => set({ locale: l }),
+      confirmLineup:     ()        => set({ lineupConfirmed: true }),
+      confirmTactic:     ()        => set({ tacticConfirmed: true }),
+      toggleFavorite: (playerId) => set(state => ({
+        favoritePlayerIds: state.favoritePlayerIds.includes(playerId)
+          ? state.favoritePlayerIds.filter(id => id !== playerId)
+          : [...state.favoritePlayerIds, playerId],
+      })),
       resetCareer: () => set({
         selectedClub: null, selectedLeague: null, seasonId: null, matchday: 1,
         lineup: {}, formation: "4-3-3", tactic: "Balanced",
         customTactic: { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
         lineupsByFormation: {}, customFormations: {},
+        lineupConfirmed: false, tacticConfirmed: false, favoritePlayerIds: [],
       }),
     }),
     { name: "career-store", skipHydration: true }

@@ -6,7 +6,7 @@ import { useThemeStore } from "@/app/store/themeStore";
 import { getPlayerPhoto } from "@/lib/images";
 import { getLeagueTheme } from "@/constants/themes";
 import DashboardLayout from "@/app/lib/DashboardLayout";
-import { PlayerModal, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
+import { PlayerModal, PlayerCard, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
 import { getAdjustedOverall } from "@/lib/positionPenalty";
 import { ContractPanel } from "@/components/ContractPanel";
 import { HelpHint } from "@/components/HelpHint";
@@ -65,7 +65,7 @@ const THEME_UI = {
     pitchLine: "rgba(255,255,255,0.12)",
     font: {},
     saveBtn: "rounded-xl uppercase tracking-widest font-mono",
-    saveLabel: "Save Lineup", savedLabel: "Saved!",
+    saveLabel: "Confirm Lineup ✓", savedLabel: "Lineup Confirmed ✓",
   },
   aurora: {
     bg: "bg-[#fef6ff]", text: "text-pink-950", muted: "text-pink-900/40",
@@ -554,6 +554,8 @@ export default function SquadPage() {
     } catch { /* откат не критичен — при следующей загрузке подтянется актуальное значение */ }
   }, [seasonId, selectedClub, captainId]);
 
+  const confirmLineupStore = useCareerStore(s => s.confirmLineup);
+
   const handleSaveLineup = useCallback(() => {
     if (formation === "Custom") {
       setShowNamePrompt(true);
@@ -561,6 +563,7 @@ export default function SquadPage() {
     }
     setLineupForFormationStore(formation, lineup);
     setFormationStore(formation);
+    confirmLineupStore();
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1800);
   }, [formation, lineup]);
@@ -568,6 +571,7 @@ export default function SquadPage() {
   const handleConfirmCustomName = useCallback((name: string) => {
     saveCustomFormationStore(name, customSlots, customPositions, lineup);
     setFormationStore(name);
+    confirmLineupStore();
     setShowNamePrompt(false);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1800);
@@ -924,15 +928,38 @@ export default function SquadPage() {
               return (
                 <div key={group} className="mb-6">
                   <div className={`text-[10px] uppercase tracking-widest font-black mb-3 ${ui.muted}`}>{group} ({list.length})</div>
-                  <div className="space-y-1.5">
-                    {list.map(p => (
-                      <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
-                        onOpen={openModal}
-                        isXI={startingIds.has(p.id ?? p.name)}
-                        onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
-                        status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
-                        avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} captainId={captainId} />
-                    ))}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                    {list.map((p, i) => {
+                      const pid = p.id ?? p.name;
+                      const isXI = startingIds.has(pid);
+                      const status = playerStatuses.find(s => (s.player_id || s.player_name) === pid);
+                      const isCaptain = captainId === pid;
+                      return (
+                        <div key={pid} className="relative">
+                          {isCaptain && (
+                            <span className="absolute top-2 right-2 z-30 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black"
+                              style={{ background: "#eab308", color: "#000" }}>C</span>
+                          )}
+                          {status && (
+                            <span className="absolute top-2 left-2 z-30 text-base" title={status.type}>
+                              {status.type === "red" || status.type === "injury" ? "🩹" : "🟨"}
+                            </span>
+                          )}
+                          <PlayerCard player={p} clubName={selectedClub?.name || ""} clubColor={glowColor} theme={theme} index={i} onOpen={() => openModal(p)} />
+                          {isXI ? (
+                            <div className="mt-1 text-center text-[10px] font-black uppercase tracking-widest" style={{ color: glowColor }}>
+                              {locale === "ru" ? "В старте" : "In lineup"}
+                            </div>
+                          ) : emptySlots.length > 0 ? (
+                            <button onClick={() => handleAddToLineup(p)}
+                              className="mt-1 w-full py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                              style={{ background: `${glowColor}18`, color: glowColor }}>
+                              + {locale === "ru" ? "В состав" : "Add to lineup"}
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

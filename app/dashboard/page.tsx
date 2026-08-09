@@ -247,6 +247,9 @@ export default function DashboardPage() {
 
   const leagueTheme = getLeagueTheme(selectedLeague?.name || selectedClub?.league || "Premier League", theme);
   const glowColor   = leagueTheme?.rawColor || "#ffffff";
+  const lineupConfirmed = useCareerStore(s => s.lineupConfirmed);
+  const tacticConfirmed = useCareerStore(s => s.tacticConfirmed);
+  const readyForSeasonSim = lineupConfirmed && tacticConfirmed;
   const userClub    = selectedClub?.name || "";
 
   useEffect(() => {
@@ -803,14 +806,27 @@ export default function DashboardPage() {
                         <Zap size={16} />
                         {simulating ? copy.dashSimulating : copy.dashSimulate}
                       </button>
-                      <button onClick={simulateWholeSeason} disabled={simulating || simulatingSeason || seasonFinished}
-                        title={locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours"}
+                      <button onClick={simulateWholeSeason} disabled={simulating || simulatingSeason || seasonFinished || !readyForSeasonSim}
+                        title={!readyForSeasonSim
+                          ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
+                          : (locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours")}
                         className="px-4 py-3 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl border transition-transform hover:scale-[1.03]"
                         style={{ borderColor: `${glowColor}40`, color: glowColor, background: `${glowColor}0d` }}>
                         ⏩ {simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season")}
                       </button>
                     </div>
                   </div>
+                  {!readyForSeasonSim && !simulatingSeason && !seasonFinished && (
+                    <div className="mb-3 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 flex-wrap"
+                      style={{ background: "rgba(234,179,8,0.1)", color: "#eab308", border: "1px solid rgba(234,179,8,0.3)" }}>
+                      ⚠️ {locale === "ru"
+                        ? "Автопрокрутка всего сезона недоступна, пока не подтверждены:"
+                        : "Whole-season autoplay is locked until you confirm:"}
+                      {!lineupConfirmed && <Link href="/squad" className="underline">{locale === "ru" ? "состав" : "lineup"}</Link>}
+                      {!lineupConfirmed && !tacticConfirmed && <span>·</span>}
+                      {!tacticConfirmed && <Link href="/tactics" className="underline">{locale === "ru" ? "тактику" : "tactic"}</Link>}
+                    </div>
+                  )}
                   {simulatingSeason && (
                     <div className="mb-3 p-4 rounded-2xl animate-fade-in-up" style={{ background: `${glowColor}12`, border: `1px solid ${glowColor}30` }}>
                       <div className="flex items-center justify-between gap-3 mb-2.5">

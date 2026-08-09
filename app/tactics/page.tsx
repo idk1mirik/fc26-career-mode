@@ -48,6 +48,8 @@ export default function TacticsPage() {
   const setTactic   = useCareerStore(s => s.setTactic);
   const customTactic    = useCareerStore(s => s.customTactic);
   const setCustomTactic = useCareerStore(s => s.setCustomTactic);
+  const tacticConfirmed = useCareerStore(s => s.tacticConfirmed);
+  const confirmTactic   = useCareerStore(s => s.confirmTactic);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const [hydrated, setHydrated] = useState(false);
   const [players, setPlayers]   = useState<any[]>([]);
@@ -87,9 +89,20 @@ export default function TacticsPage() {
   return (
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
-        <div className="mb-6">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.navTactics}</div>
-          <h1 className="text-2xl font-black">{copy.tacticsTitle}</h1>
+        <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.navTactics}</div>
+            <h1 className="text-2xl font-black">{copy.tacticsTitle}</h1>
+          </div>
+          <button onClick={confirmTactic}
+            className="px-4 py-2.5 rounded-xl text-xs font-black transition-all"
+            style={tacticConfirmed
+              ? { background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.4)" }
+              : { background: "rgba(234,179,8,0.15)", color: "#eab308", border: "1px solid rgba(234,179,8,0.4)" }}>
+            {tacticConfirmed
+              ? (locale === "ru" ? "✓ Тактика подтверждена" : "✓ Tactic Confirmed")
+              : (locale === "ru" ? "Подтвердить тактику" : "Confirm Tactic")}
+          </button>
         </div>
 
         {/* Recommendations */}

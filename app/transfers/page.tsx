@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { useCareerStore } from "@/app/store/careerStore";
+import { TransferSigningModal } from "@/components/TransferSigningModal";
 import { useThemeStore } from "@/app/store/themeStore";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { getPlayerPhoto } from "@/lib/images";
@@ -25,6 +26,8 @@ const THEME_UI = {
     pill: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20",
     buyBtn: "bg-emerald-500 text-black hover:bg-emerald-400",
     sellBtn: "bg-red-500/90 text-white hover:bg-red-500",
+    rowShape: "rounded-2xl",
+    ratingRing: "rounded-full",
   },
   aurora: {
     bg: "bg-[#fef6ff]", text: "text-pink-950", muted: "text-pink-900/40",
@@ -38,6 +41,8 @@ const THEME_UI = {
     pill: "bg-violet-100 text-violet-600 border border-violet-200",
     buyBtn: "bg-violet-500 text-white hover:bg-violet-600",
     sellBtn: "bg-pink-400 text-white hover:bg-pink-500",
+    rowShape: "rounded-[28px]",
+    ratingRing: "rounded-full",
   },
   maleficent: {
     bg: "bg-[#04000a]", text: "text-purple-100", muted: "text-purple-500/40",
@@ -51,6 +56,8 @@ const THEME_UI = {
     pill: "bg-fuchsia-950/40 text-fuchsia-400 border border-fuchsia-900/50 font-mono",
     buyBtn: "bg-fuchsia-600 text-white hover:bg-fuchsia-500 rounded-none font-mono uppercase tracking-widest",
     sellBtn: "bg-purple-900/60 text-fuchsia-300 hover:bg-purple-900 rounded-none font-mono uppercase tracking-widest",
+    rowShape: "rounded-none",
+    ratingRing: "rounded-none",
   },
 };
 
@@ -61,43 +68,62 @@ function fmtMoney(v: number) {
 }
 
 const TransferPlayerRow = memo(function TransferPlayerRow({
-  p, ui, actions, onOpen, priceLabel, subLabel, theme,
+  p, ui, actions, onOpen, priceLabel, subLabel, theme, isFavorite, onToggleFavorite,
 }: {
   p: any; ui: typeof THEME_UI["classic"];
   actions: { label: string; icon: any; onClick: () => void; busy?: boolean; disabled?: boolean; cls: string }[];
   onOpen: (p: any) => void; priceLabel?: string; subLabel?: string; theme?: string;
+  isFavorite?: boolean; onToggleFavorite?: () => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const ovr = p.overall ?? 75;
+  const ratingColor = getRatingColor(ovr, theme);
 
   return (
-    <div className={`rounded-2xl transition-all ${ui.card} animate-fade-in-up ${ui.cardHover}`}>
-      <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap">
-        <div className="flex items-center gap-3 flex-1 min-w-[160px] cursor-pointer" onClick={() => onOpen(p)}>
-          <div className="w-10 h-10 shrink-0 relative">
+    <div className={`transition-all ${ui.card} ${ui.rowShape} animate-fade-in-up ${ui.cardHover}`}>
+      <div className="flex items-center gap-2.5 px-3 py-2">
+        {/* Рейтинг — цветной кружок слева, сразу читается без прищуривания */}
+        <div className={`w-8 h-8 shrink-0 flex items-center justify-center font-black text-[12px] ${ui.ratingRing}`}
+          style={{ background: `${ratingColor}22`, color: ratingColor, border: `1.5px solid ${ratingColor}55` }}>
+          {ovr}
+        </div>
+
+        <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer" onClick={() => onOpen(p)}>
+          <div className="w-8 h-8 shrink-0 relative">
             {!imgErr
-              ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-10 h-10 object-contain" onError={() => setImgErr(true)} />
-              : <span className="text-2xl opacity-30">👤</span>}
+              ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-8 h-8 object-contain" onError={() => setImgErr(true)} />
+              : <span className="text-lg opacity-30">👤</span>}
           </div>
           <div className="flex-1 min-w-0">
-            <div className={`font-black text-sm truncate ${ui.nameColor}`}>{p.name}</div>
-            <div className={`text-[10px] ${ui.muted}`}>{p.position} · {subLabel}</div>
+            <div className={`font-black text-[13px] truncate leading-tight ${ui.nameColor}`}>{p.name}</div>
+            <div className={`text-[10px] flex items-center gap-1 leading-tight ${ui.muted}`}>
+              <FlagImage country={p.nationality || p.nation} size={10} />
+              {p.position} · {subLabel}
+            </div>
           </div>
         </div>
-        <FlagImage country={p.nationality || p.nation} size={14} />
-        <div className="text-center w-10">
-          <span className="text-base font-black" style={{ color: getRatingColor(ovr, theme) }}>{ovr}</span>
-        </div>
-        <div className={`text-xs font-black w-20 text-right ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
-        <div className="flex items-center gap-1.5">
+
+        <div className={`hidden sm:block text-xs font-black w-20 text-right shrink-0 ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
+
+        {onToggleFavorite && (
+          <button onClick={onToggleFavorite}
+            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-transform hover:scale-110"
+            style={{ color: isFavorite ? "#eab308" : "currentColor", opacity: isFavorite ? 1 : 0.3 }}
+            title={isFavorite ? "★" : "☆"}>
+            {isFavorite ? "★" : "☆"}
+          </button>
+        )}
+
+        <div className="flex items-center gap-1.5 shrink-0">
           {actions.map((a, i) => (
             <button key={i} onClick={a.onClick} disabled={a.busy || a.disabled}
-              className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
-              <a.icon size={12} />{a.label}
+              className={`shrink-0 px-2.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
+              <a.icon size={11} />{a.label}
             </button>
           ))}
         </div>
       </div>
+      <div className={`sm:hidden px-3 pb-1.5 text-[11px] font-black text-right ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
     </div>
   );
 });
@@ -144,13 +170,28 @@ export default function TransfersPage() {
   const windowLabel = preseasonOpen ? copy.transfersPreseasonWindow : winterOpen ? copy.transfersWinterWindow : copy.transfersClosed;
   const nextOpen    = matchday < 20 ? copy.transfersNextOpenWinter : copy.transfersNextOpenPreseason;
 
-  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents">("market");
+  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents" | "favorites">("market");
   const [budget, setBudget] = useState<number | null>(null);
   const [market, setMarket] = useState<any[]>([]);
+  const favoritePlayerIds = useCareerStore(s => s.favoritePlayerIds);
+  const toggleFavorite = useCareerStore(s => s.toggleFavorite);
   const [squad, setSquad] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [freeAgents, setFreeAgents] = useState<any[]>([]);
+  const playerCacheRef = useRef<Map<string, any>>(new Map());
+  useEffect(() => {
+    for (const p of market) if (p?.id) playerCacheRef.current.set(p.id, p);
+    for (const p of squad) if (p?.id) playerCacheRef.current.set(p.id, p);
+    for (const a of freeAgents) if (a?.playerId) playerCacheRef.current.set(a.playerId, {
+      id: a.playerId, name: a.playerName, position: a.position, overall: a.overall, age: a.age,
+      team: locale === "ru" ? "своб. агент" : "free agent", market_value: 0, isFreeAgent: true, _agent: a,
+    });
+  }, [market, squad, freeAgents]);
+  const favoritesList = useMemo(
+    () => favoritePlayerIds.map(id => playerCacheRef.current.get(id)).filter(Boolean),
+    [favoritePlayerIds, market, squad, freeAgents]
+  );
   const [signingAgent, setSigningAgent] = useState<any | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -279,17 +320,22 @@ export default function TransfersPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handleBuy = async (p: any) => {
-    if (!seasonId) return;
+  const [signingPlayer, setSigningPlayer] = useState<any>(null);
+
+  const handleBuy = (p: any) => setSigningPlayer(p);
+
+  const confirmBuy = async (terms: any) => {
+    if (!seasonId || !signingPlayer) return;
+    const p = signingPlayer;
     setBusyId(p.id);
     try {
       const res = await fetch("/api/transfers/buy", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId, buyerClubId: userClub, playerId: p.id }),
+        body: JSON.stringify({ seasonId, buyerClubId: userClub, playerId: p.id, terms }),
       });
       const data = await res.json();
       if (!res.ok) { showToast(data.error ?? "Transfer failed", "err"); }
-      else { showToast(`Signed ${p.name} for ${fmtMoney(data.fee)}`, "ok"); await loadAll(); }
+      else { showToast(`Signed ${p.name} for ${fmtMoney(data.totalCost ?? data.fee)}`, "ok"); setSigningPlayer(null); await loadAll(); }
     } catch (e) { showToast("Transfer failed", "err"); }
     setBusyId(null);
   };
@@ -376,7 +422,35 @@ export default function TransfersPage() {
           </div>
         </div>
 
-        {!isOpen ? (
+        {/* Избранное — доступно всегда, даже когда трансферное окно закрыто */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setTab("favorites")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === "favorites" ? ui.tabActive : ui.tabIdle}`}>
+            ★ {locale === "ru" ? "Избранное" : "Favorites"} ({favoritePlayerIds.length})
+          </button>
+        </div>
+
+        {tab === "favorites" ? (
+          <div className="space-y-1.5">
+            {favoritesList.length === 0 && (
+              <div className={`text-center py-10 text-sm ${ui.muted}`}>
+                {locale === "ru" ? "Пока никого не добавил в избранное — нажми ☆ на карточке игрока." : "No favorites yet — tap ☆ on a player card to add one."}
+              </div>
+            )}
+            {favoritesList.map((p: any) => (
+              <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
+                isFavorite onToggleFavorite={() => toggleFavorite(p.id)}
+                actions={!isOpen ? [] : p.isFreeAgent ? [{
+                  label: locale === "ru" ? "Подписать" : "Sign", icon: TrendingUp, cls: ui.buyBtn,
+                  onClick: () => setSigningAgent(p._agent),
+                }] : [{
+                  label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
+                  busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
+                  onClick: () => handleBuy(p),
+                }]} />
+            ))}
+          </div>
+        ) : !isOpen ? (
           <div className={`rounded-2xl p-10 text-center ${ui.card} animate-fade-in-up`}>
             <Lock size={40} className={`mx-auto mb-4 ${ui.muted}`} />
             <div className="text-lg font-black mb-2">{copy.transfersClosed}</div>
@@ -442,6 +516,7 @@ export default function TransfersPage() {
                 )}
                 {filteredMarket.map((p: any) => (
                   <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
+                    isFavorite={favoritePlayerIds.includes(p.id)} onToggleFavorite={() => toggleFavorite(p.id)}
                     actions={[{
                       label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
                       busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
@@ -507,6 +582,11 @@ export default function TransfersPage() {
                     <span className="text-[10px] font-black px-2 py-1 rounded-lg" style={{ color: getRatingColor(a.overall, theme), background: `${getRatingColor(a.overall, theme)}18` }}>
                       {a.overall}
                     </span>
+                    <button onClick={() => toggleFavorite(a.playerId)}
+                      className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-transform hover:scale-110"
+                      style={{ color: favoritePlayerIds.includes(a.playerId) ? "#eab308" : "currentColor", opacity: favoritePlayerIds.includes(a.playerId) ? 1 : 0.3 }}>
+                      {favoritePlayerIds.includes(a.playerId) ? "★" : "☆"}
+                    </button>
                     <button onClick={() => setSigningAgent(a)}
                       className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition ${ui.buyBtn}`}>
                       🆓 {locale === "ru" ? "Подписать" : "Sign"}
@@ -580,6 +660,20 @@ export default function TransfersPage() {
               setToast({ text: locale === "ru" ? `${signingAgent.playerName} подписан!` : `${signingAgent.playerName} signed!`, kind: "ok" });
               loadAll();
             }}
+          />
+        )}
+
+        {signingPlayer && (
+          <TransferSigningModal
+            player={signingPlayer}
+            transferFee={signingPlayer.market_value ?? 0}
+            sellingClub={signingPlayer.team}
+            budget={budget}
+            theme={theme as any}
+            locale={locale}
+            busy={busyId === signingPlayer.id}
+            onCancel={() => setSigningPlayer(null)}
+            onConfirm={confirmBuy}
           />
         )}
 

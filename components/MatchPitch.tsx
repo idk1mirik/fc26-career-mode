@@ -33,7 +33,26 @@ export function MatchPitch({
 }) {
   function layout(players: any[], isHome: boolean) {
     const groups: Record<string, any[]> = { GK: [], DEF: [], MID: [], ATT: [] };
-    for (const p of players) groups[groupOf(p.position)].push(p);
+    const hasReliablePositions = players.some(p => groupOf(p.position) === "GK");
+    if (hasReliablePositions) {
+      for (const p of players) groups[groupOf(p.position)].push(p);
+    } else {
+      // Позиция не сохранена/битая (типично для отчётов о матчах,
+      // сыгранных до того, как это поле стало частью формата рейтингов) —
+      // раньше в этом случае все 11 игроков падали в одну группу "MID" по
+      // умолчанию и рисовались одной сплошной строкой (см. баг-репорт).
+      // Запасной план: раскладываем по порядку в составе, как в типичном
+      // 1-4-3-3/1-4-4-2 — это не идеально точно, но хотя бы не одна строка.
+      const n = players.length;
+      const defCount = n >= 10 ? 4 : Math.max(1, Math.round((n - 1) * 0.36));
+      const midCount = n >= 10 ? 3 : Math.max(1, Math.round((n - 1) * 0.36));
+      players.forEach((p, i) => {
+        if (i === 0) groups.GK.push(p);
+        else if (i <= defCount) groups.DEF.push(p);
+        else if (i <= defCount + midCount) groups.MID.push(p);
+        else groups.ATT.push(p);
+      });
+    }
     // Домашняя команда внизу поля (герб тоже внизу-слева): вратарь ближе к
     // низу (y~92), атака ближе к центру (y~58). Гостевая — сверху (герб
     // сверху-слева): вратарь ближе к верху (y~8), атака ближе к центру

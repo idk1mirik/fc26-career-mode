@@ -141,10 +141,10 @@ export default function TablePage() {
                 </div>
 
                 {/* Club */}
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 cursor-pointer" onClick={() => router.push(`/clubs/${encodeURIComponent(row.club_id)}`)}>
                   <img src={getClubLogo(row.club_id)} alt="" className="w-8 h-8 object-contain shrink-0"
                     onError={e => (e.currentTarget.style.display = "none")} />
-                  <span className={`text-[15px] font-bold truncate ${isUser ? ui.userText : ""}`}>
+                  <span className={`text-[15px] font-bold truncate hover:underline ${isUser ? ui.userText : ""}`}>
                     {row.club_id}
                     {isUser && <span className={`ml-1.5 text-[9px] font-black uppercase tracking-widest ${ui.userText} opacity-70`}>{locale === "ru" ? "твой клуб" : "you"}</span>}
                     {row.club_id === domesticCupWinner && cupWinnerGetsBonusELSpot(domesticCupWinner, standings, selectedLeague?.name || "") && (
