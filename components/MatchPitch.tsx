@@ -33,17 +33,41 @@ export function MatchPitch({
       for (const p of players) groups[groupOf(p.position)].push(p);
     } else {
       // Позиция не сохранена/битая (отчёты о матчах, сыгранных до того, как
-      // это поле появилось в формате рейтингов) — раскладываем по порядку
-      // в составе как типичную 1-4-3-3, а не всё в одну строку.
-      const n = players.length;
-      const defCount = n >= 10 ? 4 : Math.max(1, Math.round((n - 1) * 0.36));
-      const midCount = n >= 10 ? 3 : Math.max(1, Math.round((n - 1) * 0.36));
-      players.forEach((p, i) => {
-        if (i === 0) groups.GK.push(p);
-        else if (i <= defCount) groups.DEF.push(p);
-        else if (i <= defCount + midCount) groups.MID.push(p);
-        else groups.ATT.push(p);
+      // это поле появилось в формате рейтингов). Раньше запасной план был
+      // грубым порядковым номером в составе — если состав в отчёте не был
+      // отсортирован по линиям, распределение получалось случайным (см.
+      // баг-репорт: "разбросаны как попало"). Теперь угадываем линию по
+      // реальной статистике матча — гораздо надёжнее порядкового номера:
+      const scored = players.map(p => {
+        const st = p.stats ?? {};
+        const saves = st.saves ?? 0, tackles = st.tackles ?? 0, interceptions = st.interceptions ?? 0;
+        const goals = st.goals ?? 0, assists = st.assists ?? 0, keyPasses = st.keyPasses ?? 0;
+        let guess: "GK" | "DEF" | "MID" | "ATT";
+        if (saves > 0) guess = "GK";
+        else {
+          const defensiveScore = tackles + interceptions;
+          const attackingScore = goals * 2 + assists * 1.5 + keyPasses;
+          if (defensiveScore >= attackingScore && defensiveScore >= 2) guess = "DEF";
+          else if (attackingScore > defensiveScore && attackingScore >= 1.5) guess = "ATT";
+          else guess = "MID";
+        }
+        return { p, guess };
       });
+      // Гарантируем хотя бы одного вратаря (первый в списке — по конвенции
+      // почти всегда так) и разумные пропорции линий, даже если статистика
+      // матча малоинформативна (0 отборов/голов у всех — типично для
+      // спокойного матча)
+      if (!scored.some(s => s.guess === "GK")) scored[0].guess = "GK";
+      for (const { p, guess } of scored) groups[guess].push(p);
+      // Если после угадывания какая-то линия пустая, а другая переполнена —
+      // грубая перебалансировка, чтобы не получить "все в атаке"
+      const order2: ("DEF" | "MID" | "ATT")[] = ["DEF", "MID", "ATT"];
+      while (order2.some(k => groups[k].length === 0) && order2.some(k => groups[k].length > 2)) {
+        const emptyKey = order2.find(k => groups[k].length === 0)!;
+        const fullKey = order2.reduce((a, b) => groups[a].length > groups[b].length ? a : b);
+        if (groups[fullKey].length <= 1) break;
+        groups[emptyKey].push(groups[fullKey].pop());
+      }
     }
     // КРИТИЧНО: у каждой команды — своя чётко изолированная половина поля,
     // без пересечения по Y. Раньше атака домашних (y=42) и полузащита

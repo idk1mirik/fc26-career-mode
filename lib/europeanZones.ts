@@ -10,9 +10,23 @@
 // поэтому просто ключевые слова ловили и вторые дивизионы ("LALIGA
 // HYPERMOTION", "Bundesliga 2") и чужие лиги с похожим названием
 // ("Ö. Bundesliga" — австрийская). Точный список надёжнее нечёткого совпадения.
-const BIG5_EXACT = ["Premier League", "LALIGA EA SPORTS", "Ligue 1 McDonald's", "Bundesliga", "Serie A Enilive"];
+// Раньше сопоставление шло по точной строке (BIG5_EXACT.includes(name)) —
+// если в сохранённом состоянии браузера (persist в localStorage) осталось
+// чуть другое название лиги с более старой версии игры, распознавание
+// молча ломалось: лига считалась "не топ-5" и получала всего 2 места в ЛЧ
+// вместо 5 (см. баг-репорт со скриншотом — Ла Лига явно топ-5 лига, а
+// зоны считались как для второго эшелона). Теперь сопоставление по
+// ключевым словам названия — устойчиво к спонсорским суффиксам и
+// небольшим расхождениям в написании.
 function isBig5League(leagueName: string): boolean {
-  return BIG5_EXACT.includes(leagueName);
+  const n = leagueName.toLowerCase().trim();
+  if (/\b2\b|2\.\s*bundesliga|hypermotion|championship|liga\s*2|2\.\s*liga/i.test(n)) return false;
+  if (n.startsWith("premier league")) return true;
+  if (n.includes("laliga") || n.includes("la liga")) return true;
+  if (n.includes("ligue 1")) return true;
+  if (n.startsWith("bundesliga")) return true; // немецкая лига начинается именно с этого слова; "Ö. Bundesliga" (Австрия) — нет
+  if (n.includes("serie a")) return true;
+  return false;
 }
 
 export function getQualificationZones(leagueName: string, totalClubs: number) {

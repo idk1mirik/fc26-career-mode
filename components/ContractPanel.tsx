@@ -286,33 +286,49 @@ export function ContractPanel({
           </div>
           <input type="range" className="w-full mt-2 accent-emerald-500" min={Math.round(marketWage * 0.5)} max={Math.round(marketWage * 1.8)} step={500}
             value={wage} onChange={(e) => setWage(Number(e.target.value))} />
-          <input type="number" className={s.input} value={wage}
-            onChange={(e) => setWage(Number(e.target.value))} step={500} min={500} />
+          <div className="flex items-center gap-2 mt-2">
+            <button type="button" className={`w-8 h-8 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
+              onClick={() => setWage(w => Math.max(500, w - 500))}>−</button>
+            <span className="font-black text-lg flex-1 text-center">€{wage.toLocaleString()}</span>
+            <button type="button" className={`w-8 h-8 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
+              onClick={() => setWage(w => w + 500)}>+</button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <label>
+          <div>
             <span className={s.label}>{t.years}</span>
-            <input type="number" className={s.input} value={years}
-              onChange={(e) => setYears(Number(e.target.value))} min={1} max={5} />
-          </label>
-          <label>
-            <span className={s.label}>{t.bonus} (€)</span>
-            <input type="number" className={s.input} value={bonus}
-              onChange={(e) => setBonus(Number(e.target.value))} step={1000} min={0} />
-          </label>
+            <div className="flex gap-1.5 mt-1.5 flex-wrap">
+              {[1, 2, 3, 4, 5].map(y => (
+                <button key={y} type="button" onClick={() => setYears(y)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${years === y ? s.chipActive : s.chip}`}>
+                  {y}{ru ? "г" : "y"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className={s.label}>{t.bonus}</span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-sm transition ${s.chip}`}
+                onClick={() => setBonus(b => Math.max(0, b - 1000))}>−</button>
+              <span className="font-black text-sm flex-1 text-center">€{bonus.toLocaleString()}</span>
+              <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-sm transition ${s.chip}`}
+                onClick={() => setBonus(b => b + 1000)}>+</button>
+            </div>
+          </div>
         </div>
 
         {/* Журнал переговоров — раньше был виден только последний раунд */}
         {history.length > 0 && (
-          <div className={`mb-4 rounded-xl p-3 ${s.historyBg}`}>
+          <div className={`mb-4 rounded-xl p-3.5 ${s.historyBg}`}>
             <div className={`${s.label} mb-2`}>{ru ? "Ход переговоров" : "Negotiation log"}</div>
-            <div className="space-y-1">
+            <div>
               {history.map((h, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
+                <div key={i} className={`flex items-center justify-between text-sm py-2 ${i < history.length - 1 ? `border-b ${s.divider}` : ""}`}>
                   <span className={s.sub}>{t.round} {h.round}</span>
-                  <span className="font-bold">€{h.offer.toLocaleString()}</span>
-                  <span className={h.outcome === "agreed" ? "text-emerald-400" : h.outcome === "rejected" ? "text-red-400" : "opacity-60"}>
+                  <span className="font-black">€{h.offer.toLocaleString()}</span>
+                  <span className={`font-bold ${h.outcome === "agreed" ? "text-emerald-400" : h.outcome === "rejected" ? "text-red-400" : "opacity-60"}`}>
                     {h.outcome === "agreed" ? "✓" : h.outcome === "rejected" ? "✕" : "…"}
                   </span>
                 </div>
@@ -357,14 +373,14 @@ export function ContractPanel({
               {releasing ? "…" : (ru ? "🗑 Отпустить игрока" : "🗑 Release player")}
             </button>
           ) : <span />}
-          <div className="flex gap-3">
-            <button className={s.secondaryBtn} onClick={onClose} disabled={loading}>{t.cancelButton}</button>
+          <div className="flex gap-2.5">
+            <button className={`${s.secondaryBtn} text-sm py-3 px-5`} onClick={onClose} disabled={loading}>{t.cancelButton}</button>
             {negotiation?.status === "agreed" ? (
-              <button className={s.primaryBtn} onClick={() => sendOffer(true)} disabled={loading}>
+              <button className={`${s.primaryBtn} text-sm py-3 px-6`} onClick={() => sendOffer(true)} disabled={loading}>
                 {isFreeAgent ? (ru ? "Подписать" : "Sign player") : t.acceptButton}
               </button>
             ) : (
-              <button className={s.primaryBtn} onClick={() => sendOffer(false)}
+              <button className={`${s.primaryBtn} text-sm py-3 px-6`} onClick={() => sendOffer(false)}
                 disabled={loading || negotiation?.status === "rejected"}>
                 {loading ? "…" : t.offerButton}
               </button>
