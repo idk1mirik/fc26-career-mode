@@ -625,13 +625,22 @@ export default function DashboardPage() {
       {/* Main */}
       <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
         {/* Top bar — герб + название + быстрые статы в одну строку */}
-        <div className={`flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-5 rounded-3xl animate-fade-in-up shadow-lg ${ui.card}`}
+        <div className={`relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-6 rounded-3xl animate-fade-in-up shadow-lg ${ui.card}`}
           style={{ borderLeft: `3px solid ${glowColor}` }}>
-          <div className="flex items-center gap-4 flex-1 min-w-0">
+          {/* Подложка — мягкий градиент цвета клуба, эффект стадионного освещения */}
+          <div className="absolute inset-0 pointer-events-none opacity-70"
+            style={{ background: `radial-gradient(120% 100% at 0% 0%, ${glowColor}14 0%, transparent 55%)` }} />
+          <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl pointer-events-none opacity-20"
+            style={{ background: glowColor }} />
+
+          <div className="relative flex items-center gap-4 flex-1 min-w-0">
             <div className="relative shrink-0">
-              <div className="absolute inset-0 rounded-full blur-xl opacity-40 animate-floaty-sm" style={{ background: glowColor }} />
-              <img src={getClubLogo(selectedClub?.name || "")} alt="" className="relative w-14 h-14 object-contain"
-                onError={e => (e.currentTarget.style.display = "none")} />
+              <div className="absolute inset-0 rounded-full blur-xl opacity-50 animate-floaty-sm" style={{ background: glowColor }} />
+              <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ background: `${glowColor}12`, border: `1.5px solid ${glowColor}35` }}>
+                <img src={getClubLogo(selectedClub?.name || "")} alt="" className="w-11 h-11 object-contain"
+                  onError={e => (e.currentTarget.style.display = "none")} />
+              </div>
             </div>
             <div className="min-w-0">
               <div className={`${ui.subLabel} mb-1`}>{copy.dashTitle}</div>
@@ -640,14 +649,15 @@ export default function DashboardPage() {
                 {selectedClub?.name} — Season 2025/26
               </h2>
               {recentForm.length > 0 && (
-                <div className="flex items-center gap-1 mt-1.5">
+                <div className="flex items-center gap-1.5 mt-2">
                   <span className={`text-[9px] uppercase tracking-widest font-black mr-1 ${ui.muted}`}>{locale === "ru" ? "Форма" : "Form"}</span>
                   {recentForm.map((r, i) => (
                     <span key={i}
-                      className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black text-white animate-fade-in-up"
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white animate-fade-in-up shadow-sm"
                       style={{
                         background: r === "W" ? "#22c55e" : r === "L" ? "#ef4444" : "#94a3b8",
                         animationDelay: `${i * 60}ms`,
+                        boxShadow: `0 0 0 2px ${(r === "W" ? "#22c55e" : r === "L" ? "#ef4444" : "#94a3b8")}25`,
                       }}>
                       {r}
                     </span>
@@ -657,31 +667,31 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Быстрые статы — раньше их не было видно нигде, кроме отдельных страниц */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Быстрые статы — плашки с иконкой вместо мелких бейджей вперемешку */}
+          <div className="relative flex items-center gap-2 sm:gap-2.5 flex-wrap">
             <HelpHint id="dash-quickstats" theme={theme as any}
               title={locale === "ru" ? "Быстрые статы" : "Quick stats"}
               text={locale === "ru"
                 ? "Место и очки — из турнирной таблицы лиги. Бюджет — сколько денег осталось на трансферы после вычета зарплат. Тур — какой матчдей лиги сейчас."
                 : "Position and points come from the league table. Budget is what's left for transfers after wages. Matchday is the current league round."} />
-            <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
-              <span className="text-base font-display font-black" style={{ color: glowColor }}>{userPos}</span>
-              <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Место" : "Position"}</span>
+            <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[64px]" style={{ background: `${glowColor}10`, border: `1px solid ${glowColor}25` }}>
+              <span className="text-lg font-display font-black leading-none" style={{ color: glowColor }}>{userPos}</span>
+              <span className={`text-[8px] uppercase tracking-widest font-black mt-1 ${ui.muted}`}>{locale === "ru" ? "Место" : "Position"}</span>
             </div>
-            <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
-              <span className="text-base font-display font-black">{userRow?.points ?? 0}</span>
-              <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Очки" : "Points"}</span>
+            <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[64px]" style={{ background: `${glowColor}10`, border: `1px solid ${glowColor}25` }}>
+              <span className="text-lg font-display font-black leading-none">{userRow?.points ?? 0}</span>
+              <span className={`text-[8px] uppercase tracking-widest font-black mt-1 ${ui.muted}`}>{locale === "ru" ? "Очки" : "Points"}</span>
             </div>
             {userRow?.budget != null && (
-              <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
-                <span className="text-base font-display font-black text-emerald-500">
+              <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[72px]" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)" }}>
+                <span className="text-lg font-display font-black leading-none text-emerald-500">
                   {userRow.budget >= 1_000_000 ? `€${(userRow.budget / 1_000_000).toFixed(1)}M` : `€${Math.round(userRow.budget / 1000)}K`}
                 </span>
-                <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Бюджет" : "Budget"}</span>
+                <span className={`text-[8px] uppercase tracking-widest font-black mt-1 ${ui.muted}`}>{locale === "ru" ? "Бюджет" : "Budget"}</span>
               </div>
             )}
-            <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl ${ui.badge}`}>
-              <span className="text-base font-display font-black">⚽ {matchday}</span>
+            <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[64px]" style={{ background: `${glowColor}10`, border: `1px solid ${glowColor}25` }}>
+              <span className="text-lg font-display font-black leading-none">⚽ {matchday}</span>
               <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Тур" : "Matchday"}</span>
             </div>
           </div>

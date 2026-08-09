@@ -256,8 +256,8 @@ export default function ClubProfilePage() {
             return (
               <div key={pid} className="p-card-in relative" style={{ animationDelay: `${Math.min(i * 0.025, 0.6)}s` }}>
                 <button onClick={e => { e.stopPropagation(); toggleFavorite({ ...player, id: pid }); }}
-                  className="absolute top-2 right-2 z-30 w-8 h-8 rounded-full flex items-center justify-center text-lg bg-black/30 transition-transform hover:scale-110"
-                  style={{ color: isFav ? "#eab308" : "#fff", opacity: isFav ? 1 : 0.5 }}>
+                  className="absolute bottom-3 right-3 z-30 w-10 h-10 rounded-full flex items-center justify-center text-2xl transition-transform hover:scale-110 shadow-lg"
+                  style={{ color: isFav ? "#eab308" : "#fff", opacity: isFav ? 1 : 0.55, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
                   {isFav ? "★" : "☆"}
                 </button>
                 <PlayerCard player={player} clubName={club.name} clubColor={leagueTheme.rawColor} theme={theme} index={i} onOpen={() => setModalPlayer(player)} />

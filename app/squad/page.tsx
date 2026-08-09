@@ -937,11 +937,11 @@ export default function SquadPage() {
                       return (
                         <div key={pid} className="relative">
                           {isCaptain && (
-                            <span className="absolute top-2 right-2 z-30 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black"
+                            <span className="absolute bottom-3 left-3 z-30 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shadow-lg"
                               style={{ background: "#eab308", color: "#000" }}>C</span>
                           )}
                           {status && (
-                            <span className="absolute top-2 left-2 z-30 text-base" title={status.type}>
+                            <span className="absolute bottom-3 right-3 z-30 text-xl drop-shadow-lg" title={status.type}>
                               {status.type === "red" || status.type === "injury" ? "🩹" : "🟨"}
                             </span>
                           )}
