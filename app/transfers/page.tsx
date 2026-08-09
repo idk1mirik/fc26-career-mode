@@ -80,7 +80,7 @@ const TransferPlayerCard = memo(function TransferPlayerCard({
   const ratingColor = getRatingColor(ovr, theme);
 
   return (
-    <div className={`relative transition-all ${ui.card} ${ui.rowShape} animate-fade-in-up ${ui.cardHover} overflow-hidden`}>
+    <div className={`relative transition-all card-lift ${ui.card} ${ui.rowShape} animate-fade-in-up ${ui.cardHover} overflow-hidden`}>
       {onToggleFavorite && (
         <button onClick={onToggleFavorite}
           className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-110 bg-black/20"

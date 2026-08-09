@@ -128,7 +128,7 @@ export default function TablePage() {
             const zoneColor = getZoneColor(i, selectedLeague?.name || "", standings.length);
             return (
               <div key={row.club_id}
-                className={`grid items-center px-5 py-4 transition-colors ${ui.rowHover} ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? `${ui.userRow} scale-[1.005]` : ""}`}
+                className={`grid items-center px-5 py-4 transition-all hover:-translate-y-0.5 ${ui.rowHover} ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? `${ui.userRow} scale-[1.005]` : ""}`}
                 style={{ gridTemplateColumns: "40px 1fr 50px 50px 50px 50px 50px 50px 55px 64px" }}>
 
                 {/* # + zone indicator */}

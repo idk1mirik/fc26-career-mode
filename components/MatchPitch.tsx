@@ -14,6 +14,15 @@ const POS_GROUP: Record<string, "GK" | "DEF" | "MID" | "ATT"> = {
   LW: "ATT", RW: "ATT", ST: "ATT", CF: "ATT", LF: "ATT", RF: "ATT",
 };
 
+function sideOf(position: string): number {
+  // -1 = левый фланг, 0 = центр, 1 = правый фланг. Раньше игроки внутри
+  // линии просто шли в порядке состава без привязки к реальной стороне —
+  // левый защитник мог отрисоваться на правом краю поля и наоборот.
+  if (position?.startsWith("L")) return -1;
+  if (position?.startsWith("R")) return 1;
+  return 0;
+}
+
 function groupOf(position: string): "GK" | "DEF" | "MID" | "ATT" {
   return POS_GROUP[position] ?? "MID";
 }
@@ -82,6 +91,7 @@ export function MatchPitch({
     const rows: { p: any; x: number; y: number }[] = [];
     for (const key of order) {
       const line = groups[key as keyof typeof groups];
+      if (hasReliablePositions) line.sort((a, b) => sideOf(a.position) - sideOf(b.position));
       const y = yFor[key as keyof typeof yFor];
       line.forEach((p, i) => {
         const x = line.length === 1 ? 50 : 10 + (i * (80 / Math.max(1, line.length - 1)));

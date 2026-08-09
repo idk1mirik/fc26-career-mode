@@ -625,7 +625,7 @@ export default function DashboardPage() {
       {/* Main */}
       <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
         {/* Top bar — герб + название + быстрые статы в одну строку */}
-        <div className={`flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-5 rounded-3xl animate-fade-in-up ${ui.card}`}
+        <div className={`flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-5 rounded-3xl animate-fade-in-up shadow-lg ${ui.card}`}
           style={{ borderLeft: `3px solid ${glowColor}` }}>
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="relative shrink-0">
@@ -957,7 +957,7 @@ export default function DashboardPage() {
               const topRated = [...eligible].sort((a, b) => (b.total_rating / b.matches_played) - (a.total_rating / a.matches_played))[0];
               if (!topScorer && !topRated) return null;
               return (
-                <div className={`p-5 mt-5 ${ui.card} animate-fade-in-up`}>
+                <div className={`p-5 mt-5 shadow-lg ${ui.card} animate-fade-in-up`}>
                   <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? "Лидеры сезона" : "Season leaders"}</div>
                   <div className="space-y-3">
                     {topScorer && topScorer.goals > 0 && (

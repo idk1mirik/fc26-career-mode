@@ -311,7 +311,7 @@ export default function FixturesPage() {
                     return (
                       <div key={f.id}
                         onClick={() => played && setReportFix(f)}
-                        className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""} ${played ? `cursor-pointer transition-colors ${ui.tableRow}` : ""}`}>
+                        className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""} ${played ? `cursor-pointer transition-all hover:-translate-y-0.5 ${ui.tableRow}` : ""}`}>
                         <div className={`text-[10px] leading-tight ${ui.muted} sm:w-24 sm:shrink-0 flex items-center gap-1`}>
                           <span>{COMP_ICON[f.competition_type] ?? "⚽"}</span>
                           <span>{dateStr} · {f.competition_name}</span>
