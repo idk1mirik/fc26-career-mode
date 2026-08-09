@@ -152,6 +152,7 @@ function getRatingColorDash(r: number): string {
 }
 
 function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userClub: string; ui: any; theme: string; onOpenReport?: (fix: any) => void }) {
+  const router = useRouter();
   const isUser = fix.home_club === userClub || fix.away_club === userClub;
   const played = fix.played;
   const clickable = played && onOpenReport;
@@ -172,7 +173,8 @@ function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userCl
         <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black text-white shrink-0" style={{ background: formColor }}>{form}</span>
       )}
       <div className="flex items-center gap-1.5 flex-1 justify-end">
-        <span className={`text-sm font-bold truncate max-w-[100px] ${ui.text}`}>{fix.home_club}</span>
+        <span className={`text-sm font-bold truncate max-w-[100px] hover:underline ${ui.text}`}
+          onClick={e => { e.stopPropagation(); router.push(`/clubs/${encodeURIComponent(fix.home_club)}`); }}>{fix.home_club}</span>
         <img src={getClubLogo(fix.home_club)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
       </div>
       <div className={`w-16 text-center font-black text-sm shrink-0 ${played ? ui.text : ui.muted}`}>
@@ -180,7 +182,8 @@ function MatchRow({ fix, userClub, ui, theme, onOpenReport }: { fix: any; userCl
       </div>
       <div className="flex items-center gap-1.5 flex-1 justify-start">
         <img src={getClubLogo(fix.away_club)} alt="" className="w-5 h-5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
-        <span className={`text-sm font-bold truncate max-w-[100px] ${ui.text}`}>{fix.away_club}</span>
+        <span className={`text-sm font-bold truncate max-w-[100px] hover:underline ${ui.text}`}
+          onClick={e => { e.stopPropagation(); router.push(`/clubs/${encodeURIComponent(fix.away_club)}`); }}>{fix.away_club}</span>
       </div>
       {form && <span className="w-5 shrink-0" />}
     </div>

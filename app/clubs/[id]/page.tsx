@@ -145,6 +145,8 @@ export default function ClubProfilePage() {
   const theme = useThemeStore((s) => s.theme) as keyof typeof GLOBAL_UI;
   const ui = GLOBAL_UI[theme] ?? GLOBAL_UI.classic;
   const locale = useCareerStore(s => s.locale) || "en";
+  const favoritePlayerIds = useCareerStore(s => s.favoritePlayerIds);
+  const toggleFavorite = useCareerStore(s => s.toggleFavorite);
   const text = CLUB_TEXT[locale][theme] ?? CLUB_TEXT.en.classic;
 
   const [club, setClub] = useState<any>(null);
@@ -248,11 +250,20 @@ export default function ClubProfilePage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-          {filteredPlayers.map((player: any, i: number) => (
-            <div key={player.id ?? player.name} className="p-card-in" style={{ animationDelay: `${Math.min(i * 0.025, 0.6)}s` }}>
-              <PlayerCard player={player} clubName={club.name} clubColor={leagueTheme.rawColor} theme={theme} index={i} onOpen={() => setModalPlayer(player)} />
-            </div>
-          ))}
+          {filteredPlayers.map((player: any, i: number) => {
+            const pid = player.id ?? player.name;
+            const isFav = favoritePlayerIds.includes(pid);
+            return (
+              <div key={pid} className="p-card-in relative" style={{ animationDelay: `${Math.min(i * 0.025, 0.6)}s` }}>
+                <button onClick={e => { e.stopPropagation(); toggleFavorite({ ...player, id: pid }); }}
+                  className="absolute top-2 right-2 z-30 w-8 h-8 rounded-full flex items-center justify-center text-lg bg-black/30 transition-transform hover:scale-110"
+                  style={{ color: isFav ? "#eab308" : "#fff", opacity: isFav ? 1 : 0.5 }}>
+                  {isFav ? "★" : "☆"}
+                </button>
+                <PlayerCard player={player} clubName={club.name} clubColor={leagueTheme.rawColor} theme={theme} index={i} onOpen={() => setModalPlayer(player)} />
+              </div>
+            );
+          })}
         </div>
       </div>
 

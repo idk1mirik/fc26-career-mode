@@ -65,18 +65,21 @@ export function calculateWageDemand(
   club: { reputationDiscount?: number },
   squadRole: SquadRole
 ): number {
-  let base = player.overall * player.overall * 0.8;
+  // Кубическая кривая от рейтинга — линейная/квадратичная формула раньше
+  // давала смехотворно маленькие зарплаты (90 OVR ≈ 10к/нед вместо
+  // реалистичных 250-300к+ у топ-клубов). См. баг-репорт.
+  let base = Math.pow(Math.max(0, player.overall - 55), 3) * 6;
 
-  if (player.age <= 21) base *= 0.85;
-  else if (player.age >= 32) base *= 0.7;
+  if (player.age <= 21) base *= 0.8;
+  else if (player.age >= 32) base *= 0.75;
 
   const avgRating = player.avgRatingLastSeason ?? 6.5;
-  base *= 1 + (avgRating - 6.5) * 0.08;
+  base *= 1 + (avgRating - 6.5) * 0.1;
 
   base *= ROLE_MULTIPLIER[squadRole];
   base *= 1 - Math.min(0.15, Math.max(0, club.reputationDiscount ?? 0));
 
-  return Math.max(500, Math.round(base / 500) * 500);
+  return Math.max(300, Math.round(base / 100) * 100);
 }
 
 export function calculateReleaseClause(marketValue: number, squadRole: SquadRole): number {

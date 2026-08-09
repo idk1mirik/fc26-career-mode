@@ -67,7 +67,7 @@ function fmtMoney(v: number) {
   return `€${v}`;
 }
 
-const TransferPlayerRow = memo(function TransferPlayerRow({
+const TransferPlayerCard = memo(function TransferPlayerCard({
   p, ui, actions, onOpen, priceLabel, subLabel, theme, isFavorite, onToggleFavorite,
 }: {
   p: any; ui: typeof THEME_UI["classic"];
@@ -80,50 +80,45 @@ const TransferPlayerRow = memo(function TransferPlayerRow({
   const ratingColor = getRatingColor(ovr, theme);
 
   return (
-    <div className={`transition-all ${ui.card} ${ui.rowShape} animate-fade-in-up ${ui.cardHover}`}>
-      <div className="flex items-center gap-2.5 px-3 py-2">
-        {/* Рейтинг — цветной кружок слева, сразу читается без прищуривания */}
-        <div className={`w-8 h-8 shrink-0 flex items-center justify-center font-black text-[12px] ${ui.ratingRing}`}
-          style={{ background: `${ratingColor}22`, color: ratingColor, border: `1.5px solid ${ratingColor}55` }}>
+    <div className={`relative transition-all ${ui.card} ${ui.rowShape} animate-fade-in-up ${ui.cardHover} overflow-hidden`}>
+      {onToggleFavorite && (
+        <button onClick={onToggleFavorite}
+          className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-110 bg-black/20"
+          style={{ color: isFavorite ? "#eab308" : "currentColor", opacity: isFavorite ? 1 : 0.4 }}
+          title={isFavorite ? "★" : "☆"}>
+          {isFavorite ? "★" : "☆"}
+        </button>
+      )}
+
+      <div className="pt-5 pb-3 px-4 flex flex-col items-center cursor-pointer" onClick={() => onOpen(p)}>
+        <div className="w-16 h-16 rounded-full flex items-center justify-center font-black text-2xl mb-2 shrink-0"
+          style={{ background: `${ratingColor}1c`, color: ratingColor, border: `2px solid ${ratingColor}55` }}>
           {ovr}
         </div>
-
-        <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer" onClick={() => onOpen(p)}>
-          <div className="w-8 h-8 shrink-0 relative">
-            {!imgErr
-              ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-8 h-8 object-contain" onError={() => setImgErr(true)} />
-              : <span className="text-lg opacity-30">👤</span>}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className={`font-black text-[13px] truncate leading-tight ${ui.nameColor}`}>{p.name}</div>
-            <div className={`text-[10px] flex items-center gap-1 leading-tight ${ui.muted}`}>
-              <FlagImage country={p.nationality || p.nation} size={10} />
-              {p.position} · {subLabel}
-            </div>
-          </div>
+        <div className="w-14 h-14 -mt-1 mb-1.5 relative">
+          {!imgErr
+            ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-14 h-14 object-contain" onError={() => setImgErr(true)} />
+            : <span className="text-3xl opacity-30 block text-center">👤</span>}
         </div>
-
-        <div className={`hidden sm:block text-xs font-black w-20 text-right shrink-0 ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
-
-        {onToggleFavorite && (
-          <button onClick={onToggleFavorite}
-            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-transform hover:scale-110"
-            style={{ color: isFavorite ? "#eab308" : "currentColor", opacity: isFavorite ? 1 : 0.3 }}
-            title={isFavorite ? "★" : "☆"}>
-            {isFavorite ? "★" : "☆"}
-          </button>
-        )}
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          {actions.map((a, i) => (
-            <button key={i} onClick={a.onClick} disabled={a.busy || a.disabled}
-              className={`shrink-0 px-2.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
-              <a.icon size={11} />{a.label}
-            </button>
-          ))}
+        <div className={`font-black text-sm text-center leading-tight ${ui.nameColor}`}>{p.name}</div>
+        <div className={`text-[11px] flex items-center justify-center gap-1 mt-1 ${ui.muted}`}>
+          <FlagImage country={p.nationality || p.nation} size={11} />
+          {p.position} · {subLabel}
         </div>
       </div>
-      <div className={`sm:hidden px-3 pb-1.5 text-[11px] font-black text-right ${ui.muted}`}>{priceLabel ?? fmtMoney(p.market_value ?? 0)}</div>
+
+      <div className="px-4 py-2.5 text-center font-black text-sm border-t border-current/10">
+        {priceLabel ?? fmtMoney(p.market_value ?? 0)}
+      </div>
+
+      <div className="px-3 pb-3 flex gap-1.5">
+        {actions.map((a, i) => (
+          <button key={i} onClick={a.onClick} disabled={a.busy || a.disabled}
+            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
+            <a.icon size={12} />{a.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 });
@@ -179,6 +174,7 @@ export default function TransfersPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [freeAgents, setFreeAgents] = useState<any[]>([]);
+  const favoritePlayersData = useCareerStore(s => s.favoritePlayersData);
   const playerCacheRef = useRef<Map<string, any>>(new Map());
   useEffect(() => {
     for (const p of market) if (p?.id) playerCacheRef.current.set(p.id, p);
@@ -189,8 +185,11 @@ export default function TransfersPage() {
     });
   }, [market, squad, freeAgents]);
   const favoritesList = useMemo(
-    () => favoritePlayerIds.map(id => playerCacheRef.current.get(id)).filter(Boolean),
-    [favoritePlayerIds, market, squad, freeAgents]
+    // Свежие данные из кэша рынка приоритетнее (если игрок сейчас виден на
+    // рынке), иначе — то, что было сохранено в момент добавления в
+    // избранное (работает с любой страницы, не только с рынка)
+    () => favoritePlayerIds.map(id => playerCacheRef.current.get(id) ?? favoritePlayersData[id]).filter(Boolean),
+    [favoritePlayerIds, favoritePlayersData, market, squad, freeAgents]
   );
   const [signingAgent, setSigningAgent] = useState<any | null>(null);
   const [search, setSearch] = useState("");
@@ -431,15 +430,15 @@ export default function TransfersPage() {
         </div>
 
         {tab === "favorites" ? (
-          <div className="space-y-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {favoritesList.length === 0 && (
               <div className={`text-center py-10 text-sm ${ui.muted}`}>
                 {locale === "ru" ? "Пока никого не добавил в избранное — нажми ☆ на карточке игрока." : "No favorites yet — tap ☆ on a player card to add one."}
               </div>
             )}
             {favoritesList.map((p: any) => (
-              <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
-                isFavorite onToggleFavorite={() => toggleFavorite(p.id)}
+              <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
+                isFavorite onToggleFavorite={() => toggleFavorite(p)}
                 actions={!isOpen ? [] : p.isFreeAgent ? [{
                   label: locale === "ru" ? "Подписать" : "Sign", icon: TrendingUp, cls: ui.buyBtn,
                   onClick: () => setSigningAgent(p._agent),
@@ -510,13 +509,13 @@ export default function TransfersPage() {
             {loading ? (
               <div className={`text-center py-16 text-sm ${ui.muted}`}>{copy.commonLoading}</div>
             ) : tab === "market" ? (
-              <div className="space-y-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {filteredMarket.length === 0 && (
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredMarket.map((p: any) => (
-                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
-                    isFavorite={favoritePlayerIds.includes(p.id)} onToggleFavorite={() => toggleFavorite(p.id)}
+                  <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
+                    isFavorite={favoritePlayerIds.includes(p.id)} onToggleFavorite={() => toggleFavorite(p)}
                     actions={[{
                       label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
                       busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
@@ -525,12 +524,12 @@ export default function TransfersPage() {
                 ))}
               </div>
             ) : tab === "squad" ? (
-              <div className="space-y-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {filteredSquad.length === 0 && (
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredSquad.map((p: any) => (
-                  <TransferPlayerRow key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`} theme={theme}
+                  <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`} theme={theme}
                     actions={[
                       { label: copy.transfersQuickSell, icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
                       { label: copy.transfersList, icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
@@ -542,9 +541,9 @@ export default function TransfersPage() {
                 {myListings.length > 0 && (
                   <div>
                     <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{copy.transfersMyListings}</div>
-                    <div className="space-y-1.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {myListings.map((l: any) => (
-                        <TransferPlayerRow key={l.id} p={enrichListing(l)}
+                        <TransferPlayerCard key={l.id} p={enrichListing(l)}
                           ui={ui} onOpen={openModal} subLabel={locale === "ru" ? "выставлен тобой" : "listed by you"} priceLabel={fmtMoney(l.asking_price)} theme={theme}
                           actions={[{ label: copy.transfersCancel, icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
                       ))}
@@ -556,9 +555,9 @@ export default function TransfersPage() {
                   {otherListings.length === 0 ? (
                     <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoListings}</div>
                   ) : (
-                    <div className="space-y-1.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {otherListings.map((l: any) => (
-                        <TransferPlayerRow key={l.id} p={enrichListing(l)}
+                        <TransferPlayerCard key={l.id} p={enrichListing(l)}
                           ui={ui} onOpen={openModal} subLabel={l.seller_club} priceLabel={fmtMoney(l.asking_price)} theme={theme}
                           actions={[{ label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn, busy: busyId === l.id, disabled: budget !== null && l.asking_price > budget, onClick: () => handleBuyListing(l) }]} />
                       ))}
@@ -567,32 +566,23 @@ export default function TransfersPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {filteredFreeAgents.length === 0 && (
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>
                     {locale === "ru" ? "Пока свободных агентов нет — они появляются, когда у кого-то истекает контракт." : "No free agents right now — they appear when someone's contract expires."}
                   </div>
                 )}
-                {filteredFreeAgents.map((a: any) => (
-                  <div key={a.contractId} className={`rounded-2xl p-3 flex items-center gap-3 transition-all card-lift animate-fade-in-up ${ui.card} ${ui.cardHover}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-bold truncate ${ui.nameColor}`}>{a.playerName}</div>
-                      <div className={`text-[11px] ${ui.muted}`}>{a.position} · {a.overall} OVR · {a.age} y.o.</div>
-                    </div>
-                    <span className="text-[10px] font-black px-2 py-1 rounded-lg" style={{ color: getRatingColor(a.overall, theme), background: `${getRatingColor(a.overall, theme)}18` }}>
-                      {a.overall}
-                    </span>
-                    <button onClick={() => toggleFavorite(a.playerId)}
-                      className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-transform hover:scale-110"
-                      style={{ color: favoritePlayerIds.includes(a.playerId) ? "#eab308" : "currentColor", opacity: favoritePlayerIds.includes(a.playerId) ? 1 : 0.3 }}>
-                      {favoritePlayerIds.includes(a.playerId) ? "★" : "☆"}
-                    </button>
-                    <button onClick={() => setSigningAgent(a)}
-                      className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition ${ui.buyBtn}`}>
-                      🆓 {locale === "ru" ? "Подписать" : "Sign"}
-                    </button>
-                  </div>
-                ))}
+                {filteredFreeAgents.map((a: any) => {
+                  const agentAsPlayer = { id: a.playerId, name: a.playerName, position: a.position, overall: a.overall, nationality: a.nationality, team: locale === "ru" ? "своб. агент" : "free agent", market_value: 0 };
+                  return (
+                    <TransferPlayerCard key={a.contractId}
+                      p={agentAsPlayer}
+                      ui={ui} onOpen={() => setSigningAgent(a)} subLabel={locale === "ru" ? `${a.age} лет` : `${a.age} y.o.`} theme={theme}
+                      isFavorite={favoritePlayerIds.includes(a.playerId)} onToggleFavorite={() => toggleFavorite(agentAsPlayer)}
+                      priceLabel={locale === "ru" ? "Своб. агент" : "Free Agent"}
+                      actions={[{ label: locale === "ru" ? "Подписать" : "Sign", icon: TrendingUp, cls: ui.buyBtn, onClick: () => setSigningAgent(a) }]} />
+                  );
+                })}
               </div>
             )}
 

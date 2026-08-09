@@ -22,7 +22,7 @@ export interface ContractsCopy {
 
 export const CONTRACTS_COPY: Record<Locale, ContractsCopy> = {
   en: {
-    title: "Contract",
+    title: "Player Negotiation",
     wage: "Weekly wage", years: "Contract length", bonus: "Signing bonus", role: "Squad role",
     releaseClause: "Release clause", happiness: "Happiness",
     roleStar: "Star player", roleImportant: "Important player", roleRotation: "Rotation", roleProspect: "Prospect", roleBackup: "Backup",
@@ -33,7 +33,7 @@ export const CONTRACTS_COPY: Record<Locale, ContractsCopy> = {
     round: "Round",
   },
   ru: {
-    title: "Контракт",
+    title: "Переговоры с игроком",
     wage: "Зарплата в неделю", years: "Срок контракта", bonus: "Бонус за подписание", role: "Роль в составе",
     releaseClause: "Отступные", happiness: "Довольство",
     roleStar: "Звезда команды", roleImportant: "Важный игрок", roleRotation: "Ротация", roleProspect: "Перспективный", roleBackup: "Запасной",

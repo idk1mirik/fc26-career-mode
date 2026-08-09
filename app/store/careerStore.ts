@@ -17,6 +17,7 @@ interface CareerState {
   lineupConfirmed: boolean;
   tacticConfirmed: boolean;
   favoritePlayerIds: string[];
+  favoritePlayersData: Record<string, any>;
   setSelectedClub:   (club: any)              => void;
   setSelectedLeague: (league: any)            => void;
   setSeasonId:       (id: string)             => void;
@@ -31,7 +32,7 @@ interface CareerState {
   setLocale:         (l: "en" | "ru")          => void;
   confirmLineup:     ()                        => void;
   confirmTactic:     ()                        => void;
-  toggleFavorite:    (playerId: string)         => void;
+  toggleFavorite:    (player: { id: string; [k: string]: any }) => void;
   resetCareer:       ()                       => void;
 }
 
@@ -52,6 +53,7 @@ export const useCareerStore = create<CareerState>()(
       lineupConfirmed: false,
       tacticConfirmed: false,
       favoritePlayerIds: [],
+      favoritePlayersData: {},
       setSelectedClub:   (club)    => set({ selectedClub: club }),
       setSelectedLeague: (league)  => set({ selectedLeague: league }),
       setSeasonId:       (id)      => set({ seasonId: id }),
@@ -75,17 +77,24 @@ export const useCareerStore = create<CareerState>()(
       setLocale:         (l)       => set({ locale: l }),
       confirmLineup:     ()        => set({ lineupConfirmed: true }),
       confirmTactic:     ()        => set({ tacticConfirmed: true }),
-      toggleFavorite: (playerId) => set(state => ({
-        favoritePlayerIds: state.favoritePlayerIds.includes(playerId)
-          ? state.favoritePlayerIds.filter(id => id !== playerId)
-          : [...state.favoritePlayerIds, playerId],
-      })),
+      toggleFavorite: (player) => set(state => {
+        const isFav = state.favoritePlayerIds.includes(player.id);
+        if (isFav) {
+          const next = { ...state.favoritePlayersData };
+          delete next[player.id];
+          return { favoritePlayerIds: state.favoritePlayerIds.filter(id => id !== player.id), favoritePlayersData: next };
+        }
+        return {
+          favoritePlayerIds: [...state.favoritePlayerIds, player.id],
+          favoritePlayersData: { ...state.favoritePlayersData, [player.id]: player },
+        };
+      }),
       resetCareer: () => set({
         selectedClub: null, selectedLeague: null, seasonId: null, matchday: 1,
         lineup: {}, formation: "4-3-3", tactic: "Balanced",
         customTactic: { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
         lineupsByFormation: {}, customFormations: {},
-        lineupConfirmed: false, tacticConfirmed: false, favoritePlayerIds: [],
+        lineupConfirmed: false, tacticConfirmed: false, favoritePlayerIds: [], favoritePlayersData: {},
       }),
     }),
     { name: "career-store", skipHydration: true }

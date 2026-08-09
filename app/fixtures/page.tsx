@@ -215,7 +215,8 @@ export default function FixturesPage() {
                   className={`grid items-center px-4 py-2 text-xs ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.highlight : ""}`}
                   style={{ gridTemplateColumns: "32px 1fr 40px 40px 50px" }}>
                   <span className={`font-black ${ui.muted}`}>{i + 1}</span>
-                  <span className={`flex items-center gap-1.5 font-bold truncate ${isUser ? ui.userColor : ""}`}>
+                  <span className={`flex items-center gap-1.5 font-bold truncate cursor-pointer hover:underline ${isUser ? ui.userColor : ""}`}
+                    onClick={() => router.push(`/clubs/${encodeURIComponent(row.club_id)}`)}>
                     <img src={getClubLogo(row.club_id)} className="w-4 h-4 object-contain shrink-0" alt="" onError={e => (e.currentTarget.style.display = "none")} />
                     {row.club_id}
                   </span>
@@ -252,7 +253,8 @@ export default function FixturesPage() {
                     <div className="w-1.5 h-6 rounded-full shrink-0" style={{ backgroundColor: directQ ? "#22c55e" : playoffQ ? "#3b82f6" : "transparent" }} />
                     <span className={`text-sm font-black font-display ${ui.muted}`}>{i + 1}</span>
                   </div>
-                  <span className="text-[15px] font-bold truncate flex items-center gap-2">
+                  <span className="text-[15px] font-bold truncate flex items-center gap-2 cursor-pointer hover:underline"
+                    onClick={() => router.push(`/clubs/${encodeURIComponent(s.club)}`)}>
                     <img src={getClubLogo(s.club)} className="w-6 h-6 object-contain shrink-0" alt="" onError={e => (e.currentTarget.style.display = "none")} />
                     {s.club}
                   </span>
@@ -316,7 +318,8 @@ export default function FixturesPage() {
                         </div>
                         <div className="flex items-center justify-between gap-2 sm:flex-1">
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-end min-w-0">
-                            <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.home_club === userClub ? ui.userColor : ""}`}>{f.home_club}</span>
+                            <span className={`text-xs sm:text-sm font-bold truncate hover:underline ${isUser && f.home_club === userClub ? ui.userColor : ""}`}
+                              onClick={e => { e.stopPropagation(); router.push(`/clubs/${encodeURIComponent(f.home_club)}`); }}>{f.home_club}</span>
                             <img src={getClubLogo(f.home_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
                           </div>
                           <div className={`w-14 sm:w-16 text-center font-black text-xs sm:text-sm shrink-0 py-1 ${ui.scoreBg} ${played ? ui.text : ui.muted}`}>
@@ -324,7 +327,8 @@ export default function FixturesPage() {
                           </div>
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:justify-start min-w-0">
                             <img src={getClubLogo(f.away_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display="none")} />
-                            <span className={`text-xs sm:text-sm font-bold truncate ${isUser && f.away_club === userClub ? ui.userColor : ""}`}>{f.away_club}</span>
+                            <span className={`text-xs sm:text-sm font-bold truncate hover:underline ${isUser && f.away_club === userClub ? ui.userColor : ""}`}
+                              onClick={e => { e.stopPropagation(); router.push(`/clubs/${encodeURIComponent(f.away_club)}`); }}>{f.away_club}</span>
                           </div>
                         </div>
                       </div>

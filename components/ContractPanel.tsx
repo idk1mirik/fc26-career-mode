@@ -25,8 +25,8 @@ const PANEL_STYLES: Record<ThemeKey, {
 }> = {
   classic: {
     overlay: "fixed inset-0 bg-black/70 backdrop-blur-sm z-[1100] flex items-center justify-center p-4",
-    panel: "bg-slate-950 border border-white/[0.08] rounded-2xl p-6 w-full max-w-lg text-white max-h-[90vh] overflow-y-auto",
-    title: "text-lg font-display font-black", sub: "text-xs text-slate-500",
+    panel: "bg-slate-950 border border-white/[0.08] rounded-2xl p-6 w-full max-w-xl text-white max-h-[90vh] overflow-y-auto",
+    title: "text-xl font-black uppercase tracking-wide", sub: "text-xs text-slate-500",
     label: "text-[10px] text-slate-400 uppercase tracking-widest font-bold",
     input: "w-full bg-white/[0.05] border border-white/[0.1] text-white rounded-xl px-3 py-2 mt-1 outline-none focus:border-emerald-500/50",
     primaryBtn: "bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl px-5 py-2.5 transition disabled:opacity-40",
@@ -39,8 +39,8 @@ const PANEL_STYLES: Record<ThemeKey, {
   },
   aurora: {
     overlay: "fixed inset-0 bg-pink-950/20 backdrop-blur-sm z-[1100] flex items-center justify-center p-4",
-    panel: "bg-white border-2 border-pink-100 rounded-2xl p-6 w-full max-w-lg text-pink-950 max-h-[90vh] overflow-y-auto",
-    title: "text-lg font-display font-black", sub: "text-xs text-pink-400",
+    panel: "bg-white border-2 border-pink-100 rounded-2xl p-6 w-full max-w-xl text-pink-950 max-h-[90vh] overflow-y-auto",
+    title: "text-xl font-black uppercase tracking-wide", sub: "text-xs text-pink-400",
     label: "text-[10px] text-pink-400 uppercase tracking-widest font-bold",
     input: "w-full bg-pink-50/50 border border-pink-100 text-pink-950 rounded-xl px-3 py-2 mt-1 outline-none focus:border-pink-400",
     primaryBtn: "bg-pink-500 hover:bg-pink-400 text-white font-bold rounded-xl px-5 py-2.5 transition disabled:opacity-40",
@@ -53,8 +53,8 @@ const PANEL_STYLES: Record<ThemeKey, {
   },
   maleficent: {
     overlay: "fixed inset-0 bg-black/85 backdrop-blur-sm z-[1100] flex items-center justify-center p-4",
-    panel: "bg-black border border-purple-900/40 rounded-none p-6 w-full max-w-lg text-fuchsia-300 font-mono max-h-[90vh] overflow-y-auto",
-    title: "text-lg font-bold uppercase tracking-widest", sub: "text-xs text-purple-500",
+    panel: "bg-black border border-purple-900/40 rounded-none p-6 w-full max-w-xl text-fuchsia-300 font-mono max-h-[90vh] overflow-y-auto",
+    title: "text-2xl font-bold uppercase tracking-widest", sub: "text-xs text-purple-500",
     label: "text-[10px] text-purple-500 uppercase tracking-widest font-bold",
     input: "w-full bg-black/60 border border-purple-900/40 text-fuchsia-400 px-3 py-2 mt-1 outline-none font-mono focus:border-fuchsia-600",
     primaryBtn: "bg-fuchsia-600 hover:bg-fuchsia-500 text-black font-bold px-5 py-2.5 transition uppercase disabled:opacity-40",
