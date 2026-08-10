@@ -18,7 +18,7 @@ function quickSellMultiplier(ovr: number): number {
 }
 
 export async function POST(req: Request) {
-  const { seasonId, sellerClubId, playerId } = await req.json();
+  const { seasonId, sellerClubId, playerId, withBuyback } = await req.json();
   if (!seasonId || !sellerClubId || !playerId) {
     return Response.json({ error: "seasonId, sellerClubId and playerId required" }, { status: 400 });
   }
@@ -86,15 +86,22 @@ export async function POST(req: Request) {
       { overall: player.overall ?? 70, age: player.age ?? 25 }, { reputationDiscount: 0 }, "rotation"
     );
     const careerId = oldContract?.career_id ?? await getCareerId(seasonId);
+    // Опция обратного выкупа для себя — раньше продажа была окончательной
+    // без вариантов. Если включена, продавец (сам пользователь) сможет
+    // выкупить игрока обратно в любой момент, пока контракт действует, за
+    // fee * 1.4 (наценка — иначе это было бы бесплатным способом "спрятать"
+    // игрока от зарплаты на время).
+    const buybackPrice = withBuyback ? Math.round(fee * 1.4) : null;
 
     await supabase.from("contracts").insert({
       season_id: seasonId, career_id: careerId,
       club_id: destinationClub, player_id: playerId, player_name: player.name,
       wage_weekly: newWage, years_left: 3, squad_role: oldContract?.squad_role ?? "rotation",
       release_clause: null, signing_bonus: 0, happiness: 65,
+      buyback_clause: !!withBuyback, buyback_price: buybackPrice, buyback_club: withBuyback ? sellerClubId : null,
       wants_renewal: false, transfer_listed: false,
     });
   } catch (e) { console.error("Contract transfer (quick sell) failed", e); }
 
-  return Response.json({ success: true, fee, toClub: destinationClub, discountApplied: Math.round((1 - multiplier) * 100) });
+  return Response.json({ success: true, fee, toClub: destinationClub, discountApplied: Math.round((1 - multiplier) * 100), buybackPrice: withBuyback ? Math.round(fee * 1.4) : null });
 }

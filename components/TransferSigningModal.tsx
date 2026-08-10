@@ -82,6 +82,7 @@ function fmtCompact(n: number) {
 }
 
 export interface TransferContractTerms {
+  offeredFee: number;
   wageWeekly: number; yearsLeft: number; squadRole: SquadRole;
   signingBonus: number; agentFee: number; goalBonus: number; appearanceBonus: number;
   buybackClause: boolean; buybackPrice: number | null; initialPaymentPct: number; additionalTerms: string;
@@ -102,6 +103,8 @@ export function TransferSigningModal({
   ), [player.overall, player.age]);
 
   const wageStep = Math.max(500, Math.round(marketWage / 40));
+  const feeStep = Math.max(50_000, Math.round(transferFee / 40));
+  const [offeredFee, setOfferedFee] = useState(transferFee);
   const [wage, setWage] = useState(marketWage);
   const [years, setYears] = useState(3);
   const [role, setRole] = useState<SquadRole>(player.overall >= 84 ? "star" : player.overall >= 78 ? "important" : "rotation");
@@ -110,15 +113,22 @@ export function TransferSigningModal({
   const [buyback, setBuyback] = useState(false);
 
   const signingBonus = includeSigningBonus ? Math.round(wage * 4) : 0;
-  const agentFee = Math.round(transferFee * 0.05);
+  const agentFee = Math.round(offeredFee * 0.05);
   const perfBonus = includePerfBonus ? Math.round(wage * 6) : 0; // ориентировочный годовой потолок бонусов за результаты
-  const buybackPrice = buyback ? Math.round(transferFee * 1.5) : null;
+  const buybackPrice = buyback ? Math.round(offeredFee * 1.5) : null;
 
-  const totalUpfrontCost = transferFee + signingBonus + agentFee;
+  const totalUpfrontCost = offeredFee + signingBonus + agentFee;
   const canAfford = budget === null || totalUpfrontCost <= budget;
 
   const acceptanceThreshold = includeSigningBonus ? marketWage * 0.7 : marketWage * 0.85;
-  const willAccept = wage >= acceptanceThreshold;
+  const willAcceptWage = wage >= acceptanceThreshold;
+  // Club-продавец не отдаст игрока сильно дешевле рынка — чем ниже
+  // предложение относительно market_value, тем выше шанс отказа. Ниже 80%
+  // отказывают всегда, 80-95% — есть небольшой (детерминированный по
+  // сумме, не рандомный, чтобы не бесить) риск отказа, 95%+ — берут.
+  const feeRatio = offeredFee / transferFee;
+  const willAcceptFee = feeRatio >= 0.85;
+  const willAccept = willAcceptWage && willAcceptFee;
 
   return (
     <div className={ui.overlay} onClick={onCancel}>
@@ -129,6 +139,21 @@ export function TransferSigningModal({
         </div>
 
         <div className="px-6">
+          {/* Сумма трансфера — теперь торгуемая величина, а не фикс. рыночная цена */}
+          <div className={ui.row}>
+            <span className={ui.rowLabel}>{locale === "ru" ? "Сумма трансфера" : "Transfer Fee"}</span>
+            <div className="flex items-center gap-2">
+              <button className={ui.stepBtn} onClick={() => setOfferedFee(f => Math.max(Math.round(transferFee * 0.5), f - feeStep))}>−</button>
+              <span className={`${ui.rowValue} w-28 text-center`} style={{ color: willAcceptFee ? undefined : "#ef4444" }}>{fmt(offeredFee, locale)}</span>
+              <button className={ui.stepBtn} onClick={() => setOfferedFee(f => Math.min(Math.round(transferFee * 1.3), f + feeStep))}>+</button>
+            </div>
+          </div>
+          {offeredFee !== transferFee && (
+            <div className={`text-[11px] -mt-1.5 mb-1 ${ui.rowLabel}`}>
+              {locale === "ru" ? "Запрошенная клубом цена" : "Club's asking price"}: {fmt(transferFee, locale)}
+            </div>
+          )}
+
           {/* Зарплата — степпер +/- вместо слайдера, как в референсе */}
           <div className={ui.row}>
             <span className={ui.rowLabel}>{locale === "ru" ? "Зарплата" : "Wage"}</span>
@@ -198,11 +223,18 @@ export function TransferSigningModal({
         </div>
 
         <div className="px-6 pb-2">
-          {!willAccept && (
+          {!willAcceptWage && (
             <div className={`${ui.warn} rounded-xl p-3 text-sm font-bold mb-2`}>
               {locale === "ru"
                 ? "Игрок откажется на таких условиях — зарплата заметно ниже рыночной. Подними предложение."
                 : "The player will reject these terms — the wage is well below market. Raise the offer."}
+            </div>
+          )}
+          {willAcceptWage && !willAcceptFee && (
+            <div className={`${ui.warn} rounded-xl p-3 text-sm font-bold mb-2`}>
+              {locale === "ru"
+                ? `${sellingClub} не продаст игрока настолько дешевле запрошенной цены. Подними сумму трансфера.`
+                : `${sellingClub} won't sell this far below the asking price. Raise the transfer fee.`}
             </div>
           )}
           {!canAfford && (
@@ -225,6 +257,7 @@ export function TransferSigningModal({
             {locale === "ru" ? "Отмена" : "Cancel"}
           </button>
           <button disabled={busy || !canAfford || !willAccept} onClick={() => onConfirm({
+            offeredFee,
             wageWeekly: wage, yearsLeft: years, squadRole: role,
             signingBonus, agentFee, goalBonus: includePerfBonus ? Math.round(perfBonus * 0.6) : 0,
             appearanceBonus: includePerfBonus ? Math.round(perfBonus * 0.4) : 0,

@@ -165,7 +165,8 @@ export default function TransfersPage() {
   const windowLabel = preseasonOpen ? copy.transfersPreseasonWindow : winterOpen ? copy.transfersWinterWindow : copy.transfersClosed;
   const nextOpen    = matchday < 20 ? copy.transfersNextOpenWinter : copy.transfersNextOpenPreseason;
 
-  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents" | "favorites">("market");
+  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents" | "favorites" | "buybacks">("market");
+  const [buybacks, setBuybacks] = useState<any[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [market, setMarket] = useState<any[]>([]);
   const favoritePlayerIds = useCareerStore(s => s.favoritePlayerIds);
@@ -217,14 +218,30 @@ export default function TransfersPage() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId }),
       }).catch(() => {});
 
-      const [standingsRes, marketRes, squadRes, historyRes, listingsRes, agentsRes] = await Promise.all([
+      // Разрешаем ИИ-выкупы (см. opция обратного выкупа в Quick Sell) —
+      // безопасно вызывать при каждой загрузке, идемпотентно.
+      const buybackResolve = await fetch("/api/transfers/resolve-buybacks", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, userClubId: userClub }),
+      }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (buybackResolve?.resolved?.length) {
+        for (const r of buybackResolve.resolved) {
+          showToast(locale === "ru"
+            ? `${r.toClub} использовал право выкупа на ${r.playerName} за ${fmtMoney(r.price)}`
+            : `${r.toClub} exercised their buyback on ${r.playerName} for ${fmtMoney(r.price)}`, "err");
+        }
+      }
+
+      const [standingsRes, marketRes, squadRes, historyRes, listingsRes, agentsRes, buybacksRes] = await Promise.all([
         fetch(`/api/standings?seasonId=${seasonId}`),
         fetch(`/api/transfers/market?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
         fetch(`/api/players?club=${encodeURIComponent(userClub)}&seasonId=${seasonId}`),
         fetch(`/api/transfers/history?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
         fetch(`/api/transfers/listings?seasonId=${seasonId}`),
         fetch(`/api/contracts/free-agents?seasonId=${seasonId}`),
+        fetch(`/api/transfers/buyback?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
       ]);
+      if (buybacksRes.ok) setBuybacks((await buybacksRes.json()).buybacks ?? []);
       if (standingsRes.ok) {
         const standings = await standingsRes.json();
         const own = Array.isArray(standings) ? standings.find((s: any) => s.club_id === userClub) : null;
@@ -323,6 +340,21 @@ export default function TransfersPage() {
 
   const handleBuy = (p: any) => setSigningPlayer(p);
 
+  const handleBuyback = async (c: any) => {
+    if (!seasonId) return;
+    setBusyId(c.player_id);
+    try {
+      const res = await fetch("/api/transfers/buyback", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, userClubId: userClub, playerId: c.player_id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось выкупить" : "Buyback failed"), "err"); }
+      else { showToast(`${locale === "ru" ? "Выкупили" : "Bought back"} ${data.playerName} — ${fmtMoney(data.price)}`, "ok"); await loadAll(); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось выкупить" : "Buyback failed", "err"); }
+    setBusyId(null);
+  };
+
   const confirmBuy = async (terms: any) => {
     if (!seasonId || !signingPlayer) return;
     const p = signingPlayer;
@@ -342,15 +374,22 @@ export default function TransfersPage() {
   const handleQuickSell = async (p: any) => {
     if (!seasonId) return;
     if (squad.length <= 15) { showToast("Squad too small to sell — need at least 15 players", "err"); return; }
+    const withBuyback = window.confirm(locale === "ru"
+      ? `Продать ${p.name}?\n\nOK — с опцией обратного выкупа (сможешь выкупить обратно позже за ~140% суммы продажи)\nОтмена — обычная продажа без выкупа`
+      : `Sell ${p.name}?\n\nOK — with a buyback option (you can buy them back later for ~140% of the sale price)\nCancel — sell outright, no buyback`);
     setBusyId(p.id);
     try {
       const res = await fetch("/api/transfers/sell", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId, sellerClubId: userClub, playerId: p.id }),
+        body: JSON.stringify({ seasonId, sellerClubId: userClub, playerId: p.id, withBuyback }),
       });
       const data = await res.json();
       if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось продать" : "Sale failed"), "err"); }
-      else { showToast(`Quick-sold ${p.name} for ${fmtMoney(data.fee)} (-${data.discountApplied}%)`, "ok"); await loadAll(); }
+      else {
+        const buybackNote = withBuyback ? (locale === "ru" ? ` — выкуп за ${fmtMoney(data.buybackPrice)}` : ` — buyback for ${fmtMoney(data.buybackPrice)}`) : "";
+        showToast(`Quick-sold ${p.name} for ${fmtMoney(data.fee)} (-${data.discountApplied}%)${buybackNote}`, "ok");
+        await loadAll();
+      }
     } catch (e) { showToast(locale === "ru" ? "Не удалось продать" : "Sale failed", "err"); }
     setBusyId(null);
   };
@@ -421,15 +460,35 @@ export default function TransfersPage() {
           </div>
         </div>
 
-        {/* Избранное — доступно всегда, даже когда трансферное окно закрыто */}
+        {/* Избранное и выкупы — доступны всегда, даже когда трансферное окно закрыто */}
         <div className="flex gap-2 mb-4">
           <button onClick={() => setTab("favorites")}
             className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === "favorites" ? ui.tabActive : ui.tabIdle}`}>
             ★ {locale === "ru" ? "Избранное" : "Favorites"} ({favoritePlayerIds.length})
           </button>
+          {buybacks.length > 0 && (
+            <button onClick={() => setTab("buybacks")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === "buybacks" ? ui.tabActive : ui.tabIdle}`}>
+              ↩ {locale === "ru" ? "Выкупы" : "Buybacks"} ({buybacks.length})
+            </button>
+          )}
         </div>
 
-        {tab === "favorites" ? (
+        {tab === "buybacks" ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {buybacks.map((c: any) => (
+              <TransferPlayerCard key={c.player_id}
+                p={{ id: c.player_id, name: c.player_name, position: "—", overall: 0, team: c.club_id, market_value: c.buyback_price }}
+                ui={ui} onOpen={() => {}} subLabel={c.club_id} theme={theme}
+                priceLabel={fmtMoney(c.buyback_price ?? 0)}
+                actions={isOpen ? [{
+                  label: locale === "ru" ? "Выкупить" : "Buy back", icon: TrendingUp, cls: ui.buyBtn,
+                  busy: busyId === c.player_id, disabled: budget !== null && (c.buyback_price ?? 0) > budget,
+                  onClick: () => handleBuyback(c),
+                }] : []} />
+            ))}
+          </div>
+        ) : tab === "favorites" ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {favoritesList.length === 0 && (
               <div className={`text-center py-10 text-sm ${ui.muted}`}>

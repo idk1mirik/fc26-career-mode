@@ -1,6 +1,6 @@
 // app/api/transfers/buy/route.ts
-// Покупка игрока по рыночной стоимости. Без переговоров/торга — это MVP:
-// платим ровно market_value, деньги сразу списываются/зачисляются.
+// Покупка игрока — сумма трансфера теперь торгуема (см. TransferSigningModal),
+// клуб-продавец не отдаст игрока дешевле 85% от запрошенной цены.
 import { supabase } from "@/lib/supabase";
 import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { chargeClub, applyClubEarning } from "@/lib/finance";
@@ -28,7 +28,17 @@ export async function POST(req: Request) {
     return Response.json({ error: "Player already belongs to this club" }, { status: 400 });
   }
 
-  const fee = player.market_value;
+  const marketFee = player.market_value;
+  // Торг по сумме трансфера — раньше платили строго market_value без
+  // вариантов. Теперь можно предложить меньше, но клуб-продавец не отдаст
+  // игрока дешевле 85% от запрошенной цены — проверяем на сервере тоже, а
+  // не только в модалке на клиенте (иначе можно было бы обойти отказ
+  // прямым запросом к API).
+  const offeredFee = Math.max(0, Number(terms?.offeredFee) || marketFee);
+  if (offeredFee < marketFee * 0.85) {
+    return Response.json({ error: `${currentClub} rejects this offer — too far below the asking price of ${marketFee}` }, { status: 400 });
+  }
+  const fee = offeredFee;
   // Полный контракт (см. TransferSigningModal) добавляет подписной бонус и
   // комиссию агента поверх суммы трансфера — раньше списывалась только fee.
   const signingBonus = Math.max(0, Number(terms?.signingBonus) || 0);
