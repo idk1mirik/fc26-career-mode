@@ -34,6 +34,9 @@ export interface Contract {
   happiness: number;
   wants_renewal: boolean;
   transfer_listed: boolean;
+  is_loan?: boolean;
+  loan_parent_club?: string | null;
+  loan_fee?: number;
 }
 
 export interface NegotiationOffer {
@@ -246,14 +249,28 @@ export async function rolloverContracts(
       continue;
     }
     const wantsRenewal = newYears === 1 && c.happiness >= 55 && Math.random() < 0.4;
+    // Аренда — только на текущий сезон: при роллове контракт возвращается к
+    // настоящему владельцу (loan_parent_club), а не остаётся у арендатора.
+    // Без этого арендованный игрок "терялся" бы у чужого клуба навсегда.
+    const returningFromLoan = c.is_loan && c.loan_parent_club;
+    const homeClub = returningFromLoan ? c.loan_parent_club! : c.club_id;
     toInsert.push({
-      season_id: newSeasonId, career_id: careerId, club_id: c.club_id,
+      season_id: newSeasonId, career_id: careerId, club_id: homeClub,
       player_id: c.player_id, player_name: c.player_name,
       wage_weekly: c.wage_weekly, years_left: newYears,
       release_clause: c.release_clause, signing_bonus: 0,
-      squad_role: c.squad_role, happiness: c.happiness,
+      squad_role: c.squad_role, happiness: returningFromLoan ? Math.min(100, c.happiness + 5) : c.happiness, // рад вернуться домой
       wants_renewal: wantsRenewal, transfer_listed: false,
+      is_loan: false, loan_parent_club: null, loan_fee: 0,
     });
+    if (returningFromLoan) {
+      overrideWrites.push(
+        supabase.from("squad_overrides").upsert(
+          { season_id: newSeasonId, player_id: c.player_id, club_id: homeClub, updated_at: new Date().toISOString() },
+          { onConflict: "season_id,player_id" }
+        )
+      );
+    }
   }
 
   if (toInsert.length) {

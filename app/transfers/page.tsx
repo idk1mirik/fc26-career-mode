@@ -167,6 +167,7 @@ export default function TransfersPage() {
 
   const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents" | "favorites" | "buybacks">("market");
   const [buybacks, setBuybacks] = useState<any[]>([]);
+  const [myContracts, setMyContracts] = useState<any[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [market, setMarket] = useState<any[]>([]);
   const favoritePlayerIds = useCareerStore(s => s.favoritePlayerIds);
@@ -232,7 +233,7 @@ export default function TransfersPage() {
         }
       }
 
-      const [standingsRes, marketRes, squadRes, historyRes, listingsRes, agentsRes, buybacksRes] = await Promise.all([
+      const [standingsRes, marketRes, squadRes, historyRes, listingsRes, agentsRes, buybacksRes, contractsRes] = await Promise.all([
         fetch(`/api/standings?seasonId=${seasonId}`),
         fetch(`/api/transfers/market?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
         fetch(`/api/players?club=${encodeURIComponent(userClub)}&seasonId=${seasonId}`),
@@ -240,8 +241,10 @@ export default function TransfersPage() {
         fetch(`/api/transfers/listings?seasonId=${seasonId}`),
         fetch(`/api/contracts/free-agents?seasonId=${seasonId}`),
         fetch(`/api/transfers/buyback?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
+        fetch(`/api/contracts?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`),
       ]);
       if (buybacksRes.ok) setBuybacks((await buybacksRes.json()).buybacks ?? []);
+      if (contractsRes.ok) setMyContracts((await contractsRes.json()).contracts ?? []);
       if (standingsRes.ok) {
         const standings = await standingsRes.json();
         const own = Array.isArray(standings) ? standings.find((s: any) => s.club_id === userClub) : null;
@@ -339,6 +342,52 @@ export default function TransfersPage() {
   const [signingPlayer, setSigningPlayer] = useState<any>(null);
 
   const handleBuy = (p: any) => setSigningPlayer(p);
+
+  const handleLoanOut = async (p: any) => {
+    if (!seasonId) return;
+    if (squad.length <= 15) { showToast("Squad too small to loan out — need at least 15 players", "err"); return; }
+    setBusyId(p.id);
+    try {
+      const res = await fetch("/api/transfers/loan-out", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, ownerClubId: userClub, playerId: p.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось отдать в аренду" : "Loan failed"), "err"); }
+      else { showToast(`${locale === "ru" ? "Отдали в аренду в" : "Loaned out to"} ${data.toClub} (+${fmtMoney(data.loanFee)})`, "ok"); await loadAll(); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось отдать в аренду" : "Loan failed", "err"); }
+    setBusyId(null);
+  };
+
+  const handleLoanIn = async (p: any) => {
+    if (!seasonId) return;
+    setBusyId(p.id);
+    try {
+      const res = await fetch("/api/transfers/loan-in", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, borrowerClubId: userClub, playerId: p.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось взять в аренду" : "Loan failed"), "err"); }
+      else { showToast(`${locale === "ru" ? "Взяли в аренду у" : "Loaned in from"} ${data.fromClub} (−${fmtMoney(data.loanFee)})`, "ok"); await loadAll(); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось взять в аренду" : "Loan failed", "err"); }
+    setBusyId(null);
+  };
+
+  const handleRecallLoan = async (p: any) => {
+    if (!seasonId) return;
+    setBusyId(p.id);
+    try {
+      const res = await fetch("/api/transfers/recall-loan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId, ownerClubId: userClub, playerId: p.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Не удалось отозвать" : "Recall failed"), "err"); }
+      else { showToast(`${locale === "ru" ? "Отозвали" : "Recalled"} ${data.playerName}`, "ok"); await loadAll(); }
+    } catch (e) { showToast(locale === "ru" ? "Не удалось отозвать" : "Recall failed", "err"); }
+    setBusyId(null);
+  };
 
   const handleBuyback = async (c: any) => {
     if (!seasonId) return;
@@ -579,6 +628,10 @@ export default function TransfersPage() {
                       label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
                       busy: busyId === p.id, disabled: budget !== null && (p.market_value ?? 0) > budget,
                       onClick: () => handleBuy(p),
+                    }, {
+                      label: locale === "ru" ? "Аренда" : "Loan",
+                      icon: Tag, cls: ui.sellBtn, busy: busyId === p.id,
+                      onClick: () => handleLoanIn(p),
                     }]} />
                 ))}
               </div>
@@ -587,13 +640,19 @@ export default function TransfersPage() {
                 {filteredSquad.length === 0 && (
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
-                {filteredSquad.map((p: any) => (
-                  <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={`${p.age} y.o.`} theme={theme}
-                    actions={[
-                      { label: copy.transfersQuickSell, icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
-                      { label: copy.transfersList, icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
-                    ]} />
-                ))}
+                {filteredSquad.map((p: any) => {
+                  const onLoanElsewhere = myContracts.some((c: any) => c.player_id === p.id && c.is_loan && c.loan_parent_club === userClub);
+                  return (
+                    <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={onLoanElsewhere ? (locale === "ru" ? "в аренде" : "on loan") : `${p.age} y.o.`} theme={theme}
+                      actions={onLoanElsewhere ? [
+                        { label: locale === "ru" ? "Отозвать" : "Recall", icon: TrendingUp, cls: ui.buyBtn, busy: busyId === p.id, onClick: () => handleRecallLoan(p) },
+                      ] : [
+                        { label: copy.transfersQuickSell, icon: TrendingDown, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleQuickSell(p) },
+                        { label: locale === "ru" ? "Аренда" : "Loan", icon: Tag, cls: ui.sellBtn, busy: busyId === p.id, onClick: () => handleLoanOut(p) },
+                        { label: copy.transfersList, icon: Tag, cls: ui.buyBtn, busy: busyId === p.id, disabled: myListings.some(l => l.player_id === p.id), onClick: () => setListingTarget(p) },
+                      ]} />
+                  );
+                })}
               </div>
             ) : tab === "listings" ? (
               <div className="space-y-6">
