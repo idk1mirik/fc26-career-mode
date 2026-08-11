@@ -129,6 +129,7 @@ export function ContractPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [releasing, setReleasing] = useState(false);
+  const [confirmingRelease, setConfirmingRelease] = useState(false);
 
   // Рыночная оценка — та же формула, что и на сервере, чтобы подсказка
   // была честной и совпадала с реальной логикой переговоров.
@@ -350,28 +351,46 @@ export function ContractPanel({
 
         <div className={`flex gap-3 justify-between items-center pt-3 border-t ${s.divider}`}>
           {!isFreeAgent && seasonId && clubId && onReleased ? (
-            <button
-              onClick={async () => {
-                if (!confirm(ru ? "Расторгнуть контракт? Игрок сразу станет свободным агентом." : "Release this player? They'll become a free agent immediately.")) return;
-                setReleasing(true);
-                try {
-                  const res = await fetch("/api/contracts/release", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ seasonId, clubId, playerId: player.playerId }),
-                  });
-                  if (!res.ok) throw new Error((await res.json()).error ?? "Release failed");
-                  onReleased();
-                  onClose();
-                } catch (e: any) {
-                  setError(e.message ?? "Release failed");
-                } finally {
-                  setReleasing(false);
-                }
-              }}
-              disabled={releasing || loading}
-              className="text-xs font-bold text-red-400 hover:text-red-300 transition disabled:opacity-40">
-              {releasing ? "…" : (ru ? "🗑 Отпустить игрока" : "🗑 Release player")}
-            </button>
+            confirmingRelease ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-red-400">
+                  {ru ? "Точно? Станет своб. агентом." : "Sure? They'll become a free agent."}
+                </span>
+                <button
+                  onClick={async () => {
+                    setConfirmingRelease(false);
+                    setReleasing(true);
+                    try {
+                      const res = await fetch("/api/contracts/release", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ seasonId, clubId, playerId: player.playerId }),
+                      });
+                      if (!res.ok) throw new Error((await res.json()).error ?? "Release failed");
+                      onReleased();
+                      onClose();
+                    } catch (e: any) {
+                      setError(e.message ?? "Release failed");
+                    } finally {
+                      setReleasing(false);
+                    }
+                  }}
+                  disabled={releasing || loading}
+                  className="text-xs font-black px-2.5 py-1 rounded-lg bg-red-500 text-white hover:bg-red-400 transition disabled:opacity-40">
+                  {releasing ? "…" : (ru ? "Да, отпустить" : "Yes, release")}
+                </button>
+                <button onClick={() => setConfirmingRelease(false)} disabled={releasing}
+                  className="text-xs font-bold opacity-60 hover:opacity-100 transition">
+                  {ru ? "Отмена" : "Cancel"}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingRelease(true)}
+                disabled={releasing || loading}
+                className="text-xs font-bold text-red-400 hover:text-red-300 transition disabled:opacity-40">
+                🗑 {ru ? "Отпустить игрока" : "Release player"}
+              </button>
+            )
           ) : <span />}
           <div className="flex gap-2.5">
             <button className={`${s.secondaryBtn} text-sm py-3 px-5`} onClick={onClose} disabled={loading}>{t.cancelButton}</button>

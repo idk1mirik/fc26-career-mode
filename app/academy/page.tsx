@@ -53,6 +53,7 @@ export default function AcademyPage() {
   const [upgradeCost, setUpgradeCost] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmingReleaseId, setConfirmingReleaseId] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [viewPlayer, setViewPlayer] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +99,7 @@ export default function AcademyPage() {
   };
 
   const handleRelease = async (p: any) => {
-    if (!confirm(locale === "ru" ? `Отчислить ${p.name}?` : `Release ${p.name}?`)) return;
+    setConfirmingReleaseId(null);
     setBusyId(p.id);
     setError(null);
     try {
@@ -233,14 +234,29 @@ export default function AcademyPage() {
                   </div>
 
                   <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => handlePromote(p)} disabled={busyId === p.id}
-                      className={`flex-1 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition disabled:opacity-40 ${ui.primaryBtn}`}>
-                      <TrendingUp size={13} /> {locale === "ru" ? "В команду" : "Promote"}
-                    </button>
-                    <button onClick={() => handleRelease(p)} disabled={busyId === p.id}
-                      className={`px-3 py-2 rounded-xl transition disabled:opacity-40 ${ui.dangerBtn}`} title={locale === "ru" ? "Отчислить" : "Release"}>
-                      <Trash2 size={14} />
-                    </button>
+                    {confirmingReleaseId === p.id ? (
+                      <>
+                        <button onClick={() => handleRelease(p)} disabled={busyId === p.id}
+                          className="flex-1 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition disabled:opacity-40 bg-red-500 text-white hover:bg-red-400">
+                          {busyId === p.id ? "…" : (locale === "ru" ? "Точно отчислить?" : "Confirm release?")}
+                        </button>
+                        <button onClick={() => setConfirmingReleaseId(null)} disabled={busyId === p.id}
+                          className={`px-3 py-2 rounded-xl transition disabled:opacity-40 ${ui.secondaryBtn}`}>
+                          {locale === "ru" ? "Нет" : "No"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => handlePromote(p)} disabled={busyId === p.id}
+                          className={`flex-1 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition disabled:opacity-40 ${ui.primaryBtn}`}>
+                          <TrendingUp size={13} /> {locale === "ru" ? "В команду" : "Promote"}
+                        </button>
+                        <button onClick={() => setConfirmingReleaseId(p.id)} disabled={busyId === p.id}
+                          className={`px-3 py-2 rounded-xl transition disabled:opacity-40 ${ui.dangerBtn}`} title={locale === "ru" ? "Отчислить" : "Release"}>
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
