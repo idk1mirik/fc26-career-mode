@@ -134,7 +134,7 @@ export default function TacticsPage() {
             <div className="space-y-2">
               {Object.entries(TACTICS).map(([key, t]) => (
                 <div key={key} onClick={() => setTactic(key)}
-                  className={`p-4 rounded-2xl cursor-pointer transition-all border ${
+                  className={`p-4 rounded-2xl cursor-pointer transition-all card-lift border ${
                     tactic === key ? ui.cardActive : `${ui.card} animate-fade-in-up ${ui.hover}`
                   }`}>
                   <div className="flex items-center justify-between mb-1">
@@ -150,7 +150,7 @@ export default function TacticsPage() {
           {/* Current tactic details */}
           <div>
             <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>{copy.tacticsCurrent}: {current.name}</div>
-            <div className={`p-5 rounded-2xl ${ui.card} animate-fade-in-up`}>
+            <div className={`p-5 rounded-2xl shadow-lg ${ui.card} animate-fade-in-up`}>
               <div className="flex items-center justify-end -mt-1 mb-2">
                 <HelpHint id="tactics-params" theme={theme as any}
                   title={locale === "ru" ? "Параметры тактики" : "Tactic parameters"}
