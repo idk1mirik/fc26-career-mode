@@ -9,6 +9,7 @@ import { getLeagueTheme } from "@/constants/themes";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupValidation";
 import { getClubLogo } from "@/data/clublogos";
+import { useClubColor } from "@/app/hooks/useClubColor";
 import { getLeagueLogo } from "@/data/leagueLogos";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
@@ -249,7 +250,13 @@ export default function DashboardPage() {
   }, [hydrated, selectedClub, router]);
 
   const leagueTheme = getLeagueTheme(selectedLeague?.name || selectedClub?.league || "Premier League", theme);
-  const glowColor   = leagueTheme?.rawColor || "#ffffff";
+  const clubColor = useClubColor(
+    selectedClub?.name,
+    selectedLeague?.name || selectedClub?.league,
+    selectedClub?.name ? getClubLogo(selectedClub.name) : null,
+    theme
+  );
+  const glowColor   = clubColor || leagueTheme?.rawColor || "#ffffff";
   const lineupConfirmed = useCareerStore(s => s.lineupConfirmed);
   const tacticConfirmed = useCareerStore(s => s.tacticConfirmed);
   const readyForSeasonSim = lineupConfirmed && tacticConfirmed;
@@ -896,7 +903,7 @@ export default function DashboardPage() {
                         useCareerStore.getState().setLineup(lineupsByFormation[f]);
                       }}
                       className="px-2.5 py-1 rounded-lg text-[10px] font-black transition-all"
-                      style={{ background: formation === f ? `${leagueTheme.rawColor}30` : "rgba(255,255,255,0.05)", color: formation === f ? leagueTheme.rawColor : undefined }}>
+                      style={{ background: formation === f ? `${glowColor}30` : "rgba(255,255,255,0.05)", color: formation === f ? glowColor : undefined }}>
                       {f}
                     </button>
                   ))}
@@ -906,7 +913,7 @@ export default function DashboardPage() {
                         useCareerStore.getState().setLineup(customFormationsStore[f].lineup);
                       }}
                       className="px-2.5 py-1 rounded-lg text-[10px] font-black transition-all"
-                      style={{ background: formation === f ? `${leagueTheme.rawColor}30` : "rgba(255,255,255,0.05)", color: formation === f ? leagueTheme.rawColor : undefined }}>
+                      style={{ background: formation === f ? `${glowColor}30` : "rgba(255,255,255,0.05)", color: formation === f ? glowColor : undefined }}>
                       📐 {f}
                     </button>
                   ))}

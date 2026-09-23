@@ -10,6 +10,7 @@ import LogoCard from "@/components/LogoCard";
 import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useClubColor } from "@/app/hooks/useClubColor";
 
 const LEAGUE_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
   football_club: string; squad_status: string; ready: string; loading: string;
@@ -87,6 +88,8 @@ const ClubCard = memo(function ClubCard({
   const setSelectedClub = useCareerStore(s => s.setSelectedClub);
   const setSelectedLeague = useCareerStore(s => s.setSelectedLeague);
   const leagueTheme = getLeagueTheme(league.name, theme);
+  // Для топ-7 лиг — свой цвет клуба (по эмблеме), для остальных — цвет лиги как раньше
+  const clubColor = useClubColor(club.name, league.name, getClubLogo(club.name), theme);
 
   // PERF: removed onMouseMove + getBoundingClientRect glow.
   // That was calling getBoundingClientRect() on EVERY mouse move across
@@ -98,7 +101,7 @@ const ClubCard = memo(function ClubCard({
     router.push(`/select-club/${encodeURIComponent(club.id)}`);
   }, [club, league, router, setSelectedClub, setSelectedLeague]);
 
-  const borderColor = theme === "maleficent" ? `${leagueTheme.rawColor}30` : undefined;
+  const borderColor = theme === "maleficent" ? `${clubColor}30` : undefined;
 
   return (
     <div
@@ -112,11 +115,11 @@ const ClubCard = memo(function ClubCard({
       {/* PERF: static gradient on hover, no JS needed — GPU-only */}
       <div
         className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse at 50% 0%, ${leagueTheme.rawColor}18, transparent 70%)` }}
+        style={{ background: `radial-gradient(ellipse at 50% 0%, ${clubColor}18, transparent 70%)` }}
       />
 
       {theme === "maleficent" && (
-        <div className="absolute top-0 left-0 right-0 h-px" style={{ background: `linear-gradient(90deg,transparent,${leagueTheme.rawColor}40,transparent)` }} />
+        <div className="absolute top-0 left-0 right-0 h-px" style={{ background: `linear-gradient(90deg,transparent,${clubColor}40,transparent)` }} />
       )}
 
       <div className="relative z-10">
@@ -130,7 +133,7 @@ const ClubCard = memo(function ClubCard({
               className={`text-xl md:text-2xl leading-tight mt-1 truncate ${ui.card.name}`}
               style={theme === "aurora" ? {
                 fontFamily: "'Fraunces',serif",
-                backgroundImage: `linear-gradient(135deg,${leagueTheme.rawColor},${leagueTheme.rawColor}80)`,
+                backgroundImage: `linear-gradient(135deg,${clubColor},${clubColor}80)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               } : {}}

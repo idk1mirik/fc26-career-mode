@@ -12,6 +12,7 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
 import { PlayerModal, PlayerCard, fmtValue } from "@/app/lib/playerComponents";
+import { useClubColor } from "@/app/hooks/useClubColor";
 
 const SELECT_CLUB_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
   pageLabel: string; loading: string; searchPlayer: string; allPositions: string;
@@ -174,6 +175,9 @@ export default function SelectClubPage() {
     () => getLeagueTheme(selectedLeague?.name || club?.league || "Premier League", theme),
     [selectedLeague?.name, club?.league, theme]
   );
+  // Для клубов топ-7 лиг — свой цвет клуба (по эмблеме), иначе цвет лиги как раньше
+  const clubLeagueName = selectedLeague?.name || club?.league || "Premier League";
+  const clubColor = useClubColor(club?.name, clubLeagueName, club?.name ? getClubLogo(club.name) : null, theme);
 
   const positions = useMemo(() => {
     const players = club?.players ?? [];
@@ -299,7 +303,7 @@ export default function SelectClubPage() {
               <h1 className={ui.headerClass} style={ui.headerFont}>{club.name}</h1>
               <p className="text-xs opacity-60 mt-1 uppercase tracking-widest">{club.league}</p>
               {estimatedBudget > 0 && (
-                <p className="text-sm font-black mt-1.5" style={{ color: leagueTheme.rawColor }}>
+                <p className="text-sm font-black mt-1.5" style={{ color: clubColor }}>
                   💰 {fmtValue(estimatedBudget)} {text.transferBudget}
                 </p>
               )}
@@ -332,7 +336,7 @@ export default function SelectClubPage() {
                 }
               }}
               className="px-5 py-3 rounded-2xl font-black transition-colors duration-200 hover:opacity-90"
-              style={{ background: leagueTheme.rawColor, color: "#fff" }}
+              style={{ background: clubColor, color: "#fff" }}
             >
               {text.startCareer}
             </button>
@@ -354,7 +358,7 @@ export default function SelectClubPage() {
               <PlayerCard
                 player={player}
                 clubName={club.name}
-                clubColor={leagueTheme.rawColor}
+                clubColor={clubColor}
                 theme={theme}
                 index={i}
                 onOpen={openModal.bind(null, player)}
@@ -368,7 +372,7 @@ export default function SelectClubPage() {
         <PlayerModal
           player={modalPlayer}
           clubName={club.name}
-          clubColor={leagueTheme.rawColor}
+          clubColor={clubColor}
           theme={theme}
           onClose={closeModal}
           isClosing={modalClosing}
@@ -379,7 +383,7 @@ export default function SelectClubPage() {
       {showConfirm && (
         <ConfirmCareerModal
           theme={theme}
-          clubColor={leagueTheme.rawColor}
+          clubColor={clubColor}
           text={text}
           onCancel={() => setShowConfirm(false)}
           onConfirm={() => {

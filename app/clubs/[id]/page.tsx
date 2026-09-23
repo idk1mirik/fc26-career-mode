@@ -10,6 +10,7 @@ import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useCareerStore } from "@/app/store/careerStore";
 import { PlayerCard, PlayerModal } from "@/app/lib/playerComponents";
+import { useClubColor } from "@/app/hooks/useClubColor";
 
 const CLUB_TEXT: Record<"en" | "ru", Record<"classic" | "aurora" | "maleficent", {
   pageLabel: string; loading: string; overallRating: string; searchRoster: string;
@@ -181,6 +182,8 @@ export default function ClubProfilePage() {
   );
 
   const leagueTheme = getLeagueTheme(club.league || "Premier League", theme);
+  // Для клубов топ-7 лиг — свой цвет по эмблеме, иначе цвет лиги как раньше
+  const clubColor = useClubColor(club.name, club.league, getClubLogo(club.name), theme);
   const uniquePositions = Array.from(new Set<string>((club.players || []).map((p: any) => p.position).filter(Boolean))).sort();
   const positions = ["ALL", ...uniquePositions];
 
@@ -260,7 +263,7 @@ export default function ClubProfilePage() {
                   style={{ color: isFav ? "#eab308" : "#fff", opacity: isFav ? 1 : 0.55, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
                   {isFav ? "★" : "☆"}
                 </button>
-                <PlayerCard player={player} clubName={club.name} clubColor={leagueTheme.rawColor} theme={theme} index={i} onOpen={() => setModalPlayer(player)} />
+                <PlayerCard player={player} clubName={club.name} clubColor={clubColor} theme={theme} index={i} onOpen={() => setModalPlayer(player)} />
               </div>
             );
           })}
@@ -271,7 +274,7 @@ export default function ClubProfilePage() {
         <PlayerModal
           player={modalPlayer}
           clubName={club.name}
-          clubColor={leagueTheme.rawColor}
+          clubColor={clubColor}
           theme={theme}
           onClose={() => setModalPlayer(null)}
           isClosing={false}

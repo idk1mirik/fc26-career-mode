@@ -3,8 +3,9 @@ import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
-import { getPlayerPhoto } from "@/lib/images";
+import { getPlayerPhoto, getClubLogo } from "@/lib/images";
 import { getLeagueTheme } from "@/constants/themes";
+import { useClubColor } from "@/app/hooks/useClubColor";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { PlayerModal, PlayerCard, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
 import { getAdjustedOverall } from "@/lib/positionPenalty";
@@ -481,7 +482,13 @@ export default function SquadPage() {
     getLeagueTheme(selectedLeague?.name || selectedClub?.league || "Premier League", theme),
     [selectedLeague, selectedClub, theme]
   );
-  const glowColor = leagueTheme?.rawColor || "#22c55e";
+  const clubColor = useClubColor(
+    selectedClub?.name,
+    selectedLeague?.name || selectedClub?.league,
+    selectedClub?.name ? getClubLogo(selectedClub.name) : null,
+    theme
+  );
+  const glowColor = clubColor || leagueTheme?.rawColor || "#22c55e";
 
   useEffect(() => {
     if (!hydrated || !selectedClub) return;

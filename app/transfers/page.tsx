@@ -4,7 +4,8 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { TransferSigningModal } from "@/components/TransferSigningModal";
 import { useThemeStore } from "@/app/store/themeStore";
 import DashboardLayout from "@/app/lib/DashboardLayout";
-import { getPlayerPhoto } from "@/lib/images";
+import { getPlayerPhoto, getClubLogo } from "@/lib/images";
+import { useClubColor } from "@/app/hooks/useClubColor";
 import { getRatingColor, FlagImage, PlayerModal } from "@/app/lib/playerComponents";
 import { getLeagueTheme } from "@/constants/themes";
 import { TrendingUp, TrendingDown, Lock, Search, Wallet, Tag, X as XIcon } from "lucide-react";
@@ -199,6 +200,14 @@ export default function TransfersPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [modalPlayer, setModalPlayer] = useState<any | null>(null);
+  const modalPlayerLeague = modalPlayer?.league || selectedClub?.league || "Premier League";
+  const modalPlayerClub = modalPlayer?.team ?? userClub;
+  const modalPlayerClubColor = useClubColor(
+    modalPlayerClub || null,
+    modalPlayerLeague,
+    modalPlayerClub ? getClubLogo(modalPlayerClub) : null,
+    theme
+  );
   const [modalClosing, setModalClosing] = useState(false);
   const [listingTarget, setListingTarget] = useState<any | null>(null);
 
@@ -732,7 +741,7 @@ export default function TransfersPage() {
           <PlayerModal
             player={modalPlayer}
             clubName={modalPlayer.team ?? userClub}
-            clubColor={getLeagueTheme(modalPlayer.league || selectedClub?.league || "Premier League", theme).rawColor}
+            clubColor={modalPlayerClubColor}
             theme={theme}
             onClose={closeModal}
             isClosing={modalClosing}
