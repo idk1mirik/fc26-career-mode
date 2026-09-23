@@ -220,12 +220,13 @@ export async function payWeeklyWages(seasonId: string, clubIds: string[]) {
 
 export async function rolloverContracts(
   careerId: string, oldSeasonId: string, newSeasonId: string
-): Promise<{ expired: Contract[]; carried: number; freedAgents: number }> {
+): Promise<{ expired: Contract[]; carried: number; freedAgents: number; loanReturns: { playerId: string; playerName: string; toClub: string; fromClub: string }[] }> {
   const { data: contracts } = await supabase.from("contracts")
     .select("*").eq("career_id", careerId).eq("season_id", oldSeasonId);
-  if (!contracts?.length) return { expired: [], carried: 0, freedAgents: 0 };
+  if (!contracts?.length) return { expired: [], carried: 0, freedAgents: 0, loanReturns: [] };
 
   const expired: Contract[] = [];
+  const loanReturns: { playerId: string; playerName: string; toClub: string; fromClub: string }[] = [];
   const toInsert: any[] = [];
   const overrideWrites: any[] = [];
 
@@ -264,6 +265,7 @@ export async function rolloverContracts(
       is_loan: false, loan_parent_club: null, loan_fee: 0,
     });
     if (returningFromLoan) {
+      loanReturns.push({ playerId: c.player_id, playerName: c.player_name, toClub: homeClub, fromClub: c.club_id });
       overrideWrites.push(
         supabase.from("squad_overrides").upsert(
           { season_id: newSeasonId, player_id: c.player_id, club_id: homeClub, updated_at: new Date().toISOString() },
@@ -279,7 +281,7 @@ export async function rolloverContracts(
   }
   if (overrideWrites.length) await Promise.all(overrideWrites);
 
-  return { expired, carried: toInsert.length - expired.length, freedAgents: expired.length };
+  return { expired, carried: toInsert.length - expired.length, freedAgents: expired.length, loanReturns };
 }
 
 export async function createContractsForClub(

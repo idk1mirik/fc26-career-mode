@@ -8,6 +8,7 @@ import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { chargeClub, applyClubEarning } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
 import { getCareerId } from "@/lib/contracts";
+import { pushNotification } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   const { seasonId, borrowerClubId, playerId } = await req.json();
@@ -64,5 +65,13 @@ export async function POST(req: Request) {
   });
 
   invalidateOverridesCache(seasonId);
+
+  await pushNotification({
+    seasonId, clubId: borrowerClubId, type: "loan_in",
+    title: "Игрок взят в аренду",
+    message: `${player.name} прибыл в аренду из ${currentClub} за ${loanFee.toLocaleString()}.`,
+    meta: { playerId, playerName: player.name, fromClub: currentClub, loanFee },
+  });
+
   return Response.json({ success: true, fromClub: currentClub, loanFee });
 }

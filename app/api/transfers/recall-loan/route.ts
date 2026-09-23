@@ -7,6 +7,7 @@
 import { supabase } from "@/lib/supabase";
 import { invalidateOverridesCache } from "@/lib/players";
 import { checkTransferWindow } from "@/lib/transferWindow";
+import { pushNotification } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   const { seasonId, ownerClubId, playerId } = await req.json();
@@ -36,5 +37,13 @@ export async function POST(req: Request) {
   });
 
   invalidateOverridesCache(seasonId);
+
+  await pushNotification({
+    seasonId, clubId: ownerClubId, type: "loan_recalled",
+    title: "Аренда отозвана",
+    message: `${contract.player_name} досрочно отозван из аренды и вернулся в состав.`,
+    meta: { playerId, playerName: contract.player_name, fromClub: contract.club_id },
+  });
+
   return Response.json({ success: true, playerName: contract.player_name });
 }

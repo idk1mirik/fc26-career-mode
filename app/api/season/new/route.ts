@@ -7,6 +7,7 @@ import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { progressLeaguePlayers } from "@/lib/progression";
 import { rolloverContracts, createContractsForClub } from "@/lib/contracts";
 import { rolloverAcademy } from "@/lib/academy";
+import { pushNotifications, PushNotificationParams } from "@/lib/notifications";
 
 function buildFixtures(clubs: string[], seasonId: string) {
   const rows: any[] = [];
@@ -97,7 +98,41 @@ export async function POST(req: Request) {
   // явно (с уменьшенным years_left). У кого контракт кончился — не переносится,
   // такие игроки станут доступны как свободные агенты на трансферном рынке.
   try {
-    await rolloverContracts(careerId, oldSeasonId, newSeason.id);
+    const rollover = await rolloverContracts(careerId, oldSeasonId, newSeason.id);
+
+    // Уведомления только по клубу пользователя — у ИИ-клубов тоже истекают
+    // контракты и возвращаются займы каждый сезон, но это не должно
+    // засорять уведомления игрока чужими делами.
+    const notes: PushNotificationParams[] = [];
+    const userClubId = oldSeason.club_id;
+
+    for (const c of rollover.expired) {
+      if (c.club_id?.toLowerCase() !== userClubId?.toLowerCase()) continue;
+      notes.push({
+        seasonId: newSeason.id, clubId: userClubId, type: "contract_expiring",
+        title: "Контракт истёк",
+        message: `Контракт ${c.player_name} закончился — игрок стал свободным агентом.`,
+        meta: { playerId: c.player_id, playerName: c.player_name },
+      });
+    }
+    for (const lr of rollover.loanReturns) {
+      if (lr.toClub?.toLowerCase() === userClubId?.toLowerCase()) {
+        notes.push({
+          seasonId: newSeason.id, clubId: userClubId, type: "loan_returned",
+          title: "Игрок вернулся из аренды",
+          message: `${lr.playerName} вернулся в клуб по окончании срока аренды.`,
+          meta: { playerId: lr.playerId, playerName: lr.playerName, fromClub: lr.fromClub },
+        });
+      } else if (lr.fromClub?.toLowerCase() === userClubId?.toLowerCase()) {
+        notes.push({
+          seasonId: newSeason.id, clubId: userClubId, type: "loan_returned",
+          title: "Арендованный игрок уехал обратно",
+          message: `Срок аренды ${lr.playerName} закончился — игрок вернулся в ${lr.toClub}.`,
+          meta: { playerId: lr.playerId, playerName: lr.playerName, toClub: lr.toClub },
+        });
+      }
+    }
+    if (notes.length) await pushNotifications(notes);
   } catch (e) { console.error("Contract rollover failed", e); }
 
   try {

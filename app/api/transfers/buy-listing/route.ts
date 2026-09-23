@@ -4,6 +4,7 @@ import { invalidateOverridesCache } from "@/lib/players";
 import { chargeClub, applyClubEarning } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
 import { calculateWageDemand, getCareerId } from "@/lib/contracts";
+import { pushNotification } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   const { seasonId, buyerClubId, listingId } = await req.json();
@@ -72,6 +73,13 @@ export async function POST(req: Request) {
       wants_renewal: false, transfer_listed: false,
     });
   } catch (e) { console.error("Contract transfer (buy-listing) failed", e); }
+
+  await pushNotification({
+    seasonId, clubId: listing.seller_club, type: "sale_listing",
+    title: "Лот продан",
+    message: `${listing.player_name} куплен клубом ${buyerClubId} за ${listing.asking_price.toLocaleString()}.`,
+    meta: { playerId: listing.player_id, playerName: listing.player_name, price: listing.asking_price, buyerClub: buyerClubId },
+  });
 
   return Response.json({ success: true, fee: listing.asking_price, fromClub: listing.seller_club, playerName: listing.player_name });
 }

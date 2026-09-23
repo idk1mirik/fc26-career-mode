@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap } from "lucide-react";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
+import NotificationBell from "@/components/NotificationBell";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
 import { getThemeCopy } from "@/lib/i18n";
@@ -164,6 +165,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const theme    = useThemeStore(s => s.theme) as keyof typeof SIDEBAR;
   const glowColor = GLOW[theme] ?? "#ffffff";
   const [mobileOpen, setMobileOpen] = useState(false);
+  const seasonId     = useCareerStore(s => s.seasonId);
+  const selectedClub = useCareerStore(s => s.selectedClub);
+  const locale        = (useCareerStore(s => s.locale) || "en") as "en" | "ru";
 
   return (
     <div className={`min-h-screen flex relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
@@ -211,7 +215,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden relative z-10">
-        <div className="absolute top-4 right-4 z-50"><ThemeToggle /></div>
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+          <NotificationBell seasonId={seasonId} clubId={selectedClub?.name} theme={theme} glowColor={glowColor} locale={locale} />
+          <ThemeToggle />
+        </div>
         <div key={pathname} className="animate-fade-in">
           {children}
         </div>

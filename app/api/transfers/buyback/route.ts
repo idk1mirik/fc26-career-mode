@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { invalidateOverridesCache } from "@/lib/players";
 import { applyClubEarning, chargeClub } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
+import { pushNotification } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -62,5 +63,13 @@ export async function POST(req: Request) {
   });
 
   invalidateOverridesCache(seasonId);
+
+  await pushNotification({
+    seasonId, clubId: userClubId, type: "buyback_used",
+    title: "Обратный выкуп совершён",
+    message: `${contract.player_name} выкуплен обратно у ${currentClub} за ${price.toLocaleString()}.`,
+    meta: { playerId, playerName: contract.player_name, price, fromClub: currentClub },
+  });
+
   return Response.json({ success: true, playerName: contract.player_name, price, fromClub: currentClub });
 }

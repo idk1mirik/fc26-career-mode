@@ -10,6 +10,7 @@ import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { applyClubEarning } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
 import { calculateWageDemand, getCareerId } from "@/lib/contracts";
+import { pushNotification } from "@/lib/notifications";
 
 function quickSellMultiplier(ovr: number): number {
   const base = 0.65;
@@ -102,6 +103,13 @@ export async function POST(req: Request) {
       wants_renewal: false, transfer_listed: false,
     });
   } catch (e) { console.error("Contract transfer (quick sell) failed", e); }
+
+  await pushNotification({
+    seasonId, clubId: sellerClubId, type: "sale_quick",
+    title: "Быстрая продажа совершена",
+    message: `${player.name} продан в ${destinationClub} за ${fee.toLocaleString()}.`,
+    meta: { playerId, playerName: player.name, price: fee, toClub: destinationClub },
+  });
 
   return Response.json({ success: true, fee, toClub: destinationClub, discountApplied: Math.round((1 - multiplier) * 100), buybackPrice: withBuyback ? Math.round(fee * 1.4) : null });
 }

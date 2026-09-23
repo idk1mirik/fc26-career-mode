@@ -62,6 +62,7 @@ export interface ThemeCopy {
   transfersBuy: string; transfersQuickSell: string; transfersList: string; transfersCancel: string;
   transfersRecalculate: string; transfersRecentActivity: string;
   transfersListModalMarketEstimate: string; transfersListModalPlaceholder: string; transfersListModalConfirm: string;
+  transfersWaitingOffers: string;
 
   // Common
   commonCancel: string; commonSave: string; commonDelete: string; commonSearch: string; commonLoading: string;
@@ -115,7 +116,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       transfersNextOpenWinter: "Opens again at Matchday 20 (January)", transfersNextOpenPreseason: "Opens next preseason",
       transfersMarketTab: "Market", transfersSquadTab: "My Squad", transfersListingsTab: "Listings",
       transfersSearchMarket: "Search players or clubs...", transfersSearchSquad: "Search your squad...", transfersNoPlayers: "No players found",
-      transfersMyListings: "My Listings", transfersOpenListings: "Open Listings", transfersNoListings: "No listings from other clubs right now",
+      transfersMyListings: "My Listings", transfersOpenListings: "Open Listings", transfersNoListings: "No listings from other clubs right now", transfersWaitingOffers: "⏳ Waiting for offers",
       transfersBuy: "Buy", transfersQuickSell: "Quick Sell", transfersList: "List", transfersCancel: "Cancel",
       transfersRecalculate: "Recalculate", transfersRecentActivity: "Recent Activity",
       transfersListModalMarketEstimate: "Market estimate:", transfersListModalPlaceholder: "Asking price, €", transfersListModalConfirm: "List",
@@ -167,7 +168,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       transfersNextOpenWinter: "Reopens at Matchday 20 (our January) ✦", transfersNextOpenPreseason: "Opens again next preseason ✦",
       transfersMarketTab: "Dream Market", transfersSquadTab: "My Team", transfersListingsTab: "Trade Board",
       transfersSearchMarket: "Looking for someone special? ✦", transfersSearchSquad: "Search your team...", transfersNoPlayers: "No one found here ✦",
-      transfersMyListings: "My Trades", transfersOpenListings: "Others' Trades", transfersNoListings: "No trades from others yet ✦",
+      transfersMyListings: "My Trades", transfersOpenListings: "Others' Trades", transfersNoListings: "No trades from others yet ✦", transfersWaitingOffers: "⏳ Awaiting offers ✦",
       transfersBuy: "Sign", transfersQuickSell: "Quick Farewell", transfersList: "Offer", transfersCancel: "Take Back",
       transfersRecalculate: "Refresh Budget ✦", transfersRecentActivity: "Our Story So Far",
       transfersListModalMarketEstimate: "Dream value:", transfersListModalPlaceholder: "Your price, €", transfersListModalConfirm: "Offer ✦",
@@ -219,7 +220,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       transfersNextOpenWinter: "REOPENS // MATCHDAY 20", transfersNextOpenPreseason: "REOPENS // NEXT CYCLE",
       transfersMarketTab: "ACQUIRE", transfersSquadTab: "MY_UNITS", transfersListingsTab: "BLACK_MARKET",
       transfersSearchMarket: "QUERY UNITS/FACTIONS...", transfersSearchSquad: "QUERY MY UNITS...", transfersNoPlayers: "// NO TARGETS FOUND",
-      transfersMyListings: "MY_OFFERS", transfersOpenListings: "HOSTILE_OFFERS", transfersNoListings: "// NO OFFERS FROM RIVALS",
+      transfersMyListings: "MY_OFFERS", transfersOpenListings: "HOSTILE_OFFERS", transfersNoListings: "// NO OFFERS FROM RIVALS", transfersWaitingOffers: "// AWAITING_BIDS...",
       transfersBuy: "ACQUIRE", transfersQuickSell: "LIQUIDATE", transfersList: "OFFER_UNIT", transfersCancel: "RETRACT",
       transfersRecalculate: "RECALIBRATE", transfersRecentActivity: "TRANSACTION_LOG",
       transfersListModalMarketEstimate: "EST. VALUE:", transfersListModalPlaceholder: "DEMANDED SUM, €", transfersListModalConfirm: "DEPLOY_OFFER",
@@ -273,7 +274,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       transfersNextOpenWinter: "Откроется на 20 туре (январь)", transfersNextOpenPreseason: "Откроется в следующую предсезонку",
       transfersMarketTab: "Рынок", transfersSquadTab: "Мой состав", transfersListingsTab: "Лоты",
       transfersSearchMarket: "Поиск игроков или клубов...", transfersSearchSquad: "Поиск по составу...", transfersNoPlayers: "Игроки не найдены",
-      transfersMyListings: "Мои лоты", transfersOpenListings: "Лоты других клубов", transfersNoListings: "Пока нет лотов от других клубов",
+      transfersMyListings: "Мои лоты", transfersOpenListings: "Лоты других клубов", transfersNoListings: "Пока нет лотов от других клубов", transfersWaitingOffers: "⏳ Ждёт предложений",
       transfersBuy: "Купить", transfersQuickSell: "Быстро продать", transfersList: "Выставить", transfersCancel: "Отменить",
       transfersRecalculate: "Пересчитать", transfersRecentActivity: "Недавние сделки",
       transfersListModalMarketEstimate: "Рыночная оценка:", transfersListModalPlaceholder: "Цена продажи, €", transfersListModalConfirm: "Выставить",
@@ -325,7 +326,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       transfersNextOpenWinter: "Откроется на 20 туре (наш январь) ✦", transfersNextOpenPreseason: "Откроется в следующую предсезонку ✦",
       transfersMarketTab: "Рынок мечты", transfersSquadTab: "Моя команда", transfersListingsTab: "Доска обмена",
       transfersSearchMarket: "Ищешь кого-то особенного? ✦", transfersSearchSquad: "Поиск по команде...", transfersNoPlayers: "Здесь никого не нашлось ✦",
-      transfersMyListings: "Мои предложения", transfersOpenListings: "Предложения других", transfersNoListings: "Пока нет предложений от других ✦",
+      transfersMyListings: "Мои предложения", transfersOpenListings: "Предложения других", transfersNoListings: "Пока нет предложений от других ✦", transfersWaitingOffers: "⏳ Ждём предложений ✦",
       transfersBuy: "Подписать", transfersQuickSell: "Быстро попрощаться", transfersList: "Предложить", transfersCancel: "Забрать обратно",
       transfersRecalculate: "Обновить бюджет ✦", transfersRecentActivity: "Наша история пока что",
       transfersListModalMarketEstimate: "Оценка мечты:", transfersListModalPlaceholder: "Твоя цена, €", transfersListModalConfirm: "Предложить ✦",
@@ -377,7 +378,7 @@ export const THEME_COPY: Record<Locale, Record<ThemeKey, ThemeCopy>> = {
       transfersNextOpenWinter: "ОТКРОЕТСЯ // ТУР 20", transfersNextOpenPreseason: "ОТКРОЕТСЯ // СЛЕД. ЦИКЛ",
       transfersMarketTab: "ЗАХВАТИТЬ", transfersSquadTab: "МОИ_ЮНИТЫ", transfersListingsTab: "ЧЁРНЫЙ_РЫНОК",
       transfersSearchMarket: "ЗАПРОС ЮНИТЫ/ФРАКЦИИ...", transfersSearchSquad: "ЗАПРОС МОИ ЮНИТЫ...", transfersNoPlayers: "// ЦЕЛИ НЕ НАЙДЕНЫ",
-      transfersMyListings: "МОИ_ПРЕДЛОЖЕНИЯ", transfersOpenListings: "ВРАЖДЕБНЫЕ_ПРЕДЛОЖЕНИЯ", transfersNoListings: "// НЕТ ПРЕДЛОЖЕНИЙ ОТ СОПЕРНИКОВ",
+      transfersMyListings: "МОИ_ПРЕДЛОЖЕНИЯ", transfersOpenListings: "ВРАЖДЕБНЫЕ_ПРЕДЛОЖЕНИЯ", transfersNoListings: "// НЕТ ПРЕДЛОЖЕНИЙ ОТ СОПЕРНИКОВ", transfersWaitingOffers: "// ОЖИДАНИЕ_ПРЕДЛОЖЕНИЙ...",
       transfersBuy: "ЗАХВАТИТЬ", transfersQuickSell: "ЛИКВИДИРОВАТЬ", transfersList: "ПРЕДЛОЖИТЬ_ЮНИТ", transfersCancel: "ОТОЗВАТЬ",
       transfersRecalculate: "ПЕРЕКАЛИБРОВАТЬ", transfersRecentActivity: "ЖУРНАЛ_ТРАНЗАКЦИЙ",
       transfersListModalMarketEstimate: "ОЦЕНКА:", transfersListModalPlaceholder: "ТРЕБУЕМАЯ СУММА, €", transfersListModalConfirm: "ОТПРАВИТЬ_ПРЕДЛОЖЕНИЕ",

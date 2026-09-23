@@ -10,6 +10,7 @@ import { getPlayersByClub } from "@/lib/players";
 import { awardLeaguePositionPrizes } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 import { payWeeklyWages } from "@/lib/contracts";
+import { resolveListingOffers } from "@/lib/transferOffers";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
@@ -252,6 +253,11 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   await Promise.all(writes);
   await payWeeklyWages(seasonId, allClubs);
   await persistStatusAndStats(seasonId, allClubs, statusUpdates, seasonStatsAccum);
+
+  // Каждый прошедший тур — новая попытка ИИ-клубов сделать предложение по
+  // открытым лотам на рынке (см. lib/transferOffers.ts). Best-effort: сбой
+  // здесь не должен ломать симуляцию тура.
+  try { await resolveListingOffers(seasonId); } catch (e) { console.error("resolveListingOffers failed", e); }
 
   const { count } = await supabase.from("fixtures")
     .select("*", { count: "exact", head: true })

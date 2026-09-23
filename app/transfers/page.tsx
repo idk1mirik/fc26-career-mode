@@ -69,12 +69,12 @@ function fmtMoney(v: number) {
 }
 
 const TransferPlayerCard = memo(function TransferPlayerCard({
-  p, ui, actions, onOpen, priceLabel, subLabel, theme, isFavorite, onToggleFavorite,
+  p, ui, actions, onOpen, priceLabel, subLabel, theme, isFavorite, onToggleFavorite, badge,
 }: {
   p: any; ui: typeof THEME_UI["classic"];
   actions: { label: string; icon: any; onClick: () => void; busy?: boolean; disabled?: boolean; cls: string }[];
   onOpen: (p: any) => void; priceLabel?: string; subLabel?: string; theme?: string;
-  isFavorite?: boolean; onToggleFavorite?: () => void;
+  isFavorite?: boolean; onToggleFavorite?: () => void; badge?: string;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const ovr = p.overall ?? 75;
@@ -89,6 +89,12 @@ const TransferPlayerCard = memo(function TransferPlayerCard({
           title={isFavorite ? "★" : "☆"}>
           {isFavorite ? "★" : "☆"}
         </button>
+      )}
+
+      {badge && (
+        <div className="absolute top-2.5 left-2.5 z-10 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-black/45 text-amber-300 whitespace-nowrap">
+          {badge}
+        </div>
       )}
 
       <div className="pt-5 pb-3 px-4 flex flex-col items-center cursor-pointer" onClick={() => onOpen(p)}>
@@ -672,6 +678,7 @@ export default function TransfersPage() {
                       {myListings.map((l: any) => (
                         <TransferPlayerCard key={l.id} p={enrichListing(l)}
                           ui={ui} onOpen={openModal} subLabel={locale === "ru" ? "выставлен тобой" : "listed by you"} priceLabel={fmtMoney(l.asking_price)} theme={theme}
+                          badge={copy.transfersWaitingOffers}
                           actions={[{ label: copy.transfersCancel, icon: XIcon, cls: ui.sellBtn, busy: busyId === l.id, onClick: () => handleCancelListing(l) }]} />
                       ))}
                     </div>

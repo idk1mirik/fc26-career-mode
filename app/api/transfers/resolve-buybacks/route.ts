@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { loadAllPlayers, invalidateOverridesCache } from "@/lib/players";
 import { applyClubEarning, chargeClub } from "@/lib/finance";
 import { checkTransferWindow } from "@/lib/transferWindow";
+import { pushNotification } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   const { seasonId, userClubId } = await req.json();
@@ -63,6 +64,13 @@ export async function POST(req: Request) {
     });
 
     resolved.push({ playerName: c.player_name, toClub: buybackClub, price });
+
+    await pushNotification({
+      seasonId, clubId: userClubId, type: "buyback_received",
+      title: "Игрока выкупили по клаузуле",
+      message: `${buybackClub} воспользовался правом выкупа и забрал ${c.player_name} за ${price.toLocaleString()}.`,
+      meta: { playerId: c.player_id, playerName: c.player_name, price, toClub: buybackClub },
+    });
   }
 
   if (resolved.length) invalidateOverridesCache(seasonId);
