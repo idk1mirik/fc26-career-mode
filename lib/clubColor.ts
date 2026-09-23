@@ -27,7 +27,7 @@ export function isTop7League(leagueName?: string | null): boolean {
   return !!leagueName && TOP7_LEAGUES.has(leagueName);
 }
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const memCache = new Map<string, string>();
 const inFlight = new Map<string, Promise<string | null>>();
 
@@ -66,18 +66,28 @@ function toHex(r: number, g: number, b: number) {
 }
 
 // Достаёт фирменный цвет клуба с эмблемы через colorthief (уже есть в зависимостях
-// проекта, но раньше нигде не использовался). getSwatchesSync разбирает картинку на
-// семантические роли (Vibrant/Muted/...) — берём самую "клубную": насыщенный,
-// не белый и не чёрный оттенок, с разумными запасными вариантами.
+// проекта, но раньше нигде не использовался). Белый фон и прозрачность
+// отфильтрованы самой библиотекой (ignoreWhite/alphaThreshold по умолчанию).
+//
+// Раньше здесь брался swatch по приоритету ролей (Vibrant в первую очередь).
+// Проблема: у клубов вроде Реал Мадрида основной цвет — приглушённый
+// бело-золотой с маленькой красно-жёлтой полоской испанского флага внизу
+// эмблемы — и как раз эта маленькая яркая полоска чаще всего "выигрывает"
+// роль Vibrant, хотя реально занимает единицы процентов пикселей. Поэтому
+// теперь среди всех непустых swatch'ей выбирается тот, что реально
+// покрывает больше всего площади лого (color.proportion) — так мелкие,
+// но насыщенные детали (флаги, полоски) больше не перебивают настоящий
+// основной цвет клуба.
 async function extractDominantColor(img: HTMLImageElement): Promise<string | null> {
   try {
     const { getSwatchesSync } = await import("colorthief");
-    const swatches = getSwatchesSync(img, { minSaturation: 0.25 });
-    const pick =
-      swatches.Vibrant ?? swatches.DarkVibrant ?? swatches.LightVibrant ??
-      swatches.Muted ?? swatches.DarkMuted ?? swatches.LightMuted ?? null;
-    if (!pick) return null;
-    const { r, g, b } = pick.color.rgb();
+    const swatches = getSwatchesSync(img, { minSaturation: 0.2 });
+    const candidates = Object.values(swatches).filter((s): s is NonNullable<typeof s> => !!s);
+    if (!candidates.length) return null;
+
+    candidates.sort((a, b) => b.color.proportion - a.color.proportion);
+    const best = candidates[0];
+    const { r, g, b } = best.color.rgb();
     return toHex(r, g, b);
   } catch {
     return null; // tainted canvas (CORS) или лого не загрузилось
