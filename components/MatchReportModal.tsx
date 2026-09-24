@@ -77,12 +77,36 @@ export function MatchReportModal({ fix, ui, theme, onClose, copy, locale = "en" 
             <img src={getClubLogo(fix.home_club)} alt="" className="w-10 h-10 object-contain" />
             <span className={`text-xs font-bold text-center ${ui.text}`}>{fix.home_club}</span>
           </div>
-          <div className={`text-3xl font-display font-black ${ui.text}`}>{fix.home_goals} – {fix.away_goals}</div>
+          <div className="flex flex-col items-center">
+            <div className={`text-3xl font-display font-black ${ui.text}`}>{fix.home_goals} – {fix.away_goals}</div>
+            {fix.penalties && (
+              <div className={`text-xs font-bold mt-0.5 ${ui.muted}`}>
+                {locale === "ru" ? "по пен." : "pens"} {fix.penalties.homeScore}–{fix.penalties.awayScore}
+              </div>
+            )}
+          </div>
           <div className="flex flex-col items-center gap-1 w-20">
             <img src={getClubLogo(fix.away_club)} alt="" className="w-10 h-10 object-contain" />
             <span className={`text-xs font-bold text-center ${ui.text}`}>{fix.away_club}</span>
           </div>
         </div>
+
+        {fix.penalties && (
+          <div className={`mb-4 p-3 rounded-2xl ${ui.tableRow}`}>
+            <div className={`text-[10px] uppercase tracking-widest font-black mb-2 ${ui.muted}`}>
+              🥅 {locale === "ru" ? "Серия пенальти" : "Penalty shootout"}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {fix.penalties.kicks.map((k: any, i: number) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs">
+                  <span>{k.scored ? "⚽" : "❌"}</span>
+                  <span className={`font-bold ${ui.text}`}>{k.playerName}</span>
+                  <span className={ui.muted}>({k.team === "home" ? fix.home_club : fix.away_club})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-2 mb-4">
           <button onClick={() => setTab("events")}

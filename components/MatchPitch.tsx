@@ -2,29 +2,21 @@
 // Раньше состав в отчёте о матче показывался плоским списком имён — теперь
 // стартовые XI обеих команд рисуются на поле, сгруппированные по линиям
 // (вратарь/защита/полузащита/атака), с бейджем рейтинга на каждом игроке.
-// Точную тактическую схему матч не хранит — раскладка внутри линии
-// равномерная по ширине, а не привязана к конкретной схеме.
+//
+// Раскладка раньше строилась с нуля своей эвристикой (свободный, не
+// привязанный к вкладке состава подбор x/y) — отсюда расхождение с тем, как
+// расстановка выглядит на вкладке "Состав". Теперь координаты те же самые,
+// что и там (lib/formations.ts, общий источник правды): под реальный состав
+// матча подбирается ближайшая по линиям именованная формация, и игроки
+// линии раскладываются по x-координатам ЭТОЙ формации, а не произвольным
+// равномерным шагом.
 "use client";
 import { getPlayerPhoto } from "@/lib/images";
+import { classifyPosition, sideOfPosition, pickFormationName, lineXCoords, PitchGroup } from "@/lib/formations";
 
-const POS_GROUP: Record<string, "GK" | "DEF" | "MID" | "ATT"> = {
-  GK: "GK",
-  CB: "DEF", LB: "DEF", RB: "DEF", LWB: "DEF", RWB: "DEF",
-  CDM: "MID", CM: "MID", CAM: "MID", LM: "MID", RM: "MID",
-  LW: "ATT", RW: "ATT", ST: "ATT", CF: "ATT", LF: "ATT", RF: "ATT",
-};
-
-function sideOf(position: string): number {
-  // -1 = левый фланг, 0 = центр, 1 = правый фланг. Раньше игроки внутри
-  // линии просто шли в порядке состава без привязки к реальной стороне —
-  // левый защитник мог отрисоваться на правом краю поля и наоборот.
-  if (position?.startsWith("L")) return -1;
-  if (position?.startsWith("R")) return 1;
-  return 0;
-}
-
-function groupOf(position: string): "GK" | "DEF" | "MID" | "ATT" {
-  return POS_GROUP[position] ?? "MID";
+function groupOf(position: string): PitchGroup {
+  const g = classifyPosition(position);
+  return g === "GK" ? "GK" : g;
 }
 
 export function MatchPitch({
@@ -36,17 +28,14 @@ export function MatchPitch({
   onSelectPlayer?: (p: any) => void;
 }) {
   function layout(players: any[], isHome: boolean) {
-    const groups: Record<string, any[]> = { GK: [], DEF: [], MID: [], ATT: [] };
+    const groups: Record<"GK" | "DEF" | "MID" | "ATT", any[]> = { GK: [], DEF: [], MID: [], ATT: [] };
     const hasReliablePositions = players.some(p => groupOf(p.position) === "GK");
     if (hasReliablePositions) {
       for (const p of players) groups[groupOf(p.position)].push(p);
     } else {
       // Позиция не сохранена/битая (отчёты о матчах, сыгранных до того, как
-      // это поле появилось в формате рейтингов). Раньше запасной план был
-      // грубым порядковым номером в составе — если состав в отчёте не был
-      // отсортирован по линиям, распределение получалось случайным (см.
-      // баг-репорт: "разбросаны как попало"). Теперь угадываем линию по
-      // реальной статистике матча — гораздо надёжнее порядкового номера:
+      // это поле появилось в формате рейтингов) — угадываем линию по
+      // реальной статистике матча.
       const scored = players.map(p => {
         const st = p.stats ?? {};
         const saves = st.saves ?? 0, tackles = st.tackles ?? 0, interceptions = st.interceptions ?? 0;
@@ -62,14 +51,8 @@ export function MatchPitch({
         }
         return { p, guess };
       });
-      // Гарантируем хотя бы одного вратаря (первый в списке — по конвенции
-      // почти всегда так) и разумные пропорции линий, даже если статистика
-      // матча малоинформативна (0 отборов/голов у всех — типично для
-      // спокойного матча)
       if (!scored.some(s => s.guess === "GK")) scored[0].guess = "GK";
       for (const { p, guess } of scored) groups[guess].push(p);
-      // Если после угадывания какая-то линия пустая, а другая переполнена —
-      // грубая перебалансировка, чтобы не получить "все в атаке"
       const order2: ("DEF" | "MID" | "ATT")[] = ["DEF", "MID", "ATT"];
       while (order2.some(k => groups[k].length === 0) && order2.some(k => groups[k].length > 2)) {
         const emptyKey = order2.find(k => groups[k].length === 0)!;
@@ -78,23 +61,33 @@ export function MatchPitch({
         groups[emptyKey].push(groups[fullKey].pop());
       }
     }
+
+    // Подбираем формацию под фактический состав линий (10 полевых игроков)
+    // и берём именно её x-координаты — те же, что нарисованы на вкладке
+    // "Состав". Если по какой-то линии реальное число игроков не совпадает
+    // с числом слотов подобранной формации (редкий случай — например,
+    // отчёт о матче с необычной заменой), эта конкретная линия просто
+    // раскладывается равномерным шагом, а не ломает всю раскладку.
+    const formationName = pickFormationName(
+      [...groups.DEF, ...groups.MID, ...groups.ATT].map(p => p.position)
+    );
+
     // КРИТИЧНО: у каждой команды — своя чётко изолированная половина поля,
-    // без пересечения по Y. Раньше атака домашних (y=42) и полузащита
-    // гостей (y=42) стояли на ОДНОЙ высоте — маркеры физически
-    // накладывались друг на друга (см. баг-репорт со скриншотом). Теперь
     // домашняя половина строго y∈[54,96], гостевая строго y∈[4,46] — между
     // ними гарантированный зазор в 8 пунктов на центральной линии.
-    const order = ["GK", "DEF", "MID", "ATT"];
+    const order: ("GK" | "DEF" | "MID" | "ATT")[] = ["GK", "DEF", "MID", "ATT"];
     const yForHome = { GK: 96, DEF: 80, MID: 66, ATT: 54 };
     const yForAway = { GK: 4, DEF: 20, MID: 34, ATT: 46 };
     const yFor = isHome ? yForHome : yForAway;
     const rows: { p: any; x: number; y: number }[] = [];
     for (const key of order) {
-      const line = groups[key as keyof typeof groups];
-      if (hasReliablePositions) line.sort((a, b) => sideOf(a.position) - sideOf(b.position));
-      const y = yFor[key as keyof typeof yFor];
+      const line = groups[key];
+      if (hasReliablePositions) line.sort((a, b) => sideOfPosition(a.position) - sideOfPosition(b.position));
+      const y = yFor[key];
+      const templateXs = key === "GK" ? [50] : lineXCoords(formationName, key);
+      const useTemplate = templateXs.length === line.length;
       line.forEach((p, i) => {
-        const x = line.length === 1 ? 50 : 10 + (i * (80 / Math.max(1, line.length - 1)));
+        const x = useTemplate ? templateXs[i] : (line.length === 1 ? 50 : 10 + (i * (80 / Math.max(1, line.length - 1))));
         rows.push({ p, x, y });
       });
     }

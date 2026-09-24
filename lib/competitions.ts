@@ -199,6 +199,14 @@ export function generateLeaguePhaseSchedule(
       return opp;
     };
 
+    // Клуб уже занят в этом раунде (в ЛЮБОЙ другой паре, кроме исключённого
+    // индекса)? ВАЖНО: раньше эта проверка отсутствовала — своп двух пар из
+    // РАЗНЫХ раундов мог вставить в раунд клуба клуба, который в этом же
+    // раунде уже играет другой матч. Итог — в одном туре ЛЧ клуб появлялся
+    // сразу в двух матчах одновременно (ровно баг-репорт пользователя).
+    const clubInRound = (r: number, club: string, excludeIdx: number) =>
+      schedule[r].some((f, idx) => idx !== excludeIdx && (f.home === club || f.away === club));
+
     for (let iter = 0; iter < 4000; iter++) {
       const conflicts = flat.filter(({ r, i }) => {
         const f = schedule[r][i];
@@ -214,6 +222,7 @@ export function generateLeaguePhaseSchedule(
         const c = schedule[rj][pj].home, d = schedule[rj][pj].away;
         if (a === c || a === d || b === c || b === d) continue;
         if (opp.get(a)?.has(d) || opp.get(c)?.has(b)) continue;
+        if (ri !== rj && (clubInRound(ri, d, pi) || clubInRound(rj, b, pj))) continue;
         schedule[ri][pi] = { home: a, away: d };
         schedule[rj][pj] = { home: c, away: b };
         break;

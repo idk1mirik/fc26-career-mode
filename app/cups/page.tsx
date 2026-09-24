@@ -12,6 +12,7 @@ import { isLineupValid, getLineupCount, MIN_LINEUP_SIZE } from "@/lib/lineupVali
 import { getThemeCopy } from "@/lib/i18n";
 import { KnockoutBracket } from "@/components/KnockoutBracket";
 import { HelpHint } from "@/components/HelpHint";
+import { MatchReportModal } from "@/components/MatchReportModal";
 
 const THEME_UI = {
   classic: {
@@ -20,6 +21,8 @@ const THEME_UI = {
     divider: "border-white/[0.05]",
     btnPrimary: "bg-emerald-500 text-black hover:bg-emerald-400",
     badge: "bg-white/[0.05]",
+    tabActive: "bg-white/20 text-white", tabIdle: "bg-white/[0.04] text-white/40 hover:bg-white/[0.08]",
+    tableRow: "hover:bg-white/[0.06]",
     font: {},
   },
   aurora: {
@@ -28,6 +31,8 @@ const THEME_UI = {
     divider: "border-pink-50",
     btnPrimary: "bg-gradient-to-r from-pink-400 to-violet-500 text-white hover:opacity-90",
     badge: "bg-pink-50",
+    tabActive: "bg-violet-500 text-white", tabIdle: "bg-pink-50 text-pink-400 hover:bg-pink-100",
+    tableRow: "hover:bg-pink-50/60",
     font: { fontFamily: "'Fraunces',serif" },
   },
   maleficent: {
@@ -36,6 +41,8 @@ const THEME_UI = {
     divider: "border-purple-900/20",
     btnPrimary: "border border-fuchsia-500 text-fuchsia-300 hover:bg-fuchsia-950/60",
     badge: "bg-purple-950/30",
+    tabActive: "bg-fuchsia-900/40 border border-fuchsia-700/50 text-fuchsia-300 font-mono", tabIdle: "bg-purple-950/20 text-purple-500/50 hover:bg-purple-950/40 font-mono",
+    tableRow: "hover:bg-purple-950/30",
     font: { fontFamily: "'Share Tech Mono',monospace" },
   },
 };
@@ -66,6 +73,7 @@ export default function CupsPage() {
   const [standingsByComp, setStandingsByComp] = useState<Record<string, any[]>>({});
   const [simulating, setSimulating] = useState<string | null>(null);
   const [cupError, setCupError] = useState<string | null>(null);
+  const [reportFix, setReportFix] = useState<any>(null);
 
   useEffect(() => {
     useCareerStore.persist.rehydrate();
@@ -287,8 +295,16 @@ export default function CupsPage() {
                             <span className="text-xs font-bold truncate max-w-[100px]">{f.home_club}</span>
                             <img src={getClubLogo(f.home_club)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
                           </div>
-                          <div className={`w-12 text-center text-xs font-black ${f.played ? "" : ui.muted}`}>
-                            {f.played ? `${f.home_goals}-${f.away_goals}` : "vs"}
+                          <div className={`w-12 flex flex-col items-center ${f.played ? "cursor-pointer" : ""}`}
+                            onClick={() => f.played && setReportFix({ ...f, competition_name: comp.name })}>
+                            <span className={`text-center text-xs font-black ${f.played ? "" : ui.muted}`}>
+                              {f.played ? `${f.home_goals}-${f.away_goals}` : "vs"}
+                            </span>
+                            {f.penalties && (
+                              <span className={`text-[9px] font-bold ${ui.muted}`}>
+                                {locale === "ru" ? "пен" : "pens"} {f.penalties.homeScore}-{f.penalties.awayScore}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 flex-1 justify-start">
                             <img src={getClubLogo(f.away_club)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
@@ -310,6 +326,10 @@ export default function CupsPage() {
           </div>
         )}
       </div>
+
+      {reportFix && (
+        <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} locale={locale} onClose={() => setReportFix(null)} />
+      )}
     </DashboardLayout>
   );
 }

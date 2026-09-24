@@ -14,6 +14,7 @@ import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/match
 import { getPlayersByClub } from "@/lib/players";
 import { getRoundName, generateKnockoutRound1, getClubLeague, LEAGUE_PHASE_CONFIG } from "@/lib/competitions";
 import { getStageInfo, getStageDisplayName, KnockoutStageName } from "@/lib/continentalKnockout";
+import { simulatePenaltyShootout, PenaltyShootoutResult } from "@/lib/penaltyShootout";
 import { getKnockoutLegDate } from "@/lib/seasonCalendar";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
@@ -134,6 +135,19 @@ export async function POST(req: Request) {
   const seasonStatsAccum: Record<string, SeasonStatAcc> = {};
   const fixtureWrites: any[] = [];
 
+  // Матч "решающий" (нужен единоличный победитель ПРЯМО СЕЙЧАС, по итогам
+  // именно этого матча) в двух случаях: старый формат (кубок страны,
+  // суперкубок, старые еврокубки) — там КАЖДЫЙ раунд однокруговой, ничьих
+  // не бывает по определению; либо новый формат еврокубка — но только если
+  // это единственный однокруговой матч плей-офф, то есть финал. Ничья в
+  // отдельном матче leg1/leg2 двухногового тура НЕ решающая — там победителя
+  // определяет сумма двух матчей (см. ниже, advanceNewFormatEuro), и по
+  // одной ноге пенальти в реальности не бьют.
+  const stageInfoForDecisiveness = isNewFormatEuro
+    ? getStageInfo(comp.name, comp.league_phase_rounds ?? 0, comp.current_round)
+    : null;
+  const isDecisiveSingleMatch = !isNewFormatEuro || stageInfoForDecisiveness?.isFinal === true;
+
   for (const fix of safeFixtures) {
     const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
     const awayUnavailable = unavailableByClub[fix.away_club] ?? new Set();
@@ -184,19 +198,32 @@ export async function POST(req: Request) {
     const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
 
-    // Победитель ЭТОГО матча (не тура в целом — для двухногих туров это
-    // используется только косметически, реальный проходящий определяется по
-    // сумме двух матчей ниже).
+    // Победитель ЭТОГО матча. Для решающих матчей (см. isDecisiveSingleMatch
+    // выше) ничья пробивается настоящей серией пенальти с реальными
+    // игроками — результат сохраняется в penalties и его можно посмотреть
+    // в отчёте о матче. Для отдельной ноги двухногового тура (не финал)
+    // "победитель" по-прежнему чисто косметический — по одной ноге пенальти
+    // не бьют, решает сумма двух матчей (см. advanceNewFormatEuro ниже).
     let winner: string;
-    if (homeGoals === awayGoals) winner = Math.random() > 0.5 ? fix.home_club : fix.away_club;
-    else winner = homeGoals > awayGoals ? fix.home_club : fix.away_club;
+    let penalties: PenaltyShootoutResult | null = null;
+    if (homeGoals === awayGoals) {
+      if (isDecisiveSingleMatch) {
+        const shootout = simulatePenaltyShootout(homeStarters, awayStarters);
+        penalties = shootout;
+        winner = shootout.winner === "home" ? fix.home_club : fix.away_club;
+      } else {
+        winner = Math.random() > 0.5 ? fix.home_club : fix.away_club;
+      }
+    } else {
+      winner = homeGoals > awayGoals ? fix.home_club : fix.away_club;
+    }
 
     fixtureWrites.push(supabase.from("cup_fixtures").update({
-      home_goals: homeGoals, away_goals: awayGoals, played: true, winner_club: winner, events, ratings,
+      home_goals: homeGoals, away_goals: awayGoals, played: true, winner_club: winner, events, ratings, penalties,
     }).eq("id", fix.id));
 
     results.push({
-      home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, winner, events, ratings,
+      home: fix.home_club, away: fix.away_club, homeGoals, awayGoals, winner, events, ratings, penalties,
       fixtureId: fix.id, tieId: fix.tie_id ?? null, leg: fix.leg ?? null,
     });
 
@@ -348,7 +375,19 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
     let winner: string;
     if (aggA > aggB) winner = clubA;
     else if (aggB > aggA) winner = clubB;
-    else winner = Math.random() < 0.5 ? clubA : clubB; // серия пенальти
+    else {
+      // Равный агрегат по сумме двух матчей — самая настоящая серия
+      // пенальти, пробитая прямо на поле второго матча (r.home = clubB
+      // принимает). Раньше здесь была монетка без единого удара.
+      const [homeSquad, awaySquad] = await Promise.all([
+        getPlayersByClub(r.home, comp.season_id),
+        getPlayersByClub(r.away, comp.season_id),
+      ]);
+      const shootout = simulatePenaltyShootout(getStartingXI(homeSquad), getStartingXI(awaySquad));
+      winner = shootout.winner === "home" ? r.home : r.away; // r.home=clubB, r.away=clubA
+      r.penalties = shootout;
+      await supabase.from("cup_fixtures").update({ penalties: shootout, winner_club: winner }).eq("id", r.fixtureId);
+    }
     tieWinners.push(winner);
   }
 
