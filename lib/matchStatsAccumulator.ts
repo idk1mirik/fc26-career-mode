@@ -106,7 +106,7 @@ export function accumulateSeasonStats(
       matches_played: prev.matches_played + 1,
       total_rating: prev.total_rating + pr.rating,
       goals: prev.goals + goals,
-      assists: prev.assists + (pr.assists ?? 0),
+      assists: prev.assists + (pr.stats?.assists ?? pr.assists ?? 0),
       yellow_cards: prev.yellow_cards + yellow,
       red_cards: prev.red_cards + red,
     };

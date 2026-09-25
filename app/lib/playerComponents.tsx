@@ -1,5 +1,6 @@
 "use client";
 import { memo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getPlayerPhoto, getPlayerFullPhoto } from "@/lib/images";
 import { getClubLogo } from "@/data/clublogos";
 
@@ -637,6 +638,22 @@ export function PlayerModal({
 }) {
   const [imgError, setImgError]         = useState(false);
   const [fullImgError, setFullImgError] = useState(false);
+  const router = useRouter();
+  const modalClubName = player.club || clubName || "";
+
+  const ClubChip = () => modalClubName ? (
+    <button
+      onClick={e => { e.stopPropagation(); onClose(); router.push(`/clubs/${encodeURIComponent(modalClubName)}`); }}
+      style={{
+        display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 4px", borderRadius: 999,
+        background: `${clubColor}14`, border: `1px solid ${clubColor}35`, cursor: "pointer",
+      }}
+      title={locale === "ru" ? "Открыть состав клуба" : "View club squad"}
+    >
+      <img src={getClubLogo(modalClubName)} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} onError={e => (e.currentTarget.style.display = "none")} />
+      <span style={{ fontSize: 11, fontWeight: 800, color: clubColor }}>{modalClubName}</span>
+    </button>
+  ) : null;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -785,6 +802,7 @@ export function PlayerModal({
               <h2 style={{ margin: 0, lineHeight: 1.1, ...cfg.name, fontSize: "clamp(1.6rem,8vw,2.4rem)" }}>{player.name}</h2>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <ClubChip />
               <FlagImage country={nationality} size={15} />
               <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{nationality || "Unknown"}</span>
               {player.age > 0 && <span style={{ fontSize: 12, color: cfg.metaColor }}>{player.age} yrs</span>}
@@ -860,6 +878,7 @@ export function PlayerModal({
               <h2 style={{ margin: 0, lineHeight: 1.05, ...cfg.name }}>{player.name}</h2>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <ClubChip />
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <FlagImage country={nationality} size={16} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: cfg.metaColor }}>{nationality || "Unknown"}</span>

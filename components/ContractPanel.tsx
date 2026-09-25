@@ -143,6 +143,27 @@ export function ContractPanel({
     return () => { document.body.style.overflow = ""; };
   }, []);
 
+  // Раньше это состояние не подтягивалось с сервера вовсе — окно всегда
+  // открывалось "с чистого листа", даже если по этому контракту уже шли
+  // переговоры (или сервер уже отклонил оффер). Теперь при открытии
+  // сначала спрашиваем текущее состояние, ничего не отправляя игроку.
+  useEffect(() => {
+    if (!player.contractId) return;
+    let cancelled = false;
+    fetch(`/api/contracts/negotiate?contractId=${encodeURIComponent(player.contractId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.negotiation) return;
+        const neg = data.negotiation;
+        setNegotiation(neg);
+        setHistory([{ round: neg.round, offer: neg.club_offer?.wage ?? wage, outcome: neg.status }]);
+        if (neg.status === "open" && neg.player_demand?.wage) setWage(neg.player_demand.wage);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.contractId]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);

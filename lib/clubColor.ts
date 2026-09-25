@@ -28,6 +28,20 @@ export function isTop7League(leagueName?: string | null): boolean {
 }
 
 const CACHE_VERSION = "v2";
+
+// Точечные ручные исключения — автоматика по эмблеме иногда путает клубный
+// цвет с второстепенным элементом герба (см. lib/clubColor.ts выше про
+// Реал). Тут только те клубы, на которые пожаловались конкретно; для всех
+// остальных по-прежнему работает автоматика.
+const MANUAL_OVERRIDES: Record<string, string> = {
+  "barcelona": "#a50044",
+  "fc barcelona": "#a50044",
+  "arsenal": "#ef0107",
+};
+
+function manualOverride(clubName: string): string | null {
+  return MANUAL_OVERRIDES[clubName.trim().toLowerCase()] ?? null;
+}
 const memCache = new Map<string, string>();
 const inFlight = new Map<string, Promise<string | null>>();
 
@@ -100,6 +114,9 @@ async function extractDominantColor(img: HTMLImageElement): Promise<string | nul
  * должен остаться на цвете лиги (это делает хук useClubColor).
  */
 export function loadClubColor(clubName: string, logoUrl: string): Promise<string | null> {
+  const manual = manualOverride(clubName);
+  if (manual) return Promise.resolve(manual);
+
   const cached = readCache(clubName);
   if (cached) return Promise.resolve(cached);
 

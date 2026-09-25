@@ -509,18 +509,23 @@ export default function DashboardPage() {
   const userRow = standings.find(s => s.club_id === userClub);
   const userPos = userRow ? standings.indexOf(userRow) + 1 : "—";
 
+  // Раньше форма считалась только по лиговым fixtures — если последний
+  // сыгранный матч клуба был кубковым (ЛЧ, Кубок страны и т.д.), он просто
+  // пропускался: полоска формы "перескакивала" на устаревший лиговый матч
+  // или вовсе оставалась пустой. Теперь берём единый календарь (лига +
+  // кубки, см. /api/calendar), отсортированный по реальной дате.
   const recentForm = useMemo(() => {
-    return fixtures
-      .filter(f => f.played && (f.home_club === userClub || f.away_club === userClub))
-      .sort((a, b) => (a.matchday ?? 0) - (b.matchday ?? 0))
+    return calendar
+      .filter((m: any) => m.played && (m.home_club === userClub || m.away_club === userClub))
+      .sort((a: any, b: any) => (a.match_date ?? "").localeCompare(b.match_date ?? ""))
       .slice(-5)
-      .map(f => {
-        const isHome = f.home_club === userClub;
-        const gf = isHome ? f.home_goals : f.away_goals;
-        const ga = isHome ? f.away_goals : f.home_goals;
+      .map((m: any) => {
+        const isHome = m.home_club === userClub;
+        const gf = isHome ? m.home_goals : m.away_goals;
+        const ga = isHome ? m.away_goals : m.home_goals;
         return gf > ga ? "W" : gf < ga ? "L" : "D";
       });
-  }, [fixtures, userClub]);
+  }, [calendar, userClub]);
 
   const [startingNewSeason, setStartingNewSeason] = useState(false);
   const handleStartNewSeason = async () => {

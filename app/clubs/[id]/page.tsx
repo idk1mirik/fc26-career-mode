@@ -158,11 +158,28 @@ export default function ClubProfilePage() {
   const [sortBy, setSortBy] = useState<"overall"|"name"|"wage">("overall");
   const [error, setError] = useState<string | null>(null);
 
+  const seasonId = useCareerStore(s => s.seasonId);
+
   useEffect(() => {
     if (!id) return;
-    const clubId = decodeURIComponent(id);
-    // Use Next.js API route instead of the Django backend
-    fetch(`/api/players?club=${encodeURIComponent(clubId)}`)
+    // ВАЖНО: useParams() в App Router на некоторых версиях Next.js отдаёт
+    // сегмент уже декодированным, а на некоторых — ещё в сыром виде.
+    // Раньше здесь был безусловный decodeURIComponent(id) — если сегмент
+    // приходил уже декодированным, а в названии клуба случайно оказывался
+    // символ, похожий на "хвост" процентной последовательности, decode
+    // бросал URIError ПРЯМО В эффекте, необработанным — страница падала
+    // с ошибкой прямо при переходе, ещё до первого fetch. Теперь decode
+    // обёрнут в try/catch и безопасно откатывается на сырое значение.
+    let clubId = id;
+    try { clubId = decodeURIComponent(id); } catch { /* id уже декодирован или не percent-encoded — используем как есть */ }
+
+    // seasonId нужен, чтобы состав отражал реальные трансферы этого сезона
+    // (кого купили/продали), а не только исходный состав из CSV — раньше
+    // этот параметр не передавался вовсе.
+    const qs = new URLSearchParams({ club: clubId });
+    if (seasonId) qs.set("seasonId", seasonId);
+
+    fetch(`/api/players?${qs.toString()}`)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then((players: any[]) => {
         if (!Array.isArray(players)) throw new Error("Bad payload");
@@ -171,7 +188,7 @@ export default function ClubProfilePage() {
         setClub({ id: clubId, name: clubId, league, overall, players });
       })
       .catch(() => setError(text.failedLoad));
-  }, [id]);
+  }, [id, seasonId]);
 
   if (error) return <div className="min-h-screen flex items-center justify-center text-red-500 font-black">{error}</div>;
   if (!club) return (

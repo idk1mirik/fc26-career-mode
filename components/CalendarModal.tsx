@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Play, Pause, Square, CalendarClock } from "lucide-react";
 import { useCareerStore } from "@/app/store/careerStore";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
@@ -73,12 +73,24 @@ function toISODate(d: Date) { return d.toISOString().split("T")[0]; }
 function addDays(d: Date, n: number) { const r = new Date(d); r.setUTCDate(r.getUTCDate() + n); return r; }
 function sameDay(a: Date, b: Date) { return toISODate(a) === toISODate(b); }
 
-// Строит карту "дата тура лиги -> номер тура" в разумных пределах (до 60
-// туров с запасом — реальный максимум в игре меньше).
-function buildMatchdayDateMap(): Map<string, number> {
-  const map = new Map<string, number>();
-  for (let md = 1; md <= 60; md++) map.set(getLeagueMatchdayDate(md), md);
-  return map;
+// Раньше в сетке календаря были видны только матчи лиги (точками), даже
+// если в этот день реально играется кубок страны, суперкубок или еврокубок
+// — их не было видно вообще, хотя они там были. Теперь весь день красится
+// цветом реального турнира (а не точкой) — сразу понятно, что за матч.
+const COMPETITION_COLORS: Record<string, string> = {
+  league: "", // особый цвет не нужен — это фон "по умолчанию"
+  domestic_cup: "#f59e0b",
+  super_cup: "#a855f7",
+  continental: "#6366f1",
+};
+function competitionColor(m: { competition_type: string; competition_name?: string }): string {
+  if (m.competition_type === "continental") {
+    const name = m.competition_name ?? "";
+    if (name.includes("Europa") && !name.includes("Conference")) return "#f97316";
+    if (name.includes("Conference")) return "#22c55e";
+    return "#6366f1"; // Champions League и общий случай
+  }
+  return COMPETITION_COLORS[m.competition_type] ?? "";
 }
 
 const simSleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -99,7 +111,39 @@ export default function CalendarModal({
   const userClub = selectedClub?.name || "";
 
   const currentMatchdayDate = useMemo(() => new Date(`${getLeagueMatchdayDate(matchday)}T00:00:00Z`), [matchday]);
-  const matchdayMap = useMemo(() => buildMatchdayDateMap(), []);
+
+  // Единый календарь клуба — лига + все кубки, где он участвует (тот же
+  // эндпоинт, что уже питает виджет "следующий матч" на дашборде).
+  const [calendarMatches, setCalendarMatches] = useState<any[]>([]);
+  useEffect(() => {
+    if (!seasonId || !userClub) return;
+    fetch(`/api/calendar?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.matches) setCalendarMatches(data.matches); })
+      .catch(() => {});
+  }, [seasonId, userClub]);
+
+  const matchesByDate = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const m of calendarMatches) {
+      if (!m.match_date) continue;
+      if (!map.has(m.match_date)) map.set(m.match_date, []);
+      map.get(m.match_date)!.push(m);
+    }
+    return map;
+  }, [calendarMatches]);
+
+  // Какие типы турниров вообще встречаются в этом сезоне клуба — для легенды
+  const activeCompetitions = useMemo(() => {
+    const seen = new Map<string, { label: string; color: string }>();
+    for (const m of calendarMatches) {
+      const color = competitionColor(m);
+      if (!color) continue;
+      const key = m.competition_name ?? m.competition_type;
+      if (!seen.has(key)) seen.set(key, { label: m.competition_name ?? key, color });
+    }
+    return [...seen.values()];
+  }, [calendarMatches]);
 
   const [viewDate, setViewDate] = useState(() => new Date(currentMatchdayDate));
   const [selected, setSelected] = useState<Date | null>(null);
@@ -268,29 +312,42 @@ export default function CalendarModal({
                 const isPast = d < currentMatchdayDate && !sameDay(d, currentMatchdayDate);
                 const isToday = sameDay(d, currentMatchdayDate);
                 const isSelected = selected && sameDay(d, selected);
-                const isMatchday = matchdayMap.has(iso);
+                const dayMatches = matchesByDate.get(iso) ?? [];
+                const isLeagueDay = dayMatches.some((m: any) => m.competition_type === "league");
+                const specialMatch = dayMatches.find((m: any) => competitionColor(m));
+                const cellColor = specialMatch ? competitionColor(specialMatch) : "";
                 const windowOpen = isTransferWindowOpenForDate(iso);
                 return (
                   <button
                     key={i}
                     disabled={isPast}
                     onClick={() => setSelected(d)}
+                    title={dayMatches.map((m: any) => `${m.competition_name}: ${m.home_club} vs ${m.away_club}`).join("\n")}
+                    style={isSelected ? undefined : cellColor ? {
+                      background: `${cellColor}${isPast ? "1c" : "30"}`,
+                      boxShadow: `inset 0 0 0 1px ${cellColor}55`,
+                    } : undefined}
                     className={`relative aspect-square rounded-lg text-xs flex flex-col items-center justify-center gap-0.5 transition-all
                       ${isPast ? `cursor-not-allowed ${ui.dayDisabled}` : `cursor-pointer ${ui.dayIdle}`}
                       ${isSelected ? ui.daySelected : ""}
                       ${isToday && !isSelected ? ui.dayToday : ""}
-                      ${!isSelected && !isPast && windowOpen ? ui.windowBg : ""}`}
+                      ${!isSelected && !isPast && !cellColor && windowOpen ? ui.windowBg : ""}`}
                   >
                     <span>{d.getUTCDate()}</span>
-                    {isMatchday && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-black/50" : ui.dot}`} />}
+                    {isLeagueDay && !cellColor && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-black/50" : ui.dot}`} />}
                   </button>
                 );
               })}
             </div>
 
-            <div className="flex items-center gap-3 mb-4 text-[10px]">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-4 text-[10px]">
               <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${ui.dot}`} /> {locale === "ru" ? "Тур лиги" : "League matchday"}</span>
-              <span className={`flex items-center gap-1.5`}><span className={`w-2.5 h-2.5 rounded ${ui.windowBg}`} /> {t.windowOpen}</span>
+              {activeCompetitions.map(c => (
+                <span key={c.label} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded" style={{ background: c.color }} /> {c.label}
+                </span>
+              ))}
+              <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded ${ui.windowBg}`} /> {t.windowOpen}</span>
             </div>
 
             {doneMsg && <div className={`text-xs mb-3 ${ui.subtle}`}>{doneMsg}</div>}

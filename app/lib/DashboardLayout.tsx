@@ -128,8 +128,12 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
       </div>
 
       <button onClick={() => { onOpenCalendar(); onNavigate?.(); }}
-        className={`mb-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${NAV_FONT[theme]} ${theme === "classic" ? "bg-white/[0.05] border border-white/[0.1] hover:bg-white/[0.09] text-white" : theme === "aurora" ? "bg-violet-50 border border-violet-200 hover:bg-violet-100 text-violet-700" : "bg-fuchsia-950/20 border border-fuchsia-800/40 hover:bg-fuchsia-950/40 text-fuchsia-300"}`}>
-        <CalendarClock size={14} />
+        className={`mb-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-black uppercase tracking-widest transition-all hover:scale-[1.03] shadow-lg ${NAV_FONT[theme]} ${theme === "aurora" ? "text-white" : "text-black"}`}
+        style={{
+          background: theme === "aurora" ? `linear-gradient(135deg, ${glowColor}, #a855f7)` : glowColor,
+          boxShadow: `0 4px 20px -4px ${glowColor}80`,
+        }}>
+        <CalendarClock size={16} />
         {locale === "ru" ? "Календарь" : "Calendar"}
       </button>
 
