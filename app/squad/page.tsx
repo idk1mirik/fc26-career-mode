@@ -414,6 +414,7 @@ export default function SquadPage() {
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const seasonId       = useCareerStore(s => s.seasonId);
+  const matchday       = useCareerStore(s => s.matchday);
   const locale = useCareerStore(s => s.locale) || "en";
   const savedLineup    = useCareerStore(s => s.lineup);
   const savedFormation = useCareerStore(s => s.formation);
@@ -978,6 +979,7 @@ export default function SquadPage() {
             locale={locale as any}
             seasonId={seasonId ?? undefined}
             clubId={selectedClub?.name}
+            currentMatchday={matchday}
             player={{
               contractId: contract.id,
               playerId: contractPanelPlayer.id ?? contractPanelPlayer.name,

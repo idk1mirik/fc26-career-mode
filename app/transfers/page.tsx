@@ -909,6 +909,9 @@ export default function TransfersPage() {
             locale={locale as any}
             isFreeAgent
             signingClubId={userClub}
+            seasonId={seasonId ?? undefined}
+            clubId={userClub}
+            currentMatchday={matchday}
             player={{
               contractId: signingAgent.contractId,
               playerId: signingAgent.playerId,

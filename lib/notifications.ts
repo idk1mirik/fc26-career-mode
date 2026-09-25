@@ -16,7 +16,9 @@ export type NotificationType =
   | "sale_listing"
   | "listing_created"
   | "listing_offer_result"
-  | "contract_expiring";
+  | "contract_expiring"
+  | "contract_negotiation_rejected"
+  | "contract_negotiation_ready";
 
 export interface PushNotificationParams {
   seasonId: string;

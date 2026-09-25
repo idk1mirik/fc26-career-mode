@@ -20,9 +20,14 @@ function buildFixtures(clubs: string[], seasonId: string) {
 
   for (let round = 0; round < rounds; round++) {
     const matchday = round + 1;
+    // См. подробный комментарий в app/api/season/route.ts — тот же фикс:
+    // без чередования сторон через тур клуб на позиции 0 играл весь первый
+    // круг дома, а весь второй (зеркальный разворот первого) — в гостях.
+    const flip = round % 2 === 1;
     for (let i = 0; i < half; i++) {
-      const home = list[i];
-      const away = list[list.length - 1 - i];
+      let home = list[i];
+      let away = list[list.length - 1 - i];
+      if (flip) [home, away] = [away, home];
       if (home !== dummy && away !== dummy) {
         rows.push({ season_id: seasonId, matchday, home_club: home, away_club: away, match_date: matchdayDate(matchday) });
       }

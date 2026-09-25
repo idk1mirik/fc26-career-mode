@@ -13,9 +13,10 @@
 //                            // тогда финализация не просто обновит контракт на
 //                            // месте, а переедет на club_id этого клуба
 // }
-import { startOrContinueNegotiation, finalizeAgreedNegotiation } from "@/lib/contracts";
+import { startOrContinueNegotiation, finalizeAgreedNegotiation, NEGOTIATION_COOLDOWN_MATCHDAYS } from "@/lib/contracts";
 import { finalizeFreeAgentSigning } from "@/lib/contracts-server";
 import { supabase } from "@/lib/supabase";
+import { pushNotification } from "@/lib/notifications";
 
 // GET /api/contracts/negotiate?contractId=X
 // Раньше такого эндпоинта не было вовсе — компонент переговоров держал
@@ -39,16 +40,34 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { contractId, clubOffer, player, club, deadlineMatchday, accept, signingClubId } = body;
+  const { contractId, clubOffer, player, club, deadlineMatchday, accept, signingClubId, seasonId, clubId } = body;
 
   if (!contractId || !clubOffer || !player) {
     return Response.json({ error: "contractId, clubOffer and player are required" }, { status: 400 });
   }
 
+  let currentMatchday: number | undefined;
+  if (seasonId) {
+    const { data: season } = await supabase.from("seasons").select("matchday").eq("id", seasonId).maybeSingle();
+    currentMatchday = season?.matchday ?? undefined;
+  }
+
   try {
     const negotiation = await startOrContinueNegotiation(
-      contractId, clubOffer, player, club ?? {}, deadlineMatchday
+      contractId, clubOffer, player, club ?? {}, deadlineMatchday, currentMatchday
     );
+
+    // Уведомляем об отказе только один раз — ровно в момент, когда он
+    // произошёл (не на каждый повторный клик во время "остывания").
+    if (negotiation.status === "rejected" && !negotiation.blocked && seasonId && clubId && negotiation.retry_after_matchday) {
+      const { data: contractRow } = await supabase.from("contracts").select("player_name").eq("id", contractId).maybeSingle();
+      await pushNotification({
+        seasonId, clubId, type: "contract_negotiation_rejected",
+        title: "Переговоры сорвались",
+        message: `${contractRow?.player_name ?? "Игрок"} отклонил предложение. Можно попробовать снова через ${NEGOTIATION_COOLDOWN_MATCHDAYS} тура.`,
+        meta: { contractId, retryAfterMatchday: negotiation.retry_after_matchday },
+      });
+    }
 
     let contract = null;
     if (accept && negotiation.status === "agreed") {

@@ -10,6 +10,7 @@ import { getPlayersByClub } from "@/lib/players";
 import { awardLeaguePositionPrizes } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 import { payWeeklyWages } from "@/lib/contracts";
+import { notifyReadyNegotiations } from "@/lib/contracts-server";
 import { resolveListingOffers } from "@/lib/transferOffers";
 
 function getStartingXI(players: any[]): any[] {
@@ -258,6 +259,7 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   // открытым лотам на рынке (см. lib/transferOffers.ts). Best-effort: сбой
   // здесь не должен ломать симуляцию тура.
   try { await resolveListingOffers(seasonId); } catch (e) { console.error("resolveListingOffers failed", e); }
+  try { await notifyReadyNegotiations(seasonId, matchday); } catch (e) { console.error("notifyReadyNegotiations failed", e); }
 
   const { count } = await supabase.from("fixtures")
     .select("*", { count: "exact", head: true })

@@ -85,7 +85,7 @@ interface HistoryEntry { round: number; offer: number; outcome: "open" | "agreed
 
 export function ContractPanel({
   player, theme = "classic", locale = "en", clubReputationDiscount = 0, onClose, onSigned,
-  isFreeAgent = false, signingClubId, seasonId, clubId, onReleased,
+  isFreeAgent = false, signingClubId, seasonId, clubId, onReleased, currentMatchday = 1,
 }: {
   player: ContractPanelPlayer;
   theme?: ThemeKey;
@@ -101,6 +101,8 @@ export function ContractPanel({
   seasonId?: string;
   clubId?: string;
   onReleased?: () => void;
+  /** текущий тур сезона — нужен, чтобы посчитать, сколько туров осталось до конца "остывания" после отказа */
+  currentMatchday?: number;
 }) {
   const t = CONTRACTS_COPY[locale];
   const s = PANEL_STYLES[theme];
@@ -182,7 +184,7 @@ export function ContractPanel({
           clubOffer: { wage, years, bonus, role },
           player: { overall: player.overall, age: player.age, avgRatingLastSeason: player.avgRatingLastSeason },
           club: { reputationDiscount: clubReputationDiscount },
-          accept,
+          accept, seasonId, clubId,
           ...(isFreeAgent && signingClubId ? { signingClubId } : {}),
         }),
       });
@@ -207,163 +209,169 @@ export function ContractPanel({
     negotiation?.status === "rejected" ? t.reactionAngry :
     negotiation ? t.reactionCounter : null;
 
+  const turnsUntilRetry = negotiation?.blocked && negotiation?.retry_after_matchday
+    ? Math.max(0, negotiation.retry_after_matchday - currentMatchday)
+    : 0;
+
   const gapPct = Math.round(((wage - marketWage) / marketWage) * 100);
+  const gapClamped = Math.max(-40, Math.min(40, gapPct)); // для позиции маркера на шкале ниже
 
   return (
     <div className={s.overlay} onClick={onClose}>
       <div className={`${s.panel} animate-modal-pop`} onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-start justify-between mb-1">
+        {/* Header — компактный, один инфо-хинт на всю логику переговоров вместо
+            четырёх разбросанных по разным блокам */}
+        <div className="flex items-start justify-between mb-4">
           <div>
             <div className={s.title}>{t.title}</div>
             <div className={s.sub}>{player.playerName} · {player.overall} OVR · {player.age} {ru ? "лет" : "y.o."}</div>
           </div>
-          <HelpHint id="contract-panel-intro" theme={theme}
-            title={ru ? "Переговоры по контракту" : "Contract negotiation"}
+          <HelpHint id="contract-panel-intro" theme={theme} title={t.howItWorks}
             text={ru
-              ? "Ты предлагаешь условия — игрок либо соглашается, либо (до 3 раундов) выставляет встречное предложение ближе к своей рыночной оценке. Слишком заниженный оффер могут отклонить сразу."
-              : "You make an offer — the player either accepts or counters (up to 3 rounds) closer to their market value. A lowball offer can be rejected outright."} />
+              ? "Ты предлагаешь условия — игрок либо соглашается, либо (до 3 раундов) выставляет встречное предложение ближе к своей рыночной оценке. Слишком заниженный оффер могут отклонить сразу, а после отказа нужно подождать несколько туров, прежде чем подойти снова."
+              : "You make an offer — the player either accepts or counters (up to 3 rounds) closer to their market value. A lowball offer can be rejected outright, and after a rejection you'll need to wait a few matchdays before trying again."} />
         </div>
 
-        {/* Текущий контракт vs рынок */}
-        {isFreeAgent ? (
-          <div className={`flex items-center justify-between p-3 mb-4 ${s.card}`} style={{ borderLeft: "3px solid #f59e0b" }}>
-            <div>
-              <div className={s.label}>{ru ? "Статус" : "Status"}</div>
-              <div className="text-sm font-bold mt-1">🆓 {ru ? "Свободный агент" : "Free agent"}</div>
-            </div>
-            <div className="text-right">
-              <div className={s.label}>{ru ? "Рыночная оценка" : "Market value"}</div>
-              <div className="text-sm font-bold mt-1">€{marketWage.toLocaleString()}/{ru ? "нед" : "wk"}</div>
+        {/* Статус-баннер — раньше реакция игрока пряталась мелким текстом внизу
+            под кучей других блоков. Теперь это первое, что видно, если что-то
+            вообще происходит. */}
+        {negotiation?.blocked ? (
+          <div className={`mb-4 p-3 rounded-xl text-sm font-bold ${s.infoBg}`}>
+            ⏳ {t.statusOnCooldown(turnsUntilRetry)}
+          </div>
+        ) : reactionText ? (
+          <div className={`mb-4 p-3 rounded-xl ${s.card}`}>
+            <div className={`font-bold ${s.reaction}`}>{reactionText}</div>
+            <div className={`${s.sub} mt-0.5`}>
+              {negotiation.status === "agreed" ? t.statusAgreed : negotiation.status === "rejected" ? t.statusRejected : t.statusOpen}
             </div>
           </div>
-        ) : (
-        <div className={`grid grid-cols-2 gap-3 p-3 mb-4 ${s.card}`}>
+        ) : null}
+
+        {/* Обзор — три мини-колонки в один ряд вместо двух отдельных
+            бордюрованных карточек (контракт/рынок) плюс отдельной полосы
+            довольства ниже. */}
+        <div className={`grid grid-cols-3 gap-3 p-3 mb-4 ${s.card}`}>
           <div>
-            <div className={s.label}>{ru ? "Текущий контракт" : "Current contract"}</div>
-            <div className="text-sm font-bold mt-1">€{player.currentWage.toLocaleString()}/{ru ? "нед" : "wk"}</div>
-            <div className={`text-[11px] ${s.sub}`}>{player.currentYears} {ru ? "г. осталось" : "yr(s) left"}</div>
+            <div className={s.label}>{isFreeAgent ? (ru ? "Статус" : "Status") : t.currentDeal}</div>
+            <div className="text-sm font-bold mt-1">
+              {isFreeAgent ? `🆓 ${ru ? "Своб. агент" : "Free agent"}` : `€${player.currentWage.toLocaleString()}/${ru ? "нед" : "wk"}`}
+            </div>
+            {!isFreeAgent && <div className={`text-[11px] ${s.sub}`}>{player.currentYears} {ru ? "г. осталось" : "yr(s) left"}</div>}
           </div>
-          <div className="text-right">
-            <div className={s.label}>{ru ? "Рыночная оценка" : "Market value"}</div>
+          <div>
+            <div className={s.label}>{t.marketRate}</div>
             <div className="text-sm font-bold mt-1">€{marketWage.toLocaleString()}/{ru ? "нед" : "wk"}</div>
-            {player.releaseClause && <div className={`text-[11px] ${s.sub}`}>{ru ? "Отступные" : "Release"}: €{(player.releaseClause / 1_000_000).toFixed(1)}M</div>}
+            {player.releaseClause ? <div className={`text-[11px] ${s.sub}`}>{t.releaseClause}: €{(player.releaseClause / 1_000_000).toFixed(1)}M</div> : null}
           </div>
-        </div>
-        )}
-
-        {/* Happiness */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <span className={`${s.label} flex items-center gap-1.5`}>
-              {t.happiness}
-              <HelpHint id="contract-happiness" theme={theme}
-                title={ru ? "Довольство" : "Happiness"}
-                text={ru
-                  ? "Растёт от справедливой сделки и игрового времени, падает от заниженной зарплаты и простоя на скамейке. Низкое довольство — риск, что игрок сам запросит трансфер."
-                  : "Rises from a fair deal and playing time, drops from lowball wages and bench time. Low happiness risks the player requesting a transfer."} />
-            </span>
-            <span className="text-xs font-bold">{player.happiness}/100 {player.happiness >= 70 ? "😊" : player.happiness >= 40 ? "😐" : "😠"}</span>
-          </div>
-          <div className={`h-2 rounded-full mt-1.5 ${s.barBg}`}>
-            <div className={`h-2 rounded-full transition-all ${s.barFill}`} style={{ width: `${player.happiness}%` }} />
-          </div>
-        </div>
-
-        {/* Роль — сегментированный переключатель вместо нативного select */}
-        <div className="mb-4">
-          <div className={`${s.label} mb-1.5 flex items-center gap-1.5`}>
-            {t.role}
-            <HelpHint id="contract-role" theme={theme}
-              title={ru ? "Роль в составе" : "Squad role"}
-              text={ru
-                ? "Влияет на зарплатные ожидания игрока: звёзды и важные игроки просят больше, ротация и резерв — меньше. Роль должна примерно совпадать с реальным игровым временем, иначе довольство будет падать."
-                : "Affects wage expectations: stars and key players ask for more, rotation/backup ask for less. Should roughly match real playing time, or happiness will drop."} />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {ROLES.map(r => (
-              <button key={r} type="button" onClick={() => setRole(r)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${role === r ? s.chipActive : s.chip}`}>
-                <span>{ROLE_ICON[r]}</span>
-                <span>{t[`role${r.charAt(0).toUpperCase()}${r.slice(1)}` as keyof typeof t]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Wage — слайдер + число одновременно, привязан к рыночной вилке */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <span className={`${s.label} flex items-center gap-1.5`}>
-              {t.wage} (€/{ru ? "нед" : "wk"})
-              <HelpHint id="contract-wage" theme={theme} side="right"
-                title={ru ? "Зарплата" : "Wage"}
-                text={ru
-                  ? "Ползунок ограничен разумной вилкой вокруг рыночной оценки игрока. Оффер намного ниже рынка (красный %) рискует получить отказ уже с первого раунда."
-                  : "The slider is bounded around a fair market range. An offer far below market (shown in red %) risks an outright rejection on the first round."} />
-            </span>
-            <span className={`text-[11px] font-bold ${gapPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {gapPct >= 0 ? "+" : ""}{gapPct}% {ru ? "от рынка" : "vs market"}
-            </span>
-          </div>
-          <input type="range" className="w-full mt-2 accent-emerald-500" min={Math.round(marketWage * 0.5)} max={Math.round(marketWage * 1.8)} step={500}
-            value={wage} onChange={(e) => setWage(Number(e.target.value))} />
-          <div className="flex items-center gap-2 mt-2">
-            <button type="button" className={`w-8 h-8 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
-              onClick={() => setWage(w => Math.max(500, w - 500))}>−</button>
-            <span className="font-black text-lg flex-1 text-center">€{wage.toLocaleString()}</span>
-            <button type="button" className={`w-8 h-8 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
-              onClick={() => setWage(w => w + 500)}>+</button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <span className={s.label}>{t.years}</span>
-            <div className="flex gap-1.5 mt-1.5 flex-wrap">
-              {[1, 2, 3, 4, 5].map(y => (
-                <button key={y} type="button" onClick={() => setYears(y)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${years === y ? s.chipActive : s.chip}`}>
-                  {y}{ru ? "г" : "y"}
+            <div className={`${s.label} flex items-center gap-1`}>
+              {t.happiness}
+              <HelpHint id="contract-happiness" theme={theme} title={t.happiness}
+                text={ru
+                  ? "Растёт от справедливой сделки и игрового времени, падает от заниженной зарплаты и простоя на скамейке."
+                  : "Rises from a fair deal and playing time, drops from lowball wages and bench time."} />
+            </div>
+            <div className="text-sm font-bold mt-1">{player.happiness}/100 {player.happiness >= 70 ? "😊" : player.happiness >= 40 ? "😐" : "😠"}</div>
+            <div className={`h-1.5 rounded-full mt-1.5 ${s.barBg}`}>
+              <div className={`h-1.5 rounded-full transition-all ${s.barFill}`} style={{ width: `${player.happiness}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Твоё предложение — роль + зарплата + срок + бонус объединены в ОДНУ
+            карточку с внутренними разделителями вместо трёх плавающих блоков. */}
+        <div className={`p-3.5 mb-4 ${s.card}`}>
+          <div className={`${s.label} mb-2`}>{t.yourOffer}</div>
+
+          <div className={`pb-3 mb-3 border-b ${s.divider}`}>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLES.map(r => (
+                <button key={r} type="button" onClick={() => setRole(r)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${role === r ? s.chipActive : s.chip}`}>
+                  <span>{ROLE_ICON[r]}</span>
+                  <span>{t[`role${r.charAt(0).toUpperCase()}${r.slice(1)}` as keyof typeof t] as string}</span>
                 </button>
               ))}
             </div>
           </div>
-          <div>
-            <span className={s.label}>{t.bonus}</span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-sm transition ${s.chip}`}
-                onClick={() => setBonus(b => Math.max(0, b - 1000))}>−</button>
-              <span className="font-black text-sm flex-1 text-center">€{bonus.toLocaleString()}</span>
-              <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-sm transition ${s.chip}`}
-                onClick={() => setBonus(b => b + 1000)}>+</button>
+
+          <div className={`pb-3 mb-3 border-b ${s.divider}`}>
+            <div className="flex items-center justify-between mb-1">
+              <span className={`${s.label} flex items-center gap-1.5`}>
+                {t.wage} (€/{ru ? "нед" : "wk"})
+                <HelpHint id="contract-wage" theme={theme} side="right" title={t.wage}
+                  text={ru
+                    ? "Ползунок ограничен разумной вилкой вокруг рыночной оценки игрока. Оффер намного ниже рынка рискует получить отказ уже с первого раунда."
+                    : "The slider is bounded around a fair market range. An offer far below market risks an outright rejection on the first round."} />
+              </span>
+              <span className="font-black text-lg">€{wage.toLocaleString()}</span>
+            </div>
+            {/* Шкала "ниже рынка / рынок / выше рынка" — заменяет голый текстовый
+                процент, на который жаловались: на глаз понятно сразу */}
+            <div className={`relative h-2 rounded-full mt-2 mb-1 ${s.barBg}`}>
+              <div className="absolute inset-y-0 left-1/2 w-px bg-current opacity-20" />
+              <div className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full ${s.barFill}`}
+                style={{ left: `${50 + (gapClamped / 40) * 50}%`, transform: "translate(-50%, -50%)" }} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] ${s.sub}`}>{ru ? "ниже рынка" : "below market"}</span>
+              <span className={`text-[11px] font-bold ${gapPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {gapPct >= 0 ? "+" : ""}{gapPct}%
+              </span>
+              <span className={`text-[10px] ${s.sub}`}>{ru ? "выше рынка" : "above market"}</span>
+            </div>
+            <input type="range" className="w-full mt-2 accent-emerald-500" min={Math.round(marketWage * 0.5)} max={Math.round(marketWage * 1.8)} step={500}
+              value={wage} onChange={(e) => setWage(Number(e.target.value))} />
+            <div className="flex items-center gap-2 mt-1">
+              <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
+                onClick={() => setWage(w => Math.max(500, w - 500))}>−</button>
+              <span className={`flex-1 text-center text-[11px] ${s.sub}`}>{ru ? "точная подстройка" : "fine-tune"}</span>
+              <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
+                onClick={() => setWage(w => w + 500)}>+</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className={s.label}>{t.years}</span>
+              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                {[1, 2, 3, 4, 5].map(y => (
+                  <button key={y} type="button" onClick={() => setYears(y)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${years === y ? s.chipActive : s.chip}`}>
+                    {y}{ru ? "г" : "y"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className={s.label}>{t.bonus}</span>
+              <div className="flex items-center gap-2 mt-1.5">
+                <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-sm transition ${s.chip}`}
+                  onClick={() => setBonus(b => Math.max(0, b - 1000))}>−</button>
+                <span className="font-black text-sm flex-1 text-center">€{bonus.toLocaleString()}</span>
+                <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-sm transition ${s.chip}`}
+                  onClick={() => setBonus(b => b + 1000)}>+</button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Журнал переговоров — раньше был виден только последний раунд */}
+        {/* Журнал переговоров — компактная строка "раундов" вместо
+            разлинованного списка, занимает намного меньше места по вертикали */}
         {history.length > 0 && (
-          <div className={`mb-4 rounded-xl p-3.5 ${s.historyBg}`}>
-            <div className={`${s.label} mb-2`}>{ru ? "Ход переговоров" : "Negotiation log"}</div>
-            <div>
+          <div className="mb-4">
+            <div className={`${s.label} mb-1.5`}>{t.log}</div>
+            <div className="flex flex-wrap gap-1.5">
               {history.map((h, i) => (
-                <div key={i} className={`flex items-center justify-between text-sm py-2 ${i < history.length - 1 ? `border-b ${s.divider}` : ""}`}>
-                  <span className={s.sub}>{t.round} {h.round}</span>
-                  <span className="font-black">€{h.offer.toLocaleString()}</span>
-                  <span className={`font-bold ${h.outcome === "agreed" ? "text-emerald-400" : h.outcome === "rejected" ? "text-red-400" : "opacity-60"}`}>
+                <div key={i} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ${s.chip}`}>
+                  <span className="opacity-60">{t.round} {h.round}</span>
+                  <span>€{(h.offer / 1000).toFixed(1)}k</span>
+                  <span className={h.outcome === "agreed" ? "text-emerald-400" : h.outcome === "rejected" ? "text-red-400" : "opacity-50"}>
                     {h.outcome === "agreed" ? "✓" : h.outcome === "rejected" ? "✕" : "…"}
                   </span>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {negotiation && (
-          <div className="mb-4 text-sm">
-            <div className={`font-bold ${s.reaction}`}>{reactionText}</div>
-            <div className={`${s.sub} mt-0.5`}>
-              {negotiation.status === "agreed" ? t.statusAgreed : negotiation.status === "rejected" ? t.statusRejected : t.statusOpen}
             </div>
           </div>
         )}
@@ -421,7 +429,7 @@ export function ContractPanel({
               </button>
             ) : (
               <button className={`${s.primaryBtn} text-sm py-3 px-6`} onClick={() => sendOffer(false)}
-                disabled={loading || negotiation?.status === "rejected"}>
+                disabled={loading || (negotiation?.status === "rejected" && !negotiation?.blocked) || (negotiation?.blocked && turnsUntilRetry > 0)}>
                 {loading ? "…" : t.offerButton}
               </button>
             )}

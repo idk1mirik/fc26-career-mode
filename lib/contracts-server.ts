@@ -8,6 +8,35 @@
 // при сборке (players.ts использует Node fs/path, в браузере их нет).
 import { supabase } from "./supabase";
 import { FREE_AGENT_CLUB, type SquadRole, type Contract, type NegotiationOffer } from "./contracts";
+import { pushNotification } from "./notifications";
+
+// Раньше отказ игрока блокировал переговоры по этому контракту навсегда —
+// теперь это просто "остывание" на NEGOTIATION_COOLDOWN_MATCHDAYS туров
+// (см. lib/contracts.ts). Эта функция дёргается на каждом продвижении
+// тура (lib/simulateMatchday.ts) и уведомляет клуб ровно один раз, когда
+// остывание закончилось и можно подходить к игроку снова.
+export async function notifyReadyNegotiations(seasonId: string, currentMatchday: number): Promise<void> {
+  const { data: rejected } = await supabase.from("negotiations")
+    .select("id, contract_id, retry_after_matchday")
+    .eq("status", "rejected").eq("retry_notified", false)
+    .not("retry_after_matchday", "is", null)
+    .lte("retry_after_matchday", currentMatchday);
+  if (!rejected?.length) return;
+
+  for (const neg of rejected) {
+    const { data: contract } = await supabase.from("contracts")
+      .select("club_id, season_id, player_name").eq("id", (neg as any).contract_id).maybeSingle();
+    if (!contract || contract.season_id !== seasonId) continue;
+
+    await pushNotification({
+      seasonId, clubId: contract.club_id, type: "contract_negotiation_ready",
+      title: "Можно возобновить переговоры",
+      message: `${contract.player_name} готов снова выслушать предложение по контракту.`,
+      meta: { contractId: (neg as any).contract_id },
+    });
+    await supabase.from("negotiations").update({ retry_notified: true }).eq("id", (neg as any).id);
+  }
+}
 
 // ── Список свободных агентов сезона, обогащённый статами игрока из CSV ──
 export async function getFreeAgents(seasonId: string) {

@@ -26,9 +26,18 @@ function buildFixtures(clubs: string[], seasonId: string) {
 
   for (let round = 0; round < rounds; round++) {
     const matchday = round + 1;
+    // Раньше "домашняя" сторона была всегда i (левая половина списка),
+    // "гостевая" — всегда n-1-i (правая половина) — БЕЗ единого случая
+    // чередования. Клуб, стоящий на позиции 0 (она не вращается в
+    // алгоритме "круга"), в итоге играл ВСЕ туры первого круга дома, а
+    // весь второй круг — исключительно в гостях (он строится зеркальным
+    // разворотом первого). Стандартный фикс round-robin: через тур
+    // менять местами хозяев и гостей внутри каждого круга.
+    const flip = round % 2 === 1;
     for (let i = 0; i < half; i++) {
-      const home = list[i];
-      const away = list[list.length - 1 - i];
+      let home = list[i];
+      let away = list[list.length - 1 - i];
+      if (flip) [home, away] = [away, home];
       if (home !== dummy && away !== dummy) {
         rows.push({ season_id: seasonId, matchday, home_club: home, away_club: away, match_date: matchdayDate(matchday) });
       }

@@ -54,6 +54,9 @@ export interface Negotiation {
   club_offer: NegotiationOffer;
   player_demand: NegotiationOffer;
   deadline_matchday: number | null;
+  retry_after_matchday?: number | null;
+  retry_notified?: boolean;
+  blocked?: boolean; // true = попытка отклонена клиенту ДО раунда переговоров — идёт "остывание" после прошлого отказа
 }
 
 export const ROLE_MULTIPLIER: Record<SquadRole, number> = {
@@ -61,6 +64,10 @@ export const ROLE_MULTIPLIER: Record<SquadRole, number> = {
 };
 
 export const MAX_NEGOTIATION_ROUNDS = 3;
+// Сколько туров должно пройти после отказа игрока, прежде чем клуб может
+// подойти к нему снова с новым предложением. Раньше отказ блокировал
+// навсегда — теперь просто откладывает следующую попытку.
+export const NEGOTIATION_COOLDOWN_MATCHDAYS = 4;
 export function rand2(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
 export function calculateWageDemand(
@@ -143,11 +150,29 @@ export async function startOrContinueNegotiation(
   clubOffer: NegotiationOffer,
   playerInfo: { overall: number; age: number; avgRatingLastSeason?: number },
   clubInfo: { reputationDiscount?: number },
-  deadlineMatchday?: number
+  deadlineMatchday?: number,
+  currentMatchday?: number
 ): Promise<Negotiation> {
   const { data: existing } = await supabase.from("negotiations")
     .select("*").eq("contract_id", contractId).eq("status", "open")
     .order("created_at", { ascending: false }).maybeSingle();
+
+  // Раньше после отказа (status="rejected") клуб мог просто начать НОВЫЕ
+  // переговоры мгновенно — искался только status="open", так что отказ не
+  // сдерживал вообще ничего. Теперь: если последний отказ ещё "остывает"
+  // (retry_after_matchday в будущем), новые переговоры не начинаем — просто
+  // возвращаем ту же отклонённую запись, окно покажет "рано, подожди ещё".
+  if (!existing) {
+    const { data: lastRejected } = await supabase.from("negotiations")
+      .select("*").eq("contract_id", contractId).eq("status", "rejected")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (lastRejected && currentMatchday !== undefined) {
+      const retryAfter = (lastRejected as any).retry_after_matchday;
+      if (retryAfter != null && currentMatchday < retryAfter) {
+        return { ...(lastRejected as Negotiation), blocked: true };
+      }
+    }
+  }
 
   let neg: Negotiation;
   if (existing) {
@@ -161,11 +186,15 @@ export async function startOrContinueNegotiation(
   }
 
   const resolved = resolveNegotiationRound(neg, playerInfo, clubInfo);
+  const retryAfterMatchday = resolved.status === "rejected" && currentMatchday !== undefined
+    ? currentMatchday + NEGOTIATION_COOLDOWN_MATCHDAYS
+    : null;
 
   if (existing) {
     const { data, error } = await supabase.from("negotiations").update({
       status: resolved.status, round: resolved.round,
       club_offer: resolved.club_offer, player_demand: resolved.player_demand,
+      retry_after_matchday: retryAfterMatchday, retry_notified: false,
       updated_at: new Date().toISOString(),
     }).eq("id", (existing as any).id).select().single();
     if (error) throw error;
@@ -175,6 +204,7 @@ export async function startOrContinueNegotiation(
       contract_id: contractId, status: resolved.status, round: resolved.round,
       club_offer: resolved.club_offer, player_demand: resolved.player_demand,
       deadline_matchday: deadlineMatchday ?? null,
+      retry_after_matchday: retryAfterMatchday, retry_notified: false,
     }).select().single();
     if (error) throw error;
     return data as Negotiation;

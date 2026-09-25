@@ -20,6 +20,7 @@ export interface PlayerMatchStats {
 export interface PlayerRating {
   name: string;
   playerId?: string;
+  position?: string;
   rating: number; // 1.0–10.0
   subbedIn?: boolean;
   stats?: {
@@ -142,7 +143,7 @@ export function generateMatchRatings(
       const rating = calculatePlayerRating(stats, goalDiff);
 
       return {
-        name: p.name, playerId: p.id, rating, subbedIn,
+        name: p.name, playerId: p.id, position: p.position, rating, subbedIn,
         stats: {
           goals: stats.goals, assists: stats.assists, keyPasses: stats.keyPasses,
           saves: stats.saves, tackles: stats.tackles, interceptions: stats.interceptions,
