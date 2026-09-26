@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
+import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
 import { TransferSigningModal } from "@/components/TransferSigningModal";
 import { useThemeStore } from "@/app/store/themeStore";
@@ -71,14 +72,17 @@ function fmtMoney(v: number) {
 }
 
 const TransferPlayerCard = memo(function TransferPlayerCard({
-  p, ui, actions, onOpen, priceLabel, subLabel, theme, isFavorite, onToggleFavorite, badge,
+  p, ui, actions, onOpen, priceLabel, subLabel, theme, isFavorite, onToggleFavorite, badge, clubBadge,
 }: {
   p: any; ui: typeof THEME_UI["classic"];
   actions: { label: string; icon: any; onClick: () => void; busy?: boolean; disabled?: boolean; cls: string }[];
   onOpen: (p: any) => void; priceLabel?: string; subLabel?: string; theme?: string;
   isFavorite?: boolean; onToggleFavorite?: () => void; badge?: string;
+  /** Название клуба — если передано, под именем игрока появляется кликабельный чип с гербом, ведущий на страницу состава этого клуба. */
+  clubBadge?: string;
 }) {
   const [imgErr, setImgErr] = useState(false);
+  const router = useRouter();
   const ovr = p.overall ?? 75;
   const ratingColor = getRatingColor(ovr, theme);
 
@@ -114,6 +118,16 @@ const TransferPlayerCard = memo(function TransferPlayerCard({
           <FlagImage country={p.nationality || p.nation} size={11} />
           {p.position} · {subLabel}
         </div>
+        {clubBadge && (
+          <button
+            onClick={e => { e.stopPropagation(); router.push(`/clubs/${encodeURIComponent(clubBadge)}`); }}
+            className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/20 hover:bg-black/35 transition-colors"
+            title={clubBadge}
+          >
+            <img src={getClubLogo(clubBadge)} alt="" className="w-3.5 h-3.5 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
+            <span className="text-[10px] font-bold truncate max-w-[90px]">{clubBadge}</span>
+          </button>
+        )}
       </div>
 
       <div className="px-4 py-2.5 text-center font-black text-sm border-t border-current/10">
@@ -583,7 +597,7 @@ export default function TransfersPage() {
               </div>
             )}
             {favoritesList.map((p: any) => (
-              <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
+              <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} clubBadge={p.team} theme={theme}
                 isFavorite onToggleFavorite={() => toggleFavorite(p)}
                 actions={!isOpen ? [] : p.isFreeAgent ? [{
                   label: locale === "ru" ? "Подписать" : "Sign", icon: TrendingUp, cls: ui.buyBtn,
@@ -779,7 +793,7 @@ export default function TransfersPage() {
                   <div className={`text-center py-10 text-sm ${ui.muted}`}>{copy.transfersNoPlayers}</div>
                 )}
                 {filteredMarket.map((p: any) => (
-                  <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} theme={theme}
+                  <TransferPlayerCard key={p.id} p={p} ui={ui} onOpen={openModal} subLabel={p.team} clubBadge={p.team} theme={theme}
                     isFavorite={favoritePlayerIds.includes(p.id)} onToggleFavorite={() => toggleFavorite(p)}
                     actions={[{
                       label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn,
@@ -834,7 +848,7 @@ export default function TransfersPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {otherListings.map((l: any) => (
                         <TransferPlayerCard key={l.id} p={enrichListing(l)}
-                          ui={ui} onOpen={openModal} subLabel={l.seller_club} priceLabel={fmtMoney(l.asking_price)} theme={theme}
+                          ui={ui} onOpen={openModal} subLabel={l.seller_club} clubBadge={l.seller_club} priceLabel={fmtMoney(l.asking_price)} theme={theme}
                           actions={[{ label: copy.transfersBuy, icon: TrendingUp, cls: ui.buyBtn, busy: busyId === l.id, disabled: budget !== null && l.asking_price > budget, onClick: () => handleBuyListing(l) }]} />
                       ))}
                     </div>

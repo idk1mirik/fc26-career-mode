@@ -315,7 +315,12 @@ export default function CalendarModal({
                 const dayMatches = matchesByDate.get(iso) ?? [];
                 const isLeagueDay = dayMatches.some((m: any) => m.competition_type === "league");
                 const specialMatch = dayMatches.find((m: any) => competitionColor(m));
-                const cellColor = specialMatch ? competitionColor(specialMatch) : "";
+                // Раньше тур лиги обозначался только маленькой точкой, а
+                // цветом заливались только кубковые дни — теперь лига тоже
+                // красит весь день целиком (акцентным цветом темы), просто
+                // кубки/еврокубки имеют приоритет, если в один день почему-то
+                // выпадают оба (крайне редко, но на всякий случай).
+                const cellColor = specialMatch ? competitionColor(specialMatch) : (isLeagueDay ? glowColor : "");
                 const windowOpen = isTransferWindowOpenForDate(iso);
                 return (
                   <button
@@ -324,24 +329,24 @@ export default function CalendarModal({
                     onClick={() => setSelected(d)}
                     title={dayMatches.map((m: any) => `${m.competition_name}: ${m.home_club} vs ${m.away_club}`).join("\n")}
                     style={isSelected ? undefined : cellColor ? {
-                      background: `${cellColor}${isPast ? "1c" : "30"}`,
-                      boxShadow: `inset 0 0 0 1px ${cellColor}55`,
+                      background: `${cellColor}${isPast ? "35" : "60"}`,
+                      boxShadow: `inset 0 0 0 1.5px ${cellColor}${isPast ? "50" : "90"}`,
+                      color: isPast ? undefined : "#fff",
                     } : undefined}
-                    className={`relative aspect-square rounded-lg text-xs flex flex-col items-center justify-center gap-0.5 transition-all
-                      ${isPast ? `cursor-not-allowed ${ui.dayDisabled}` : `cursor-pointer ${ui.dayIdle}`}
+                    className={`relative aspect-square rounded-lg text-xs flex flex-col items-center justify-center gap-0.5 transition-all font-bold
+                      ${isPast ? `cursor-not-allowed ${cellColor ? "" : ui.dayDisabled}` : `cursor-pointer ${cellColor ? "" : ui.dayIdle}`}
                       ${isSelected ? ui.daySelected : ""}
                       ${isToday && !isSelected ? ui.dayToday : ""}
                       ${!isSelected && !isPast && !cellColor && windowOpen ? ui.windowBg : ""}`}
                   >
                     <span>{d.getUTCDate()}</span>
-                    {isLeagueDay && !cellColor && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-black/50" : ui.dot}`} />}
                   </button>
                 );
               })}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-4 text-[10px]">
-              <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${ui.dot}`} /> {locale === "ru" ? "Тур лиги" : "League matchday"}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded" style={{ background: glowColor }} /> {locale === "ru" ? "Тур лиги" : "League matchday"}</span>
               {activeCompetitions.map(c => (
                 <span key={c.label} className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded" style={{ background: c.color }} /> {c.label}

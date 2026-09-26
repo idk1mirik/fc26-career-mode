@@ -160,6 +160,17 @@ export default function ClubProfilePage() {
 
   const seasonId = useCareerStore(s => s.seasonId);
 
+  // ВАЖНО (настоящая причина "клуб не грузится"): useClubColor — это React
+  // Hook, а раньше он вызывался ПОСЛЕ условных `if (!club) return ...` /
+  // `if (error) return ...` ниже. Значит на первом рендере (пока club ещё
+  // null) он вообще не вызывался, а как только данные приходили и компонент
+  // переставал возвращаться рано — вызывался. Разный порядок хуков между
+  // рендерами — React сразу валит компонент с "Rendered fewer hooks than
+  // expected" (Rules of Hooks). Именно это и выглядело как "страница не
+  // грузится/падает с ошибкой". Хук поднят сюда и вызывается БЕЗУСЛОВНО на
+  // каждом рендере, с безопасными фолбэками, пока club ещё не загружен.
+  const clubColor = useClubColor(club?.name ?? null, club?.league ?? null, club?.name ? getClubLogo(club.name) : null, theme);
+
   useEffect(() => {
     if (!id) return;
     // ВАЖНО: useParams() в App Router на некоторых версиях Next.js отдаёт
@@ -201,7 +212,7 @@ export default function ClubProfilePage() {
 
   const leagueTheme = getLeagueTheme(club.league || "Premier League", theme);
   // Для клубов топ-7 лиг — свой цвет по эмблеме, иначе цвет лиги как раньше
-  const clubColor = useClubColor(club.name, club.league, getClubLogo(club.name), theme);
+  // (сам хук вызван выше, безусловно — см. комментарий там)
   const uniquePositions = Array.from(new Set<string>((club.players || []).map((p: any) => p.position).filter(Boolean))).sort();
   const positions = ["ALL", ...uniquePositions];
 
