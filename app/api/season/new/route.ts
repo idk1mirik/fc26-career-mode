@@ -8,6 +8,9 @@ import { progressLeaguePlayers } from "@/lib/progression";
 import { rolloverContracts, createContractsForClub } from "@/lib/contracts";
 import { rolloverAcademy } from "@/lib/academy";
 import { pushNotifications, PushNotificationParams } from "@/lib/notifications";
+import { computePromotionRelegation } from "@/lib/promotionRelegation";
+import { getPlayersByClub } from "@/lib/players";
+import { computeInitialBudget } from "@/lib/finance";
 
 function buildFixtures(clubs: string[], seasonId: string) {
   const rows: any[] = [];
@@ -54,12 +57,35 @@ export async function POST(req: Request) {
   const league = (leagues as any[]).find(l => l.name === oldSeason.league_name);
   if (!league) return Response.json({ error: "League not found" }, { status: 404 });
 
-  const clubs: string[] = league.clubs.map((c: any) => c.id);
+  const oldLeagueClubs: string[] = league.clubs.map((c: any) => c.id);
+
+  // ── Повышение/понижение между дивизионами (см. lib/promotionRelegation.ts) ──
+  // Нужна РЕАЛЬНАЯ итоговая таблица лиги пользователя ДО создания нового
+  // сезона, чтобы знать, с каким составом клубов и в какой лиге строить
+  // следующий сезон (клуб пользователя мог как повыситься, так и вылететь).
+  const { data: finalStandings } = await supabase.from("standings").select("*").eq("season_id", oldSeasonId);
+  const finalOrder = [...(finalStandings ?? [])]
+    .sort((a: any, b: any) => (b.points - a.points) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf))
+    .map((r: any) => r.club_id);
+
+  let promoRelegation: Awaited<ReturnType<typeof computePromotionRelegation>> = null;
+  try {
+    promoRelegation = finalOrder.length
+      ? await computePromotionRelegation(oldSeason.league_name, oldSeason.club_id, finalOrder)
+      : null;
+  } catch (e) { console.error("Promotion/relegation calculation failed", e); }
+
+  // Лига и состав клубов НОВОГО сезона — по умолчанию те же, что и были,
+  // если для этой лиги повышение/понижение не отслеживается (см. PYRAMIDS)
+  // или пользователь остался в той же лиге по итогам таблицы.
+  const newLeagueName = promoRelegation?.newUserLeague ?? oldSeason.league_name;
+  const newLeague = newLeagueName === oldSeason.league_name ? league : (leagues as any[]).find(l => l.name === newLeagueName);
+  const clubs: string[] = promoRelegation?.newUserLeagueClubs ?? oldLeagueClubs;
 
   const { data: newSeason, error: sErr } = await supabase
     .from("seasons")
     .insert({
-      league_id: oldSeason.league_id, league_name: oldSeason.league_name, club_id: oldSeason.club_id,
+      league_id: newLeague?.id ?? oldSeason.league_id, league_name: newLeagueName, club_id: oldSeason.club_id,
       season_num: (oldSeason.season_num ?? 1) + 1,
     })
     .select().single();
@@ -96,7 +122,7 @@ export async function POST(req: Request) {
   // Делаем ДО расчёта бюджетов ниже, чтобы стоимость состава уже учитывала
   // новые overall (иначе бюджет считался бы по вчерашним, ещё не выросшим игрокам).
   try {
-    await progressLeaguePlayers(clubs, oldSeasonId, careerId);
+    await progressLeaguePlayers(oldLeagueClubs, oldSeasonId, careerId);
   } catch (e) { console.error("Player progression failed", e); }
 
   // Контракты не переживают смену season_id сами по себе — переносим их
@@ -141,7 +167,7 @@ export async function POST(req: Request) {
   } catch (e) { console.error("Contract rollover failed", e); }
 
   try {
-    await rolloverAcademy(careerId, oldSeasonId, newSeason.id, oldSeason.club_id, league.name);
+    await rolloverAcademy(careerId, oldSeasonId, newSeason.id, oldSeason.club_id, newLeagueName);
   } catch (e) { console.error("Academy rollover failed", e); }
 
   const fixtures = buildFixtures(clubs, newSeason.id);
@@ -154,24 +180,54 @@ export async function POST(req: Request) {
   // а значит и "должный" бюджет на следующий сезон, перебивая Math.max'ом
   // реально потраченные деньги. Получалось: чем больше тратишь на трансферы,
   // тем больше "бесплатных" денег появляется в следующем сезоне. computeInitialBudget
-  // корректно использовать только при СОЗДАНИИ новой карьеры (app/api/season/route.ts),
-  // не при переходе между сезонами существующей.
-  const { data: oldStandings } = await supabase.from("standings").select("*").eq("season_id", oldSeasonId);
-  const oldBudgetByClub: Record<string, number> = Object.fromEntries((oldStandings ?? []).map((r: any) => [r.club_id, r.budget ?? 0]));
+  // корректно использовать только при СОЗДАНИИ новой карьеры (app/api/season/route.ts)
+  // либо для клубов, которые ВПЕРВЫЕ входят в лигу пользователя через
+  // повышение/понижение — у них попросту нет истории бюджета в этой карьере.
+  const oldBudgetByClub: Record<string, number> = Object.fromEntries((finalStandings ?? []).map((r: any) => [r.club_id, r.budget ?? 0]));
+  const incomingSet = new Set(promoRelegation?.incomingClubs ?? []);
+
+  const incomingBudgets = new Map<string, number>();
+  if (incomingSet.size) {
+    await Promise.all([...incomingSet].map(async (c) => {
+      const players = await getPlayersByClub(c);
+      const squadValue = players.reduce((s: number, p: any) => s + (p.market_value ?? 0), 0);
+      const avgOverall = players.length ? players.reduce((s: number, p: any) => s + (p.overall ?? 70), 0) / players.length : 70;
+      incomingBudgets.set(c, computeInitialBudget(squadValue, avgOverall));
+      // Новому клубу лиги нужны собственные контракты — их никогда не было
+      // в этой карьере (upsert с ignoreDuplicates безопасен, если клуб уже
+      // когда-то тут был — например, вернулся с повышением после вылета).
+      try { await createContractsForClub(newSeason.id, careerId, c, players); }
+      catch (e) { console.error(`createContractsForClub failed for incoming club ${c}`, e); }
+    }));
+  }
 
   const standingsRows = clubs.map((c) => ({
     season_id: newSeason.id, club_id: c,
-    budget: Math.max(0, oldBudgetByClub[c] ?? 0), // просто перенесённый остаток, не пересчитанный
+    budget: incomingSet.has(c) ? (incomingBudgets.get(c) ?? 0) : Math.max(0, oldBudgetByClub[c] ?? 0),
   }));
   await supabase.from("standings").insert(standingsRows);
+
+  // ── Уведомление о повышении/понижении — самое важное игровое событие
+  // конца сезона, обязательно должно быть видно, а не потеряно в общем шуме. ──
+  if (promoRelegation?.userLeagueChanged) {
+    const notes: PushNotificationParams[] = [{
+      seasonId: newSeason.id, clubId: oldSeason.club_id,
+      type: promoRelegation.userPromoted ? "league_promoted" : "league_relegated",
+      title: promoRelegation.userPromoted ? "🎉 Повышение в классе!" : "📉 Вылет из лиги",
+      message: promoRelegation.userPromoted
+        ? `Клуб финишировал в топе таблицы и переходит в ${promoRelegation.newUserLeague} в новом сезоне!`
+        : `Клуб занял место в зоне вылета и переходит в ${promoRelegation.newUserLeague} в новом сезоне.`,
+      meta: { newLeague: promoRelegation.newUserLeague, promoted: promoRelegation.userPromoted },
+    }];
+    await pushNotifications(notes);
+  }
 
   // ── Реальные финалисты прошлого сезона для Суперкубка (вместо произвольных
   // первых клубов списка лиги) ──
   let prevSeasonFinalists: { leagueChampion?: string; leagueRunnerUp?: string; cupWinner?: string; cupRunnerUp?: string } = {};
   try {
-    const sortedOld = [...(oldStandings ?? [])].sort((a: any, b: any) => (b.points - a.points) || (b.gf - a.gf));
-    prevSeasonFinalists.leagueChampion = sortedOld[0]?.club_id;
-    prevSeasonFinalists.leagueRunnerUp = sortedOld[1]?.club_id;
+    prevSeasonFinalists.leagueChampion = finalOrder[0];
+    prevSeasonFinalists.leagueRunnerUp = finalOrder[1];
 
     const { data: domesticCup } = await supabase.from("competitions")
       .select("*").eq("season_id", oldSeasonId).eq("type", "domestic_cup").eq("status", "finished").maybeSingle();
@@ -186,7 +242,7 @@ export async function POST(req: Request) {
   } catch (e) { console.error("Could not resolve previous season finalists", e); }
 
   try {
-    await createSeasonCompetitions(newSeason.id, league.name, prevSeasonFinalists);
+    await createSeasonCompetitions(newSeason.id, newLeagueName, prevSeasonFinalists);
   } catch (e) { console.error("Competition creation failed", e); }
 
   return Response.json({ seasonId: newSeason.id, seasonNum: newSeason.season_num });

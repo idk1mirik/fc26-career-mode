@@ -219,8 +219,7 @@ export default function DashboardPage() {
   const [standings, setStandings]   = useState<any[]>([]);
   const [fixtures, setFixtures]     = useState<any[]>([]);
   const [simulating, setSimulating] = useState(false);
-  const [lastResults, setLastResults] = useState<any[]>([]);
-  const [showResults, setShowResults] = useState(false);
+  const [lastResults, setLastResults] = useState<any[]>([]);  const [showResults, setShowResults] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [seasonFinished, setSeasonFinished] = useState(false);
   const [seasonTrophies, setSeasonTrophies] = useState<any[]>([]);
@@ -228,6 +227,29 @@ export default function DashboardPage() {
   const [reportFix, setReportFix] = useState<any>(null);
   const [activeNav, setActiveNav]   = useState("/dashboard");
   const [calendar, setCalendar]     = useState<any[]>([]);
+  // Раньше кубковый раунд на дашборде показывал только личный матч клуба —
+  // весь остальной раунд (и до игры, и результаты после) был виден только
+  // на /cups. Теперь блок "результаты/предстоящие" на дашборде подменяется
+  // ЕГО полным раундом целиком (все матчи, не только клуба пользователя) —
+  // той же версткой, что и у лиги. Как только раунд сыгран и по календарю
+  // наступает очередь другого турнира (хоть снова лиги, хоть другого
+  // кубка) — блок сам переключается, ничего вручную закреплять не нужно.
+  // Два отдельных состояния (а не одно), чтобы "предстоящий раунд"
+  // (грузится наперёд эффектом ниже) не перезаписывал "только что сыгранный"
+  // раунд, если следующий по календарю матч — снова кубковый.
+  const [upcomingCupRound, setUpcomingCupRound] = useState<{ info: { name: string; round: string }; fixtures: any[] } | null>(null);
+  const [justPlayedCupRound, setJustPlayedCupRound] = useState<{ info: { name: string; round: string }; results: any[] } | null>(null);
+  const [lastPlayedWasCup, setLastPlayedWasCup] = useState(false);
+
+  const loadUpcomingCupRound = useCallback(async (competitionId: string, name: string) => {
+    const res = await fetch(`/api/cup/current-round?competitionId=${competitionId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setUpcomingCupRound({ info: { name, round: data.roundLabel ?? "" }, fixtures: data.fixtures ?? [] });
+      return data.roundLabel as string | undefined;
+    }
+    return undefined;
+  }, []);
   const [seasonPlayerStats, setSeasonPlayerStats] = useState<any[]>([]);
   const [clubContracts, setClubContracts] = useState<any[]>([]);
   const [unavailableNames, setUnavailableNames] = useState<Set<string>>(new Set());
@@ -327,6 +349,17 @@ export default function DashboardPage() {
     return calendar.find(m => !m.played) ?? null;
   }, [calendar]);
 
+  // Как только очередь доходит до кубкового матча (см. cupReady ниже, та же
+  // логика по дате) — подгружаем ВЕСЬ раунд этого турнира целиком, не
+  // только матч пользователя.
+  useEffect(() => {
+    if (!nextMatch || nextMatch.source !== "cup" || !nextMatch.competition_id) return;
+    const careerDate = getLeagueMatchdayDate(matchday);
+    const due = !nextMatch.match_date || nextMatch.match_date <= careerDate;
+    if (!due) return;
+    loadUpcomingCupRound(nextMatch.competition_id, nextMatch.competition_name);
+  }, [nextMatch, matchday, loadUpcomingCupRound]);
+
   // Симуляция кубкового раунда
   const advanceCupRound = async () => {
     if (!nextMatch?.competition_id || simulatingCup || !lineupValid) return;
@@ -336,7 +369,20 @@ export default function DashboardPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitionId: nextMatch.competition_id, userClubId: userClub, userTactic: tactic, userLineup: Object.values(lineup || {}).filter(Boolean) }),
       });
-      if (res.ok) await loadCalendar(seasonId!, userClub);
+      if (res.ok) {
+        const data = await res.json();
+        // Ответ /api/cup/advance уже содержит результаты ВСЕГО раунда (не
+        // только матча пользователя) — используем их напрямую, без
+        // повторного похода на сервер.
+        setJustPlayedCupRound({
+          info: { name: nextMatch.competition_name, round: upcomingCupRound?.info.round ?? "" },
+          results: data.results ?? [],
+        });
+        setLastPlayedWasCup(true);
+        setShowResults(true);
+        setUpcomingCupRound(null);
+        await loadCalendar(seasonId!, userClub);
+      }
     } catch (e) { console.error(e); }
     setSimulatingCup(false);
   };
@@ -357,6 +403,7 @@ export default function DashboardPage() {
       const data = await res.json();
       if (res.ok) {
         setLastResults(data.results || []);
+        setLastPlayedWasCup(false);
         setMatchday(data.nextMatchday);
         setShowResults(true);
         await loadData(seasonId);
@@ -929,10 +976,23 @@ export default function DashboardPage() {
             })()}
 
             {/* Last results + upcoming — раньше шли друг под другом на всю
-                ширину даже на широких экранах; места хватает на 2 колонки. */}
-            {(showResults && lastResults.length > 0) || currentFixtures.length > 0 ? (
+                ширину даже на широких экранах; места хватает на 2 колонки.
+                Если сейчас идёт другой турнир (не лига) — показываем ЕГО
+                полный раунд вместо тура лиги, той же версткой. */}
+            {(showResults && (lastPlayedWasCup ? (justPlayedCupRound?.results.length ?? 0) > 0 : lastResults.length > 0)) ||
+             (upcomingCupRound?.fixtures.length ?? currentFixtures.length) > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                {showResults && lastResults.length > 0 && (
+                {showResults && lastPlayedWasCup && justPlayedCupRound && justPlayedCupRound.results.length > 0 && (
+                  <div className={`p-5 ${ui.card} animate-fade-in-up`}>
+                    <div className={`${ui.subLabel} mb-3`}>{justPlayedCupRound.info.name} — {justPlayedCupRound.info.round}</div>
+                    <div className="space-y-1">
+                      {justPlayedCupRound.results.map((r, i) => (
+                        <MatchRow key={i} fix={{ ...r, home_club: r.home, away_club: r.away, played: true, home_goals: r.homeGoals, away_goals: r.awayGoals, events: r.events, penalties: r.penalties }} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showResults && !lastPlayedWasCup && lastResults.length > 0 && (
                   <div className={`p-5 ${ui.card} animate-fade-in-up`}>
                     <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday - 1} — ${copy.dashMatchdayResults}` : `Matchday ${matchday - 1} ${copy.dashMatchdayResults}`}</div>
                     <div className="space-y-1">
@@ -943,7 +1003,16 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {currentFixtures.length > 0 && (
+                {upcomingCupRound && upcomingCupRound.fixtures.length > 0 ? (
+                  <div className={`p-5 ${ui.card} animate-fade-in-up`}>
+                    <div className={`${ui.subLabel} mb-3`}>{upcomingCupRound.info.name} — {upcomingCupRound.info.round}</div>
+                    <div className="space-y-1">
+                      {upcomingCupRound.fixtures.map((f, i) => (
+                        <MatchRow key={i} fix={f} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
+                      ))}
+                    </div>
+                  </div>
+                ) : currentFixtures.length > 0 && (
                   <div className={`p-5 ${ui.card} animate-fade-in-up`}>
                     <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? `Тур ${matchday} — ${copy.dashUpcoming}` : `Matchday ${matchday} — ${copy.dashUpcoming}`}</div>
                     <div className="space-y-1">
