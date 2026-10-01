@@ -86,15 +86,26 @@ function seededRandom(seed: string): number {
 
 export function computePotential(ovr: number, age: number, id: string): number {
   if (age <= 0 || ovr <= 0) return ovr;
-  const ceiling = ovr >= 88 ? ovr + 3 : ovr >= 82 ? ovr + 8 : ovr >= 75 ? ovr + 12 : ovr + 6;
   const r = seededRandom(id);
-  let bonus = 0;
-  if (age <= 17)      bonus = Math.floor(r * 8) + 7;
-  else if (age <= 19) bonus = Math.floor(r * 7) + 5;
-  else if (age <= 21) bonus = Math.floor(r * 6) + 3;
-  else if (age <= 23) bonus = Math.floor(r * 4) + 1;
-  else if (age <= 26) bonus = Math.floor(r * 2);
-  return Math.min(99, Math.min(ceiling, ovr + bonus));
+  // Раньше "потолок" роста считался от ТЕКУЩЕГО рейтинга (ovr>=75 → +12,
+  // иначе всего +6) — из-за этого низко оценённый МОЛОДОЙ талант (типичный
+  // вандеркинд стартует как раз с низким overall) упирался в тесный
+  // потолок +6 ещё до применения возрастного бонуса, а 24-26-летние
+  // получали бонус всего +0/+1 — то есть "потенциал ≈ текущий рейтинг",
+  // расти уже некуда. Теперь запас роста считается от ВОЗРАСТА (это и есть
+  // реальный фактор "сколько ещё есть времени прибавлять"), а рейтинг
+  // ограничивает рост только КОГДА игрок уже близко к топу (88+) — там
+  // жёстко до 99 в любом случае мало места.
+  let bonus = 0, maxBonus = 0;
+  if (age <= 17)      { bonus = Math.floor(r * 10) + 10; maxBonus = 28; }
+  else if (age <= 19) { bonus = Math.floor(r * 9) + 8;   maxBonus = 24; }
+  else if (age <= 21) { bonus = Math.floor(r * 7) + 6;   maxBonus = 19; }
+  else if (age <= 23) { bonus = Math.floor(r * 6) + 4;   maxBonus = 14; }
+  else if (age <= 26) { bonus = Math.floor(r * 5) + 3;   maxBonus = 10; }
+  else if (age <= 29) { bonus = Math.floor(r * 3) + 1;   maxBonus = 5; }
+  const nearTopCap = ovr >= 88 ? 4 : ovr >= 82 ? 10 : 99;
+  bonus = Math.min(bonus, maxBonus, nearTopCap);
+  return Math.min(99, ovr + bonus);
 }
 
 let cache: Player[] | null = null;

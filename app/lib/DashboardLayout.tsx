@@ -11,6 +11,7 @@ import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
 import { getThemeCopy } from "@/lib/i18n";
 import { prewarmClubLogos } from "@/lib/clubLogoResolver";
+import { prewarmPhotoBucket } from "@/lib/photoResolver";
 
 const NAV_ICONS = [
   { key: "navOverview",  icon: LayoutDashboard, href: "/dashboard" },
@@ -195,7 +196,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // пронумерованные варианты гербов (см. lib/clubLogoResolver.ts). Ставим
   // тут, а не на конкретной странице, потому что DashboardLayout оборачивает
   // почти весь авторизованный интерфейс.
-  useEffect(() => { prewarmClubLogos(); }, []);
+  useEffect(() => {
+    prewarmClubLogos();
+    prewarmPhotoBucket("players");
+    prewarmPhotoBucket("players_full");
+  }, []);
 
   return (
     <div className={`min-h-screen flex relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>

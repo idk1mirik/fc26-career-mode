@@ -1,6 +1,7 @@
 import { STORAGE } from "./storage";
 import { normalizeName } from "./normalize";
 import { resolvedClubLogoFilename } from "./clubLogoResolver";
+import { resolvedPhotoFilename } from "./photoResolver";
 
 export function getClubLogo(name: string) {
   // См. lib/clubLogoResolver.ts — если для клуба через prewarmClubLogos()
@@ -11,11 +12,15 @@ export function getClubLogo(name: string) {
 }
 
 export function getPlayerPhoto(name: string) {
-  return `${STORAGE.players}/${normalizeName(name)}.png`;
+  // См. lib/photoResolver.ts — тот же приём, что и для гербов: если найден
+  // более свежий пронумерованный вариант фото лица, отдаём его.
+  const latest = resolvedPhotoFilename("players", name);
+  return `${STORAGE.players}/${latest ?? `${normalizeName(name)}.png`}`;
 }
 
 export function getPlayerFullPhoto(name: string) {
-  return `${STORAGE.playersFull}/${normalizeName(name)}.png`;
+  const latest = resolvedPhotoFilename("players_full", name);
+  return `${STORAGE.playersFull}/${latest ?? `${normalizeName(name)}.png`}`;
 }
 
 export function getFlag(country: string) {
