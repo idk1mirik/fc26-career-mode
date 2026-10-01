@@ -56,6 +56,13 @@ export default function LeagueLeadersPage() {
   const seasonId       = useCareerStore(s => s.seasonId);
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
+  // ВАЖНО: selectedLeague бывает null (например, продолжение старой карьеры)
+  // — во всём остальном приложении (dashboard/page.tsx) для этого ровно
+  // поэтому всегда используется запасной вариант selectedClub?.league. Эта
+  // страница раньше полагалась ТОЛЬКО на selectedLeague?.name — если оно
+  // пустое, запрос вообще не срабатывал (условие в useEffect ниже), и
+  // страница молча оставалась пустой сколько угодно туров.
+  const leagueName = selectedLeague?.name || selectedClub?.league || "";
   const [leaders, setLeaders] = useState<{ topScorers: any[]; topAssists: any[]; topRated: any[]; mostCards: any[] }>({ topScorers: [], topAssists: [], topRated: [], mostCards: [] });
   const [tab, setTab] = useState<TabKey>("goals");
   const [hydrated, setHydrated] = useState(false);
@@ -72,12 +79,12 @@ export default function LeagueLeadersPage() {
   const ru = locale === "ru";
 
   useEffect(() => {
-    if (!hydrated || !seasonId || !selectedLeague?.name) return;
-    fetch(`/api/league-leaders?seasonId=${seasonId}&league=${encodeURIComponent(selectedLeague.name)}`)
+    if (!hydrated || !seasonId || !leagueName) return;
+    fetch(`/api/league-leaders?seasonId=${seasonId}&league=${encodeURIComponent(leagueName)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setLeaders(data); })
       .catch(() => {});
-  }, [hydrated, seasonId, selectedLeague?.name]);
+  }, [hydrated, seasonId, leagueName]);
 
   const userClub = selectedClub?.name || "";
   if (!hydrated) return null;
@@ -95,11 +102,11 @@ export default function LeagueLeadersPage() {
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
         <div className="flex items-center gap-3 mb-6">
-          <img src={getLeagueLogo(selectedLeague?.name || "")} alt="" className="w-10 h-10 object-contain"
+          <img src={getLeagueLogo(leagueName)} alt="" className="w-10 h-10 object-contain"
             onError={e => (e.currentTarget.style.display = "none")} />
           <div className="flex-1">
             <div className={`text-[10px] uppercase tracking-widest mb-0.5 ${ui.muted}`}>{ru ? "Лидеры лиги" : "League Leaders"}</div>
-            <h1 className="text-3xl font-display font-black">{selectedLeague?.name || (ru ? "Лига" : "League")} 2025/26</h1>
+            <h1 className="text-3xl font-display font-black">{leagueName || (ru ? "Лига" : "League")} 2025/26</h1>
           </div>
           <HelpHint id="leaders-page-intro" theme={theme as any}
             title={ru ? "Лидеры лиги" : "League Leaders"}

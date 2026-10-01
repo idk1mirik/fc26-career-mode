@@ -96,6 +96,7 @@ import { getZoneColor } from "@/lib/europeanZones";
 function StandingsTable({ standings, userClub, ui, theme, glowColor, leagueName }: {
   standings: any[]; userClub: string; ui: any; theme: string; glowColor: string; leagueName?: string;
 }) {
+  const router = useRouter();
   if (!standings.length) return (
     <div className={`text-center py-8 ${ui.muted} text-sm`}>No standings yet</div>
   );
@@ -110,6 +111,8 @@ function StandingsTable({ standings, userClub, ui, theme, glowColor, leagueName 
             <th className="pb-3 text-center">W</th>
             <th className="pb-3 text-center">D</th>
             <th className="pb-3 text-center">L</th>
+            <th className="pb-3 text-center">GF</th>
+            <th className="pb-3 text-center">GA</th>
             <th className="pb-3 text-center">GD</th>
             <th className="pb-3 text-center font-black">Pts</th>
           </tr>
@@ -120,7 +123,8 @@ function StandingsTable({ standings, userClub, ui, theme, glowColor, leagueName 
             const gd = row.gf - row.ga;
             return (
               <tr key={row.club_id}
-                className={`transition-colors ${ui.tableRow} ${isUser ? ui.highlight : ""}`}>
+                onClick={() => router.push(`/clubs/${encodeURIComponent(row.club_id)}`)}
+                className={`transition-colors cursor-pointer ${ui.tableRow} ${isUser ? ui.highlight : ""}`}>
                 <td className={`py-2.5 pl-2 font-black text-xs ${ui.muted}`} style={getZoneColor(i, leagueName || "", standings.length) ? { color: getZoneColor(i, leagueName || "", standings.length)! } : undefined}>{i + 1}</td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-2">
@@ -132,6 +136,8 @@ function StandingsTable({ standings, userClub, ui, theme, glowColor, leagueName 
                 <td className={`py-2.5 text-center ${ui.muted}`}>{row.won}</td>
                 <td className={`py-2.5 text-center ${ui.muted}`}>{row.drawn}</td>
                 <td className={`py-2.5 text-center ${ui.muted}`}>{row.lost}</td>
+                <td className={`py-2.5 text-center ${ui.muted}`}>{row.gf}</td>
+                <td className={`py-2.5 text-center ${ui.muted}`}>{row.ga}</td>
                 <td className={`py-2.5 text-center ${gd > 0 ? "text-emerald-400" : gd < 0 ? "text-red-400" : ui.muted}`}>{gd > 0 ? `+${gd}` : gd}</td>
                 <td className={`py-2.5 text-center font-black text-base ${isUser ? (theme === "classic" ? "text-emerald-400" : theme === "aurora" ? "text-violet-600" : "text-fuchsia-400") : ui.text}`}>{row.points}</td>
               </tr>
@@ -364,6 +370,7 @@ export default function DashboardPage() {
   const advanceCupRound = async () => {
     if (!nextMatch?.competition_id || simulatingCup || !lineupValid) return;
     setSimulatingCup(true);
+    setApiError(null);
     try {
       const res = await fetch("/api/cup/advance", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -382,8 +389,15 @@ export default function DashboardPage() {
         setShowResults(true);
         setUpcomingCupRound(null);
         await loadCalendar(seasonId!, userClub);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setApiError(`${nextMatch.competition_name}: ${data.error ?? `HTTP ${res.status}`}`);
+        console.error("Cup advance failed:", res.status, data);
       }
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      setApiError(`${nextMatch.competition_name}: ${e?.message ?? "network error"}`);
+      console.error(e);
+    }
     setSimulatingCup(false);
   };
 
@@ -683,6 +697,18 @@ export default function DashboardPage() {
 
       {/* Main */}
       <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
+        {/* Ошибка последнего действия (тур лиги / раунд кубка) — раньше при
+            сбое на сервере не показывалось вообще ничего, кнопка просто
+            переставала крутиться и всё оставалось как было. Теперь видно
+            точный текст ошибки — по нему можно диагностировать, что
+            конкретно пошло не так. */}
+        {apiError && (
+          <div className="mb-5 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold flex items-center justify-between gap-3 animate-fade-in-up">
+            <span>⚠️ {apiError}</span>
+            <button onClick={() => setApiError(null)} className="shrink-0 opacity-60 hover:opacity-100 transition">✕</button>
+          </div>
+        )}
+
         {/* Top bar — герб + название + быстрые статы в одну строку */}
         <div className={`relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-6 rounded-3xl animate-fade-in-up shadow-lg ${ui.card}`}
           style={{ borderLeft: `3px solid ${glowColor}` }}>

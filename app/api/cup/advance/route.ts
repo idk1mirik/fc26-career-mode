@@ -14,6 +14,7 @@ import { simulateMatchByRating, simulateMatch, getClubTactic } from "@/lib/match
 import { getPlayersByClub } from "@/lib/players";
 import { getRoundName, generateKnockoutRound1, getClubLeague, LEAGUE_PHASE_CONFIG } from "@/lib/competitions";
 import { getStageInfo, getStageDisplayName, KnockoutStageName } from "@/lib/continentalKnockout";
+import { getDomesticCupRoundDate } from "@/lib/seasonCalendar";
 import { simulatePenaltyShootout, PenaltyShootoutResult } from "@/lib/penaltyShootout";
 import { getKnockoutLegDate } from "@/lib/seasonCalendar";
 import { generateMatchEvents } from "@/lib/matchReport";
@@ -286,19 +287,38 @@ export async function POST(req: Request) {
   const nextRound = comp.current_round + 1;
   const { pairs, byeTeam } = generateKnockoutRound1(winners, comp.type === "continental" ? getClubLeague : undefined);
 
+  // ВАЖНО (это и есть настоящая причина "турнир останавливается через
+  // 2-3 раунда и дальше нет расписания"): раньше этот insert не проверял
+  // ошибку вообще, а current_round обновлялся БЕЗУСЛОВНО чуть ниже, даже
+  // если вставка строк для следующего раунда молча провалилась (например,
+  // из-за отсутствовавшего match_date — здесь он не проставлялся вовсе, в
+  // отличие от ВСЕХ остальных мест создания фикстур в игре). В базе
+  // оставался раунд без единого матча, current_round уже указывал на него,
+  // и /api/competitions/due (который ищет "неигранный матч в текущем
+  // раунде") никогда больше не находил повода предложить этот турнир —
+  // тот тихо замирал навсегда. Теперь: match_date проставляется как и
+  // везде, ошибка insert проверяется, и current_round НЕ продвигается,
+  // если вставка реально не удалась — вместо этого возвращается понятная
+  // ошибка (её теперь видно в интерфейсе, см. app/dashboard/page.tsx).
   if (pairs.length > 0 || byeTeam) {
     const roundName = getRoundName(pairs.length + (byeTeam ? 1 : 0));
+    const matchDate = getDomesticCupRoundDate(nextRound);
     const rows: any[] = pairs.map(p => ({
       competition_id: competitionId, round: nextRound, round_name: roundName,
-      home_club: p.home, away_club: p.away,
+      home_club: p.home, away_club: p.away, match_date: matchDate,
     }));
     if (byeTeam) {
       rows.push({
         competition_id: competitionId, round: nextRound, round_name: roundName,
-        home_club: byeTeam, away_club: byeTeam, played: true, winner_club: byeTeam, is_bye: true,
+        home_club: byeTeam, away_club: byeTeam, match_date: matchDate,
+        played: true, winner_club: byeTeam, is_bye: true,
       });
     }
-    await supabase.from("cup_fixtures").insert(rows);
+    const { error: insertErr } = await supabase.from("cup_fixtures").insert(rows);
+    if (insertErr) {
+      console.error(`cup_fixtures insert failed for ${comp.name} round ${nextRound}:`, insertErr);
+      return Response.json({ error: `Failed to create round ${nextRound} fixtures: ${insertErr.message}` }, { status: 500 });
+    }
 
     const participants = new Set([...results.map(r => r.home), ...results.map(r => r.away)]);
     for (const w of byeWinnersThisRound) participants.add(w);
@@ -354,7 +374,11 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
       competition_id: competitionId, round: nextRound, round_name: getStageDisplayName(info.stage),
       tie_id: r.tieId, leg: 2, home_club: r.away, away_club: r.home, match_date: legDate,
     }));
-    await supabase.from("cup_fixtures").insert(rows);
+    const { error: insertErr } = await supabase.from("cup_fixtures").insert(rows);
+    if (insertErr) {
+      console.error(`cup_fixtures insert failed (leg 2) for ${comp.name} round ${nextRound}:`, insertErr);
+      return Response.json({ error: `Failed to create leg 2 fixtures: ${insertErr.message}` }, { status: 500 });
+    }
     await supabase.from("competitions").update({ current_round: nextRound }).eq("id", competitionId);
     return Response.json({ finished: false, nextRound, results });
   }
@@ -412,10 +436,14 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
   if (!nextInfo || nextInfo.isFinal) {
     // Следующий шаг — финал: один матч между двумя оставшимися финалистами.
     const [a, b] = allWinners;
-    await supabase.from("cup_fixtures").insert({
+    const { error: insertErr } = await supabase.from("cup_fixtures").insert({
       competition_id: competitionId, round: nextRound, round_name: "Final",
       home_club: a, away_club: b, match_date: getKnockoutLegDate(calKey, "final", 1),
     });
+    if (insertErr) {
+      console.error(`cup_fixtures insert failed (final) for ${comp.name} round ${nextRound}:`, insertErr);
+      return Response.json({ error: `Failed to create final fixture: ${insertErr.message}` }, { status: 500 });
+    }
     await supabase.from("competitions").update({ current_round: nextRound }).eq("id", competitionId);
     return Response.json({ finished: false, nextRound, results });
   }
@@ -428,7 +456,11 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
     competition_id: competitionId, round: nextRound, round_name: getStageDisplayName(nextInfo.stage),
     tie_id: crypto.randomUUID(), leg: 1, home_club: p.home, away_club: p.away, match_date: legDate,
   }));
-  await supabase.from("cup_fixtures").insert(rows);
+  const { error: insertErr2 } = await supabase.from("cup_fixtures").insert(rows);
+  if (insertErr2) {
+    console.error(`cup_fixtures insert failed (${nextInfo.stage}) for ${comp.name} round ${nextRound}:`, insertErr2);
+    return Response.json({ error: `Failed to create ${nextInfo.stage} fixtures: ${insertErr2.message}` }, { status: 500 });
+  }
   await supabase.from("competitions").update({ current_round: nextRound }).eq("id", competitionId);
   return Response.json({ finished: false, nextRound, results });
 }

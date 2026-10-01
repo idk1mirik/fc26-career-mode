@@ -42,7 +42,8 @@ export async function createSeasonCompetitions(
           played: true, winner_club: byeTeam, is_bye: true,
         });
       }
-      await supabase.from("cup_fixtures").insert(rows);
+      const { error: domCupErr } = await supabase.from("cup_fixtures").insert(rows);
+      if (domCupErr) console.error(`Domestic cup round 1 insert failed for ${cupDef.name}:`, domCupErr);
       created.push({ name: cupDef.name, id: comp.id });
     }
   }
@@ -84,7 +85,14 @@ export async function createSeasonCompetitions(
             });
           }
         });
-        await supabase.from("cup_fixtures").insert(rows);
+        const { error: leaguePhaseErr } = await supabase.from("cup_fixtures").insert(rows);
+        if (leaguePhaseErr) {
+          // Если эта вставка молча проваливалась (как раньше происходило
+          // ниже по пайплайну), у турнира формально была бы лиг-фаза
+          // (league_phase_rounds > 0), но ни одного матча в ней — турнир
+          // выглядел бы "сломанным" с первого же дня сезона.
+          console.error(`League phase cup_fixtures insert failed for ${def.name}:`, leaguePhaseErr);
+        }
         created.push({ name: def.name, id: comp.id });
       }
     }

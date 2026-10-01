@@ -2,6 +2,8 @@ const BASE =
   process.env.NEXT_PUBLIC_SUPABASE_URL +
   "/storage/v1/object/public/clubs";
 
+import { resolvedClubLogoFilename } from "@/lib/clubLogoResolver";
+
 function normalizeName(name: string) {
   return name
     .toLowerCase()
@@ -16,5 +18,10 @@ function normalizeName(name: string) {
 }
 
 export function getClubLogo(clubName: string): string {
-  return `${BASE}/${normalizeName(clubName)}.png`;
+  // Если через prewarmClubLogos() (см. lib/clubLogoResolver.ts) найден более
+  // свежий пронумерованный вариант герба этого клуба в бакете — отдаём его
+  // вместо базового имени. Без этого новый загруженный файл под другим
+  // именем никогда бы не использовался.
+  const latest = resolvedClubLogoFilename(clubName);
+  return `${BASE}/${latest ?? `${normalizeName(clubName)}.png`}`;
 }

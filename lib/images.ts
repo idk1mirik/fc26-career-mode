@@ -1,8 +1,13 @@
 import { STORAGE } from "./storage";
 import { normalizeName } from "./normalize";
+import { resolvedClubLogoFilename } from "./clubLogoResolver";
 
 export function getClubLogo(name: string) {
-  return `${STORAGE.clubs}/${normalizeName(name)}.png`;
+  // См. lib/clubLogoResolver.ts — если для клуба через prewarmClubLogos()
+  // найден более свежий пронумерованный вариант герба, отдаём его вместо
+  // базового имени.
+  const latest = resolvedClubLogoFilename(name);
+  return `${STORAGE.clubs}/${latest ?? `${normalizeName(name)}.png`}`;
 }
 
 export function getPlayerPhoto(name: string) {

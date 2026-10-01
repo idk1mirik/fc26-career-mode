@@ -10,6 +10,7 @@ import CalendarModal from "@/components/CalendarModal";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
 import { getThemeCopy } from "@/lib/i18n";
+import { prewarmClubLogos } from "@/lib/clubLogoResolver";
 
 const NAV_ICONS = [
   { key: "navOverview",  icon: LayoutDashboard, href: "/dashboard" },
@@ -189,6 +190,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const seasonId     = useCareerStore(s => s.seasonId);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const locale        = (useCareerStore(s => s.locale) || "en") as "en" | "ru";
+
+  // Один раз за сессию — листаем бакет "clubs" и запоминаем самые свежие
+  // пронумерованные варианты гербов (см. lib/clubLogoResolver.ts). Ставим
+  // тут, а не на конкретной странице, потому что DashboardLayout оборачивает
+  // почти весь авторизованный интерфейс.
+  useEffect(() => { prewarmClubLogos(); }, []);
 
   return (
     <div className={`min-h-screen flex relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
