@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
+import { ThemedSelect } from "@/components/ThemedSelect";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
 import { TransferSigningModal } from "@/components/TransferSigningModal";
@@ -113,10 +114,10 @@ const TransferPlayerCard = memo(function TransferPlayerCard({
             ? <img src={getPlayerPhoto(p.name)} alt={p.name} className="w-14 h-14 object-contain" onError={() => setImgErr(true)} />
             : <span className="text-3xl opacity-30 block text-center">👤</span>}
         </div>
-        <div className={`font-black text-sm text-center leading-tight ${ui.nameColor}`}>{p.name}</div>
-        <div className={`text-[11px] flex items-center justify-center gap-1 mt-1 ${ui.muted}`}>
-          <FlagImage country={p.nationality || p.nation} size={11} />
-          {p.position} · {subLabel}
+        <div className={`font-black text-sm text-center leading-tight break-words max-w-full ${ui.nameColor}`}>{p.name}</div>
+        <div className={`text-[11px] flex items-center justify-center gap-1 mt-1 max-w-full min-w-0 ${ui.muted}`}>
+          <span className="shrink-0"><FlagImage country={p.nationality || p.nation} size={11} /></span>
+          <span className="truncate min-w-0">{p.position} · {subLabel}</span>
         </div>
         {clubBadge && (
           <button
@@ -130,17 +131,26 @@ const TransferPlayerCard = memo(function TransferPlayerCard({
         )}
       </div>
 
-      <div className="px-4 py-2.5 text-center font-black text-sm border-t border-current/10">
+      <div className="px-4 py-2.5 text-center font-black text-sm border-t border-current/10 truncate">
         {priceLabel ?? fmtMoney(p.market_value ?? 0)}
       </div>
 
-      <div className="px-3 pb-3 flex gap-1.5">
-        {actions.map((a, i) => (
-          <button key={i} onClick={a.onClick} disabled={a.busy || a.disabled}
-            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
-            <a.icon size={12} />{a.label}
-          </button>
-        ))}
+      {/* Кнопки действий — раньше все шли в один ряд (flex-1) и при трёх
+          кнопках ("Быстро продать / Аренда / Выставить") текст вылезал за
+          края. Теперь сетка из 2 колонок: одна кнопка — на всю ширину,
+          две — рядом, три — две рядом + третья на всю ширину снизу.
+          Подписи могут переноситься, а не обрезаться/вылезать. */}
+      <div className="px-3 pb-3 grid grid-cols-2 gap-1.5">
+        {actions.map((a, i) => {
+          const span2 = actions.length === 1 || (actions.length === 3 && i === 2);
+          return (
+            <button key={i} onClick={a.onClick} disabled={a.busy || a.disabled}
+              className={`${span2 ? "col-span-2" : ""} min-w-0 min-h-[38px] px-2 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide leading-tight text-center flex items-center justify-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${a.cls}`}>
+              <a.icon size={12} className="shrink-0" />
+              <span className="min-w-0 break-words">{a.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -466,9 +476,9 @@ export default function TransfersPage() {
         body: JSON.stringify({ seasonId, buyerClubId: userClub, playerId: p.id, terms }),
       });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error ?? "Transfer failed", "err"); }
-      else { showToast(`Signed ${p.name} for ${fmtMoney(data.totalCost ?? data.fee)}`, "ok"); setSigningPlayer(null); await loadAll(); }
-    } catch (e) { showToast("Transfer failed", "err"); }
+      if (!res.ok) { showToast(data.error ?? (locale === "ru" ? "Трансфер не удался" : "Transfer failed"), "err"); }
+      else { showToast(locale === "ru" ? `${p.name} подписан за ${fmtMoney(data.totalCost ?? data.fee)}` : `Signed ${p.name} for ${fmtMoney(data.totalCost ?? data.fee)}`, "ok"); setSigningPlayer(null); await loadAll(); }
+    } catch (e) { showToast(locale === "ru" ? "Трансфер не удался" : "Transfer failed", "err"); }
     setBusyId(null);
   };
 
@@ -679,36 +689,26 @@ export default function TransfersPage() {
               <div className={`mb-4 p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 ${ui.card} ${ui.rowShape}`}>
                 <label className="flex flex-col gap-1 text-[10px] uppercase tracking-widest opacity-50">
                   {locale === "ru" ? "Позиция" : "Position"}
-                  <select value={marketFilters.goalkeepersOnly ? "GK" : marketFilters.position}
-                    onChange={e => {
-                      const v = e.target.value;
+                  <ThemedSelect value={marketFilters.goalkeepersOnly ? "GK" : marketFilters.position}
+                    onChange={v => {
                       setMarketFilters(f => ({ ...f, goalkeepersOnly: v === "GK", position: v === "GK" ? "" : v }));
                     }}
-                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}>
-                    <option value="">{locale === "ru" ? "Любая" : "Any"}</option>
-                    <option value="GK">GK</option>
-                    <option value="CB">CB</option>
-                    <option value="LB">LB</option>
-                    <option value="RB">RB</option>
-                    <option value="CDM">CDM</option>
-                    <option value="CM">CM</option>
-                    <option value="CAM">CAM</option>
-                    <option value="LM">LM</option>
-                    <option value="RM">RM</option>
-                    <option value="LW">LW</option>
-                    <option value="RW">RW</option>
-                    <option value="ST">ST</option>
-                  </select>
+                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}
+                    options={[
+                      { value: "", label: locale === "ru" ? "Любая" : "Any" },
+                      ...["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LM", "RM", "LW", "RW", "ST"].map(v => ({ value: v, label: v })),
+                    ]} />
                 </label>
 
                 <label className="flex flex-col gap-1 text-[10px] uppercase tracking-widest opacity-50">
                   {locale === "ru" ? "Нога" : "Foot"}
-                  <select value={marketFilters.foot} onChange={e => setMarketFilters(f => ({ ...f, foot: e.target.value }))}
-                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}>
-                    <option value="">{locale === "ru" ? "Любая" : "Any"}</option>
-                    <option value="1">{locale === "ru" ? "Правая" : "Right"}</option>
-                    <option value="2">{locale === "ru" ? "Левая" : "Left"}</option>
-                  </select>
+                  <ThemedSelect value={marketFilters.foot} onChange={v => setMarketFilters(f => ({ ...f, foot: v }))}
+                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}
+                    options={[
+                      { value: "", label: locale === "ru" ? "Любая" : "Any" },
+                      { value: "1", label: locale === "ru" ? "Правая" : "Right" },
+                      { value: "2", label: locale === "ru" ? "Левая" : "Left" },
+                    ]} />
                 </label>
 
                 <label className="flex flex-col gap-1 text-[10px] uppercase tracking-widest opacity-50">
@@ -760,20 +760,22 @@ export default function TransfersPage() {
 
                 <label className="flex flex-col gap-1 text-[10px] uppercase tracking-widest opacity-50">
                   {locale === "ru" ? "Мин. финты (1–5)" : "Min skill moves (1–5)"}
-                  <select value={marketFilters.minSkillMoves} onChange={e => setMarketFilters(f => ({ ...f, minSkillMoves: e.target.value }))}
-                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}>
-                    <option value="">{locale === "ru" ? "Любые" : "Any"}</option>
-                    {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{"★".repeat(n)}</option>)}
-                  </select>
+                  <ThemedSelect value={marketFilters.minSkillMoves} onChange={v => setMarketFilters(f => ({ ...f, minSkillMoves: v }))}
+                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}
+                    options={[
+                      { value: "", label: locale === "ru" ? "Любые" : "Any" },
+                      ...[1, 2, 3, 4, 5].map(n => ({ value: String(n), label: "★".repeat(n) })),
+                    ]} />
                 </label>
 
                 <label className="flex flex-col gap-1 text-[10px] uppercase tracking-widest opacity-50">
                   {locale === "ru" ? "Мин. слабая нога (1–5)" : "Min weak foot (1–5)"}
-                  <select value={marketFilters.minWeakFoot} onChange={e => setMarketFilters(f => ({ ...f, minWeakFoot: e.target.value }))}
-                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}>
-                    <option value="">{locale === "ru" ? "Любая" : "Any"}</option>
-                    {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{"★".repeat(n)}</option>)}
-                  </select>
+                  <ThemedSelect value={marketFilters.minWeakFoot} onChange={v => setMarketFilters(f => ({ ...f, minWeakFoot: v }))}
+                    className={`px-2.5 py-2 text-xs rounded-lg outline-none ${ui.input}`}
+                    options={[
+                      { value: "", label: locale === "ru" ? "Любая" : "Any" },
+                      ...[1, 2, 3, 4, 5].map(n => ({ value: String(n), label: "★".repeat(n) })),
+                    ]} />
                 </label>
 
                 <div className="flex items-end">

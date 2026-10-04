@@ -368,20 +368,21 @@ function NamePromptModal({ defaultValue, onConfirm, onCancel, theme }: {
   defaultValue: string; onConfirm: (name: string) => void; onCancel: () => void; theme: string;
 }) {
   const [value, setValue] = useState(defaultValue);
+  const ru = useCareerStore(s => s.locale) === "ru";
   const isDark = theme !== "aurora";
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
       <div onClick={e => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl p-6"
         style={{ background: isDark ? "#0d1117" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #fce7f3" }}>
-        <div className={`text-sm font-black mb-3 ${isDark ? "text-white" : "text-pink-950"}`}>Name this formation</div>
+        <div className={`text-sm font-black mb-3 ${isDark ? "text-white" : "text-pink-950"}`}>{ru ? "Название схемы" : "Name this formation"}</div>
         <input autoFocus value={value} onChange={e => setValue(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && value.trim()) onConfirm(value.trim()); }}
           className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-4"
           style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #fbcfe8", color: isDark ? "#fff" : "#500724" }} />
         <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", color: isDark ? "rgba(255,255,255,0.6)" : "#9d174d" }}>Cancel</button>
-          <button onClick={() => value.trim() && onConfirm(value.trim())} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "rgba(34,197,94,0.2)", color: "#22c55e" }}>Save</button>
+          <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", color: isDark ? "rgba(255,255,255,0.6)" : "#9d174d" }}>{ru ? "Отмена" : "Cancel"}</button>
+          <button onClick={() => value.trim() && onConfirm(value.trim())} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "rgba(34,197,94,0.2)", color: "#22c55e" }}>{ru ? "Сохранить" : "Save"}</button>
         </div>
       </div>
     </div>
@@ -391,17 +392,18 @@ function NamePromptModal({ defaultValue, onConfirm, onCancel, theme }: {
 function ConfirmDeleteModal({ name, onConfirm, onCancel, theme }: {
   name: string; onConfirm: () => void; onCancel: () => void; theme: string;
 }) {
+  const ru = useCareerStore(s => s.locale) === "ru";
   const isDark = theme !== "aurora";
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
       <div onClick={e => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl p-6"
         style={{ background: isDark ? "#0d1117" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #fce7f3" }}>
-        <div className={`text-sm font-black mb-2 ${isDark ? "text-white" : "text-pink-950"}`}>Delete "{name}"?</div>
-        <div className={`text-xs mb-4 ${isDark ? "text-white/40" : "text-pink-900/40"}`}>This cannot be undone.</div>
+        <div className={`text-sm font-black mb-2 ${isDark ? "text-white" : "text-pink-950"}`}>{ru ? `Удалить «${name}»?` : `Delete "${name}"?`}</div>
+        <div className={`text-xs mb-4 ${isDark ? "text-white/40" : "text-pink-900/40"}`}>{ru ? "Это нельзя отменить." : "This cannot be undone."}</div>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", color: isDark ? "rgba(255,255,255,0.6)" : "#9d174d" }}>Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}>Delete</button>
+          <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "#fdf2f8", color: isDark ? "rgba(255,255,255,0.6)" : "#9d174d" }}>{ru ? "Отмена" : "Cancel"}</button>
+          <button onClick={onConfirm} className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}>{ru ? "Удалить" : "Delete"}</button>
         </div>
       </div>
     </div>

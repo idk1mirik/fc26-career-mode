@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { ThemedSelect } from "@/components/ThemedSelect";
 import { getLeagueTheme } from "@/constants/themes";
 import { getLeagueLogo } from "@/data/leagueLogos";
 import LogoCard from "@/components/LogoCard";
@@ -283,14 +284,15 @@ export default function LeaguesPage() {
             />
 
             {/* Sort */}
-            <select
+            <ThemedSelect
               value={sortBy}
-              onChange={e => setSortBy(e.target.value as "name" | "clubs")}
+              onChange={v => setSortBy(v as "name" | "clubs")}
               className={`px-3 py-3 ${ui.sortSelect}`}
-            >
-              <option value="name">{text.sortName}</option>
-              <option value="clubs">{text.sortClubs}</option>
-            </select>
+              options={[
+                { value: "name", label: text.sortName },
+                { value: "clubs", label: text.sortClubs },
+              ]}
+            />
 
             {/* Back to Home */}
             <Link href="/">

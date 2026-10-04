@@ -17,6 +17,45 @@ const TEXT = {
 
 type NotifText = { title: string; empty: string; markAll: string; justNow: string; minutesAgo: (n: number) => string; hoursAgo: (n: number) => string; daysAgo: (n: number) => string; };
 
+// Серверные уведомления хранятся на русском. Для английского интерфейса
+// переводим известные шаблоны на лету (раньше англоязычный пользователь видел
+// русский текст в колокольчике).
+const TITLE_EN: Record<string, string> = {
+  "Переговоры сорвались": "Negotiations broke down", "Контракт истёк": "Contract expired",
+  "Игрок вернулся из аренды": "Player returned from loan", "Арендованный игрок уехал обратно": "Loaned player went back",
+  "Игрока выкупили по клаузуле": "Player bought back via clause", "Обратный выкуп совершён": "Buyback completed",
+  "Игрок отдан в аренду": "Player loaned out", "Лот продан": "Listing sold", "Аренда отозвана": "Loan recalled",
+  "Быстрая продажа совершена": "Quick sale completed", "Игрок взят в аренду": "Player loaned in",
+  "Можно возобновить переговоры": "Negotiations can resume", "Предложение принято": "Offer accepted",
+  "🎉 Повышение в классе!": "🎉 Promoted!", "📉 Вылет из лиги": "📉 Relegated",
+};
+const MSG_EN: [RegExp, string][] = [
+  [/^(.+) отклонил предложение\. Можно попробовать снова через (\d+) тура\.$/, "$1 rejected the offer. You can try again in $2 matchdays."],
+  [/^Контракт (.+) закончился — игрок стал свободным агентом\.$/, "$1's contract has ended — he is now a free agent."],
+  [/^(.+) вернулся в клуб по окончании срока аренды\.$/, "$1 returned to the club after his loan ended."],
+  [/^Срок аренды (.+) закончился — игрок вернулся в (.+)\.$/, "$1's loan has ended — he went back to $2."],
+  [/^(.+) воспользовался правом выкупа и забрал (.+) за (.+)\.$/, "$1 used the buyback option and took $2 for $3."],
+  [/^(.+) выкуплен обратно у (.+) за (.+)\.$/, "$1 bought back from $2 for $3."],
+  [/^(.+) отправлен в аренду в (.+) за (.+)\.$/, "$1 sent on loan to $2 for $3."],
+  [/^(.+) куплен клубом (.+) за (.+)\.$/, "$1 bought by $2 for $3."],
+  [/^(.+) досрочно отозван из аренды и вернулся в состав\.$/, "$1 recalled from loan early and is back in the squad."],
+  [/^(.+) продан в (.+) за (.+)\.$/, "$1 sold to $2 for $3."],
+  [/^(.+) прибыл в аренду из (.+) за (.+)\.$/, "$1 arrived on loan from $2 for $3."],
+  [/^(.+) готов снова выслушать предложение по контракту\.$/, "$1 is ready to listen to a contract offer again."],
+  [/^(.+) купил (.+) за (.+) — лот снят с рынка\.$/, "$1 bought $2 for $3 — listing removed from the market."],
+  [/^Клуб финишировал в топе таблицы и переходит в (.+) в новом сезоне!$/, "The club finished at the top and moves up to $1 next season!"],
+  [/^Клуб занял место в зоне вылета и переходит в (.+) в новом сезоне\.$/, "The club finished in the relegation zone and drops to $1 next season."],
+  [/^(.+) — (.+): (.+) проходит напрямую$/, "$1 — $2: $3 goes through directly"],
+];
+function localize(n: AppNotification, locale: "en" | "ru"): { title: string; message: string } {
+  if (locale !== "en") return { title: n.title, message: n.message };
+  let title = TITLE_EN[n.title] ?? n.title;
+  if (title.startsWith("Жеребьёвка: ")) title = "Draw: " + title.slice("Жеребьёвка: ".length);
+  let message = n.message;
+  for (const [re, out] of MSG_EN) { if (re.test(message)) { message = message.replace(re, out); break; } }
+  return { title, message };
+}
+
 function relativeTime(iso: string, t: NotifText) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diffMs / 60_000);
@@ -102,8 +141,8 @@ export default function NotificationBell({
                 <div key={n.id} className="px-4 py-3 flex gap-2.5" style={{ opacity: n.read ? 0.55 : 1 }}>
                   {!n.read && <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: glowColor }} />}
                   <div className={n.read ? "pl-[14px]" : ""}>
-                    <div className="text-xs font-black mb-0.5" style={{ color: textMain }}>{n.title}</div>
-                    <div className="text-[11px] leading-snug" style={{ color: textMuted }}>{n.message}</div>
+                    <div className="text-xs font-black mb-0.5" style={{ color: textMain }}>{localize(n, locale).title}</div>
+                    <div className="text-[11px] leading-snug break-words" style={{ color: textMuted }}>{localize(n, locale).message}</div>
                     <div className="text-[9px] uppercase tracking-widest mt-1" style={{ color: textMuted }}>{relativeTime(n.created_at, t)}</div>
                   </div>
                 </div>

@@ -119,6 +119,19 @@ export async function createContract(params: {
   return data as Contract;
 }
 
+// Игрок открывает торг с запросом чуть выше своей "честной" ставки, а дальше
+// только уступает — его запрос НИКОГДА не растёт от раунда к раунду.
+// Раньше встречное предложение считалось как середина между оффером клуба
+// и ставкой игрока с шумом ±3%, и слайдер клиента сам прыгал на эту цифру —
+// со стороны казалось, что "зарплата растёт сама, и надо предлагать всё
+// больше". Теперь запрос = ask_prev − 40% разницы с оффером клуба, но не
+// ниже 92% честной ставки (контр-предложение всегда само по себе приемлемо
+// для игрока) и не выше предыдущего запроса.
+export const OPENING_ASK_MULT = 1.08;
+export const ACCEPT_THRESHOLD = -0.1;   // оффер не хуже −10% от честной ставки — игрок согласен сразу
+export const COUNTER_FLOOR_MULT = 0.92;  // ниже этого игрок в контр-предложении не опустится
+export const CONCESSION_SHARE = 0.4;     // какую долю разницы между запросом и оффером игрок уступает за раунд
+
 export function resolveNegotiationRound(
   neg: Negotiation,
   player: { overall: number; age: number; avgRatingLastSeason?: number },
@@ -127,7 +140,7 @@ export function resolveNegotiationRound(
   const demand = calculateWageDemand(player, club, neg.club_offer.role);
   const gap = (neg.club_offer.wage - demand) / demand;
 
-  if (gap >= -0.1) {
+  if (gap >= ACCEPT_THRESHOLD) {
     return { ...neg, status: "agreed" };
   }
 
@@ -135,13 +148,18 @@ export function resolveNegotiationRound(
     return { ...neg, status: gap < -0.3 ? "rejected" : "agreed" };
   }
 
-  const noise = 1 + (Math.random() - 0.5) * 0.06;
-  const counterWage = Math.round(((neg.club_offer.wage + demand) / 2) * noise / 100) * 100;
+  const openingAsk = Math.round((demand * OPENING_ASK_MULT) / 100) * 100;
+  // В раунде 1 player_demand ещё просто копия оффера клуба (см. вставку ниже),
+  // поэтому реальным "предыдущим запросом" считаем открывающий.
+  const prevAsk = neg.round <= 1 ? openingAsk : Math.min(openingAsk, neg.player_demand?.wage ?? openingAsk);
+  const floor = Math.round((demand * COUNTER_FLOOR_MULT) / 100) * 100;
+  const conceded = prevAsk - (prevAsk - neg.club_offer.wage) * CONCESSION_SHARE;
+  const counterWage = Math.min(prevAsk, Math.max(floor, Math.round(conceded / 100) * 100));
 
   return {
     ...neg,
     round: neg.round + 1,
-    player_demand: { ...neg.player_demand, wage: counterWage },
+    player_demand: { ...neg.club_offer, wage: counterWage },
   };
 }
 
@@ -155,7 +173,7 @@ export async function startOrContinueNegotiation(
 ): Promise<Negotiation> {
   const { data: existing } = await supabase.from("negotiations")
     .select("*").eq("contract_id", contractId).eq("status", "open")
-    .order("created_at", { ascending: false }).maybeSingle();
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
   // Раньше после отказа (status="rejected") клуб мог просто начать НОВЫЕ
   // переговоры мгновенно — искался только status="open", так что отказ не
@@ -223,7 +241,35 @@ export async function finalizeAgreedNegotiation(negotiationId: string) {
   }).eq("id", neg.contract_id).select().single();
 
   if (error) throw error;
+  await markNegotiationConsumed(negotiationId);
   return data as Contract;
+}
+
+// После подписания "согласованная" запись переговоров больше не должна
+// позволять принять те же условия ещё раз — помечаем её израсходованной.
+// Best-effort: если в БД нет такого значения статуса, просто молча идём дальше.
+export async function markNegotiationConsumed(negotiationId: string) {
+  try {
+    await supabase.from("negotiations").update({ status: "expired", updated_at: new Date().toISOString() }).eq("id", negotiationId);
+  } catch { /* не критично */ }
+}
+
+// Принять УЖЕ согласованные игроком условия. Условия, пришедшие в запросе,
+// обязаны совпадать с теми, на которые игрок согласился, иначе — отказ:
+// раньше после "игрок согласен" можно было двигать зарплату/срок/роль и
+// жать "принять", обходя переговоры.
+export function sameOffer(a: Partial<NegotiationOffer> | null | undefined, b: Partial<NegotiationOffer> | null | undefined): boolean {
+  if (!a || !b) return false;
+  return Number(a.wage) === Number(b.wage) && Number(a.years) === Number(b.years)
+    && Number(a.bonus ?? 0) === Number(b.bonus ?? 0) && a.role === b.role;
+}
+
+export async function getLatestAgreedNegotiation(contractId: string): Promise<Negotiation | null> {
+  const { data } = await supabase.from("negotiations")
+    .select("*").eq("contract_id", contractId)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!data || (data as any).status !== "agreed") return null;
+  return data as Negotiation;
 }
 
 export async function payWeeklyWages(seasonId: string, clubIds: string[]) {

@@ -632,7 +632,7 @@ export function PlayerModal({
   player, clubName, clubColor, theme, onClose, isClosing, seasonStats, locale = "en", onManageContract,
 }: {
   player: any; clubName: string; clubColor: string; theme: string; onClose: () => void; isClosing?: boolean;
-  seasonStats?: { matches_played: number; goals: number; assists?: number; yellow_cards: number; red_cards: number; avg_rating: number } | null;
+  seasonStats?: { matches_played: number; goals: number; assists?: number; yellow_cards: number; red_cards: number; avg_rating: number; clean_sheets?: number } | null;
   locale?: "en" | "ru";
   onManageContract?: () => void;
 }) {
@@ -836,7 +836,7 @@ export function PlayerModal({
                 <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.35em", color: cfg.labelColor }}>
                   {locale === "ru" ? "Этот сезон" : "This Season"}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 5 }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${isGK ? 7 : 6},1fr)`, gap: 5 }}>
                   {[
                     { key: "mp", label: locale === "ru" ? "И" : "MP", value: seasonStats.matches_played },
                     { key: "goals", label: locale === "ru" ? "Г" : "GOALS", value: seasonStats.goals },
@@ -844,6 +844,7 @@ export function PlayerModal({
                     { key: "yel", label: locale === "ru" ? "ЖК" : "YEL", value: seasonStats.yellow_cards },
                     { key: "red", label: locale === "ru" ? "КК" : "RED", value: seasonStats.red_cards },
                     { key: "avg", label: locale === "ru" ? "СР" : "AVG", value: seasonStats.avg_rating.toFixed(1) },
+                    ...(isGK ? [{ key: "cs", label: locale === "ru" ? "СМ" : "CS", value: seasonStats.clean_sheets ?? 0 }] : []),
                   ].map(s => (
                     <div key={s.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
                       <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.key === "avg" ? getRatingColor(Number(s.value) * 10, theme) : cfg.metaColor }}>{s.value}</span>
@@ -916,7 +917,7 @@ export function PlayerModal({
                 <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.35em", color: cfg.labelColor }}>
                   {locale === "ru" ? "Этот сезон" : "This Season"}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 5 }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${isGK ? 7 : 6},1fr)`, gap: 5 }}>
                   {[
                     { key: "mp", label: locale === "ru" ? "И" : "MP", value: seasonStats.matches_played },
                     { key: "goals", label: locale === "ru" ? "Г" : "GOALS", value: seasonStats.goals },
@@ -924,6 +925,7 @@ export function PlayerModal({
                     { key: "yel", label: locale === "ru" ? "ЖК" : "YEL", value: seasonStats.yellow_cards },
                     { key: "red", label: locale === "ru" ? "КК" : "RED", value: seasonStats.red_cards },
                     { key: "avg", label: locale === "ru" ? "СР" : "AVG", value: seasonStats.avg_rating.toFixed(1) },
+                    ...(isGK ? [{ key: "cs", label: locale === "ru" ? "СМ" : "CS", value: seasonStats.clean_sheets ?? 0 }] : []),
                   ].map(s => (
                     <div key={s.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 2px", background: cfg.statBg, border: `1px solid ${cfg.statBorder}`, borderRadius: br }}>
                       <span style={{ fontSize: 15, fontWeight: 900, lineHeight: 1, color: s.key === "avg" ? getRatingColor(Number(s.value) * 10, theme) : cfg.metaColor }}>{s.value}</span>

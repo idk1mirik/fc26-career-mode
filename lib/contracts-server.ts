@@ -7,7 +7,7 @@
 // компонентов — иначе снова словим "Module not found: Can't resolve 'fs'"
 // при сборке (players.ts использует Node fs/path, в браузере их нет).
 import { supabase } from "./supabase";
-import { FREE_AGENT_CLUB, type SquadRole, type Contract, type NegotiationOffer } from "./contracts";
+import { FREE_AGENT_CLUB, markNegotiationConsumed, type SquadRole, type Contract, type NegotiationOffer } from "./contracts";
 import { pushNotification } from "./notifications";
 
 // Раньше отказ игрока блокировал переговоры по этому контракту навсегда —
@@ -83,6 +83,7 @@ export async function finalizeFreeAgentSigning(negotiationId: string, buyerClubI
 
   const { invalidateOverridesCache } = await import("./players");
   invalidateOverridesCache(contract.season_id);
+  await markNegotiationConsumed(negotiationId);
 
   return data as Contract;
 }

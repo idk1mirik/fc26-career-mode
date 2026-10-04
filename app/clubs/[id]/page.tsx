@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { ThemedSelect } from "@/components/ThemedSelect";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getLeagueTheme } from "@/constants/themes";
@@ -265,14 +266,14 @@ export default function ClubProfilePage() {
 
           <div className="flex items-center gap-3 flex-wrap">
             <input type="text" placeholder={text.searchRoster} value={search} onChange={e => setSearch(e.target.value)} className={ui.searchBg + " w-40"} />
-            <select value={posFilter} onChange={e => setPosFilter(e.target.value)} className={ui.selectBg}>
-              {positions.map(p => <option key={p} value={p}>{p === "ALL" ? text.allPositions : p}</option>)}
-            </select>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value as "overall"|"name"|"wage")} className={ui.selectBg}>
-              <option value="overall">{text.sortOvr}</option>
-              <option value="wage">{text.sortWage}</option>
-              <option value="name">{text.sortName}</option>
-            </select>
+            <ThemedSelect value={posFilter} onChange={setPosFilter} className={ui.selectBg} menuMinWidth={150}
+              options={positions.map(p => ({ value: p, label: p === "ALL" ? text.allPositions : p }))} />
+            <ThemedSelect value={sortBy} onChange={v => setSortBy(v as "overall"|"name"|"wage")} className={ui.selectBg} menuMinWidth={150}
+              options={[
+                { value: "overall", label: text.sortOvr },
+                { value: "wage", label: text.sortWage },
+                { value: "name", label: text.sortName },
+              ]} />
             <button onClick={() => router.back()} className={ui.backBtn}>{text.back}</button>
           </div>
         </div>

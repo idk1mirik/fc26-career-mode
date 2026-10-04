@@ -21,6 +21,7 @@ import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { applyClubEarning } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
+import { pushNotification } from "@/lib/notifications";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
@@ -37,6 +38,64 @@ const CAL_KEY_BY_NAME: Record<string, "champions_league" | "europa_league" | "co
   "Europa Conference League": "conference_league",
 };
 
+// ── Жеребьёвка: описание только что составленных пар — клиент показывает её
+// в отдельном окне, а клубу пользователя (если он участвует) уходит
+// уведомление, чтобы жеребьёвка не терялась даже при автопромотке. ──
+export interface DrawInfo {
+  competitionId: string; competitionName: string; stage: string;
+  pairs: { home: string; away: string }[]; byes: string[];
+  standings?: { club: string; points: number; gd: number }[];
+}
+
+async function announceDraw(comp: any, userClubId: string | undefined, draw: DrawInfo) {
+  if (!userClubId) return;
+  const involved = draw.byes.includes(userClubId) || draw.pairs.some(p => p.home === userClubId || p.away === userClubId);
+  if (!involved) return;
+  const mine = draw.pairs.find(p => p.home === userClubId || p.away === userClubId);
+  const msg = mine
+    ? `${draw.competitionName} — ${draw.stage}: ${mine.home} vs ${mine.away}`
+    : `${draw.competitionName} — ${draw.stage}: ${userClubId} проходит напрямую`;
+  await pushNotification({
+    seasonId: comp.season_id, clubId: userClubId, type: "cup_draw",
+    title: `Жеребьёвка: ${draw.competitionName}`, message: msg, meta: { draw },
+  });
+}
+
+// Если текущий раунд турнира уже полностью сыгран, а current_round почему-то
+// не сдвинулся (сбой на прошлой попытке — например, не вставились матчи
+// следующего раунда), дальше его не продвигал никто: "no fixtures" /
+// кнопка "играть" на дашборде не делала ничего. Здесь это лечится:
+//  - если впереди есть НЕсыгранные заранее созданные раунды (лиг-фаза
+//    еврокубка) — просто переставляем на него current_round;
+//  - если впереди ничего нет, а турнир нового формата — достраиваем
+//    следующий этап (плей-офф / 2-я нога / финал) из уже сыгранных матчей.
+async function healStalledCompetition(comp: any, isNewFormatEuro: boolean): Promise<Response | null> {
+  const { count: unplayedNow } = await supabase.from("cup_fixtures")
+    .select("id", { count: "exact", head: true })
+    .eq("competition_id", comp.id).eq("round", comp.current_round).eq("played", false);
+  if ((unplayedNow ?? 0) > 0) return null;
+
+  const { data: later } = await supabase.from("cup_fixtures")
+    .select("round").eq("competition_id", comp.id).gt("round", comp.current_round).eq("played", false)
+    .order("round", { ascending: true }).limit(1);
+  if (later?.length) {
+    await supabase.from("competitions").update({ current_round: later[0].round }).eq("id", comp.id);
+    comp.current_round = later[0].round;
+    return null;
+  }
+
+  if (!isNewFormatEuro) return null;
+  const { data: playedRows } = await supabase.from("cup_fixtures")
+    .select("*").eq("competition_id", comp.id).eq("round", comp.current_round).eq("played", true).eq("is_bye", false);
+  if (!playedRows?.length) return null;
+  const results = playedRows.map((f: any) => ({
+    home: f.home_club, away: f.away_club, homeGoals: f.home_goals ?? 0, awayGoals: f.away_goals ?? 0,
+    winner: f.winner_club, events: f.events, ratings: f.ratings, penalties: f.penalties,
+    fixtureId: f.id, tieId: f.tie_id ?? null, leg: f.leg ?? null,
+  }));
+  return await advanceNewFormatEuro(comp, results, comp.id, undefined);
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
   const { competitionId, userClubId, userHomeGoals, userAwayGoals, userTactic } = body;
@@ -46,6 +105,9 @@ export async function POST(req: Request) {
   if (!comp || comp.status === "finished") return Response.json({ error: "Competition not found or finished" }, { status: 404 });
 
   const isNewFormatEuro = comp.type === "continental" && (comp.league_phase_rounds ?? 0) > 0;
+
+  const healed = await healStalledCompetition(comp, isNewFormatEuro);
+  if (healed) return healed;
 
   const { data: fixtures } = await supabase.from("cup_fixtures")
     .select("*").eq("competition_id", competitionId).eq("round", comp.current_round).eq("played", false);
@@ -263,7 +325,7 @@ export async function POST(req: Request) {
   // НОВЫЙ ФОРМАТ: лиг-фаза → плей-офф с двумя ногами
   // ════════════════════════════════════════════════════════════════════════
   if (isNewFormatEuro) {
-    return await advanceNewFormatEuro(comp, results, competitionId);
+    return await advanceNewFormatEuro(comp, results, competitionId, userClubId);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -330,11 +392,16 @@ export async function POST(req: Request) {
   }
 
   await supabase.from("competitions").update({ current_round: nextRound }).eq("id", competitionId);
-  return Response.json({ finished: false, nextRound, results });
+  const oldDraw: DrawInfo = {
+    competitionId, competitionName: comp.name, stage: getRoundName(pairs.length + (byeTeam ? 1 : 0)),
+    pairs: pairs.map(p => ({ home: p.home, away: p.away })), byes: byeTeam ? [byeTeam] : [],
+  };
+  await announceDraw(comp, userClubId, oldDraw);
+  return Response.json({ finished: false, nextRound, results, draw: oldDraw });
 }
 
 // ── Новый формат: продвижение после лиг-фазы и внутри двухногого плей-офф ──
-async function advanceNewFormatEuro(comp: any, results: any[], competitionId: string) {
+async function advanceNewFormatEuro(comp: any, results: any[], competitionId: string, userClubId?: string) {
   const calKey = CAL_KEY_BY_NAME[comp.name];
   const leaguePhaseRounds: number = comp.league_phase_rounds ?? 0;
 
@@ -347,7 +414,7 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
 
   // ── 2. Это был ПОСЛЕДНИЙ тур лиг-фазы — переходим в плей-офф. ──
   if (comp.current_round === leaguePhaseRounds) {
-    return await transitionToKnockout(comp, competitionId, calKey);
+    return await transitionToKnockout(comp, competitionId, calKey, userClubId);
   }
 
   // ── 3. Мы в плей-офф: определяем стадию/ногу текущего раунда. ──
@@ -445,7 +512,11 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
       return Response.json({ error: `Failed to create final fixture: ${insertErr.message}` }, { status: 500 });
     }
     await supabase.from("competitions").update({ current_round: nextRound }).eq("id", competitionId);
-    return Response.json({ finished: false, nextRound, results });
+    const finalDraw: DrawInfo = {
+      competitionId, competitionName: comp.name, stage: getStageDisplayName("final"), pairs: [{ home: a, away: b }], byes: [],
+    };
+    await announceDraw(comp, userClubId, finalDraw);
+    return Response.json({ finished: false, nextRound, results, draw: finalDraw });
   }
 
   // Следующая стадия — снова двухногий тур. Жеребьёвка среди прошедших
@@ -462,12 +533,17 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
     return Response.json({ error: `Failed to create ${nextInfo.stage} fixtures: ${insertErr2.message}` }, { status: 500 });
   }
   await supabase.from("competitions").update({ current_round: nextRound }).eq("id", competitionId);
-  return Response.json({ finished: false, nextRound, results });
+  const stageDraw: DrawInfo = {
+    competitionId, competitionName: comp.name, stage: getStageDisplayName(nextInfo.stage),
+    pairs: pairs.map(p => ({ home: p.home, away: p.away })), byes: [],
+  };
+  await announceDraw(comp, userClubId, stageDraw);
+  return Response.json({ finished: false, nextRound, results, draw: stageDraw });
 }
 
 // ── Переход из лиг-фазы в плей-офф: таблица очков → прямые квалификанты +
 // посев стыковых матчей (двухногих) для оставшегося пула. ──
-async function transitionToKnockout(comp: any, competitionId: string, calKey: "champions_league" | "europa_league" | "conference_league") {
+async function transitionToKnockout(comp: any, competitionId: string, calKey: "champions_league" | "europa_league" | "conference_league", userClubId?: string) {
   const phaseConfig = LEAGUE_PHASE_CONFIG[comp.name];
   if (!phaseConfig) return Response.json({ error: "No league-phase config for this competition" }, { status: 500 });
 
@@ -521,5 +597,12 @@ async function transitionToKnockout(comp: any, competitionId: string, calKey: "c
   }
   await supabase.from("competitions").update({ phase: "knockout", current_round: playoffRound }).eq("id", competitionId);
 
-  return Response.json({ finished: false, nextRound: playoffRound, results: [], transitionedToKnockout: true, standings });
+  const draw: DrawInfo = {
+    competitionId, competitionName: comp.name, stage: getStageDisplayName("playoff"),
+    pairs: seededPairs, byes: direct,
+    standings: standings.map(s => ({ club: s.club, points: s.points, gd: s.gd })),
+  };
+  await announceDraw(comp, userClubId, draw);
+
+  return Response.json({ finished: false, nextRound: playoffRound, results: [], transitionedToKnockout: true, standings, draw });
 }

@@ -16,6 +16,10 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { getThemeCopy } from "@/lib/i18n";
 import { MatchReportModal } from "@/components/MatchReportModal";
 import { HelpHint } from "@/components/HelpHint";
+import { LiveCompetitionPanel } from "@/components/LiveCompetitionPanel";
+import { DrawModal } from "@/components/DrawModal";
+import { runTimeline, advanceBackgroundCups, type DrawInfo, type SimContext } from "@/lib/simClient";
+import { seasonLabel, formatGameDate } from "@/lib/seasonLabel";
 import React from "react";
 
 const GLOBAL_UI = {
@@ -220,6 +224,8 @@ export default function DashboardPage() {
   const lineupsByFormation = useCareerStore(s => s.lineupsByFormation);
   const customFormationsStore = useCareerStore(s => s.customFormations);
   const setSeasonId    = useCareerStore(s => s.setSeasonId);
+  const seasonNum      = useCareerStore(s => s.seasonNum);
+  const setSeasonNum   = useCareerStore(s => s.setSeasonNum);
 
   const [hydrated, setHydrated]     = useState(false);
   const [standings, setStandings]   = useState<any[]>([]);
@@ -260,6 +266,30 @@ export default function DashboardPage() {
   const [clubContracts, setClubContracts] = useState<any[]>([]);
   const [unavailableNames, setUnavailableNames] = useState<Set<string>>(new Set());
   const [simulatingCup, setSimulatingCup] = useState(false);
+
+  // ── Правая панель: таблица лиги или таблица/сетка текущего турнира ──
+  const [competitions, setCompetitions] = useState<any[]>([]);
+  const [fixturesByComp, setFixturesByComp] = useState<Record<string, any[]>>({});
+  const [standingsByComp, setStandingsByComp] = useState<Record<string, any[]>>({});
+  const [panelCompId, setPanelCompId] = useState<string | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
+
+  // ── Жеребьёвки (очередь окон) ──
+  const [drawQueue, setDrawQueue] = useState<DrawInfo[]>([]);
+  const drawPausedRef = useRef(false);
+
+  const loadCompetitions = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`/api/competitions?seasonId=${sid}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCompetitions(data.competitions ?? []);
+      setFixturesByComp(data.fixturesByComp ?? {});
+      setStandingsByComp(data.standingsByComp ?? {});
+    } catch { /* панель просто останется со старыми данными */ }
+  }, []);
+
+  const pushDraw = useCallback((d: DrawInfo) => setDrawQueue(q => [...q, d]), []);
 
   const availableLineupPlayers = useMemo(() =>
     Object.values(lineup || {}).filter((p: any) => p && !unavailableNames.has(p.id ?? p.name)),
@@ -303,6 +333,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!seasonFinished || !seasonId) return;
+    // Экран итогов строится из competitions/fixturesByComp/standingsByComp —
+    // перезагружаем их, чтобы там были финальные результаты ВСЕХ турниров.
+    loadCompetitions(seasonId);
     fetch(`/api/competitions?seasonId=${seasonId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -311,7 +344,7 @@ export default function DashboardPage() {
         setSeasonTrophies(finished.filter((c: any) => c.winner_club === userClub));
         setAllCompetitionResults(finished);
       }).catch(() => {});
-  }, [seasonFinished, seasonId, userClub]);
+  }, [seasonFinished, seasonId, userClub, loadCompetitions]);
 
   // Загрузка таблицы и расписания
   const loadData = useCallback(async (sid: string) => {
@@ -326,10 +359,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!seasonId) return;
     loadData(seasonId);
+    loadCompetitions(seasonId);
     fetch(`/api/season?id=${seasonId}`).then(r => r.ok ? r.json() : null).then(s => {
       if (s?.status === "finished") setSeasonFinished(true);
+      if (s?.season_num) setSeasonNum(s.season_num);
     }).catch(() => {});
-  }, [seasonId, loadData]);
+  }, [seasonId, loadData, loadCompetitions, setSeasonNum]);
 
   // Загружаем единый календарь (лига + кубки) для определения следующего матча
   const loadCalendar = useCallback(async (sid: string, clubId: string) => {
@@ -366,6 +401,11 @@ export default function DashboardPage() {
     loadUpcomingCupRound(nextMatch.competition_id, nextMatch.competition_name);
   }, [nextMatch, matchday, loadUpcomingCupRound]);
 
+  const simCtx = (): SimContext => ({
+    seasonId: seasonId!, userClubId: userClub, tactic, customTactic,
+    lineup: Object.values(lineup || {}).filter(Boolean),
+  });
+
   // Симуляция кубкового раунда
   const advanceCupRound = async () => {
     if (!nextMatch?.competition_id || simulatingCup || !lineupValid) return;
@@ -379,8 +419,7 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         // Ответ /api/cup/advance уже содержит результаты ВСЕГО раунда (не
-        // только матча пользователя) — используем их напрямую, без
-        // повторного похода на сервер.
+        // только матча пользователя) — используем их напрямую.
         setJustPlayedCupRound({
           info: { name: nextMatch.competition_name, round: upcomingCupRound?.info.round ?? "" },
           results: data.results ?? [],
@@ -388,7 +427,14 @@ export default function DashboardPage() {
         setLastPlayedWasCup(true);
         setShowResults(true);
         setUpcomingCupRound(null);
+        setPanelCompId(nextMatch.competition_id);
+        if (data.draw) pushDraw(data.draw);
+        // Остальные турниры с той же датой (где клуб пользователя не играет) —
+        // доигрываются сами, иначе они бы так и висели неигранными.
+        const more = await advanceBackgroundCups(simCtx(), nextMatch.match_date ?? getLeagueMatchdayDate(matchday));
+        more.forEach(pushDraw);
         await loadCalendar(seasonId!, userClub);
+        await loadCompetitions(seasonId!);
       } else {
         const data = await res.json().catch(() => ({}));
         setApiError(`${nextMatch.competition_name}: ${data.error ?? `HTTP ${res.status}`}`);
@@ -420,8 +466,13 @@ export default function DashboardPage() {
         setLastPlayedWasCup(false);
         setMatchday(data.nextMatchday);
         setShowResults(true);
+        setPanelCompId(null);
+        // Кубки, где клуб пользователя сейчас не играет, идут сами по датам
+        const bg = await advanceBackgroundCups(simCtx(), data.finished ? "9999-12-31" : getLeagueMatchdayDate(data.nextMatchday), { ignoreDate: !!data.finished });
+        bg.forEach(pushDraw);
         await loadData(seasonId);
         await loadCalendar(seasonId, userClub);
+        await loadCompetitions(seasonId);
         if (data.finished) setSeasonFinished(true);
       } else {
         setApiError(data.error || "Could not simulate matchday.");
@@ -441,104 +492,52 @@ export default function DashboardPage() {
   const simPausedRef = useRef(false);
   const simStopRef = useRef(false);
 
-  // При автопромотке лиги кубки раньше вообще не трогались — их fixtures
-  // просто копились неигранными. Теперь после каждого лигового тура ещё
-  // проверяем все активные турниры: если дата текущего раунда уже наступила
-  // (или прошла) по игровому календарю — доигрываем его тоже, в автопилоте.
-  const advanceDueCups = async (currentDateStr: string, ignoreDate = false) => {
-    // Раньше тут дёргался полный /api/competitions (все fixtures + таблица
-    // лиг-фазы) на КАЖДОЙ проверке — при промотке всего сезона это тысячи
-    // тяжёлых запросов и заметные тормоза. Теперь — лёгкая проверка "у кого
-    // вообще есть неигранный тур и когда он датирован", без лишних данных.
-    //
-    // ignoreDate=true — используется ПОСЛЕ завершения лигового сезона: раз
-    // календарь игры двигается только через туры лиги, а лига уже закончилась,
-    // дальше ждать больше нечего — доигрываем оставшиеся раунды кубков как есть.
-    let safety = ignoreDate ? 20 : 6;
-    while (safety-- > 0) {
-      const dueRes = await fetch(`/api/competitions/due?seasonId=${seasonId}`);
-      if (!dueRes.ok) return;
-      const { due } = await dueRes.json();
-      let advancedAny = false;
-
-      for (const d of due as { competitionId: string; matchDate: string | null }[]) {
-        if (!ignoreDate && d.matchDate && d.matchDate > currentDateStr) continue; // дата ещё не наступила
-        await fetch("/api/cup/advance", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            competitionId: d.competitionId, userClubId: userClub, userTactic: tactic,
-            userLineup: Object.values(lineup || {}).filter(Boolean),
-          }),
-        });
-        advancedAny = true;
-      }
-      if (!advancedAny) break;
-    }
-  };
-
   const simSleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+  // Промотка сезона целиком — единая хронология лиги и кубков (см.
+  // lib/simClient.ts): берём ближайшее событие по датам (тур лиги или раунд
+  // любого кубка) и играем его, до самого конца. Гоняем циклом с клиента, а
+  // не одним запросом — так не упираемся в таймаут serverless-функции и
+  // видно прогресс. После КАЖДОГО события таблица обновляется "вживую", а
+  // правая панель переключается на играемый турнир.
   const simulateWholeSeason = async () => {
     if (!seasonId || simulating || simulatingSeason) return;
     setSimulatingSeason(true);
     setApiError(null);
+    setLiveMode(true);
     setSeasonSimProgress({ done: 0, matchday });
     simPausedRef.current = false;
     simStopRef.current = false;
+    drawPausedRef.current = false;
     setSimPaused(false);
+    let done = 0;
     try {
-      let finished = false;
-      let iterations = 0;
-      const SAFETY_CAP = 80; // больше, чем матчей в самом длинном реалистичном календаре
-      while (!finished && iterations < SAFETY_CAP) {
-        // Пауза — крутимся тут, пока не отожмут "Продолжить" или не остановят совсем.
-        // Не выходим из цикла молча: проверяем стоп и во время паузы тоже.
-        while (simPausedRef.current && !simStopRef.current) await simSleep(200);
-        if (simStopRef.current) break;
-
-        const res = await fetch("/api/season/advance", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          // Раньше здесь ничего не передавалось ("автопилот"), и сервер на
-          // КАЖДЫЙ матч заново собирал "топ-11 по общему рейтингу" вместо
-          // реального сохранённого состава — из-за этого статистика при
-          // авто-прокрутке была совсем не похожа на то, что получилось бы
-          // при ручной игре (другой стартовый состав, другая логика матча).
-          // Теперь передаём тот же lineup/tactic, что и при ручной игре —
-          // сервер сам подставит замены только на недоступные позиции.
-          body: JSON.stringify({
-            seasonId, userClubId: userClub, userTactic: tactic,
-            userCustomTactic: tactic === "Custom" ? customTactic : undefined,
-            userLineup: Object.values(lineup || {}).filter(Boolean),
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setApiError(data.error || "Season sim stopped early."); break; }
-        iterations++;
-        finished = !!data.finished;
-        setSeasonSimProgress({ done: iterations, matchday: data.nextMatchday });
-
-        await advanceDueCups(getLeagueMatchdayDate(data.nextMatchday));
-
-        // Живое обновление — раньше таблица/результаты обновлялись только
-        // ОДИН раз в самом конце, и вся автопрокрутка выглядела как "экран
-        // просто завис на N секунд". Теперь таблица и тур реально видно,
-        // как они меняются по ходу симуляции — плюс небольшая пауза между
-        // турами, чтобы это ощущалось как течение времени, а не рывок.
-        await loadData(seasonId);
-        if (finished) setSeasonFinished(true);
-        if (!finished && !simStopRef.current) await simSleep(320);
-      }
-      if (!simStopRef.current) {
-        // Лига закончилась, но у кубков (особенно еврокубков — их плей-офф
-        // может ещё продолжаться) могли остаться недоигранные раунды с датами
-        // ПОСЛЕ последнего тура лиги. Дальше календарь всё равно не двигается
-        // сам по себе — доигрываем всё, что осталось, не дожидаясь дат.
-        await advanceDueCups("9999-12-31", true);
-      }
+      const result = await runTimeline(simCtx(), matchday, "end", {
+        shouldStop: () => simStopRef.current,
+        waitIfPaused: async () => { while (simPausedRef.current && !simStopRef.current) await simSleep(200); },
+        stepDelayMs: 320,
+        onError: (m) => setApiError(m),
+        onDraw: (d) => {
+          pushDraw(d);
+          // Жеребьёвка с участием клуба пользователя — ставим на паузу, чтобы успеть посмотреть
+          const involved = d.byes.includes(userClub) || d.pairs.some(pr => pr.home === userClub || pr.away === userClub);
+          if (involved) { drawPausedRef.current = true; simPausedRef.current = true; setSimPaused(true); }
+        },
+        onEvent: async (e) => {
+          done++;
+          setSeasonSimProgress({ done, matchday: e.matchday });
+          if (e.kind === "league") { setMatchday(e.matchday); setPanelCompId(null); }
+          else if (e.competitionId) setPanelCompId(e.competitionId);
+          await Promise.all([loadData(seasonId), loadCompetitions(seasonId)]);
+        },
+      });
+      if (result.leagueFinished) setSeasonFinished(true);
       await loadData(seasonId);
+      await loadCompetitions(seasonId);
       await loadCalendar(seasonId, userClub);
     } catch (e) { console.error(e); setApiError("Network error during season simulation."); }
     setSimulatingSeason(false);
+    setLiveMode(false);
     setSeasonSimProgress(null);
     simPausedRef.current = false;
     simStopRef.current = false;
@@ -600,9 +599,11 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         useCareerStore.getState().setSeasonId(data.seasonId);
+        if (data.seasonNum) useCareerStore.getState().setSeasonNum(data.seasonNum);
         useCareerStore.getState().setMatchday(1);
         setSeasonFinished(false);
         setStandings([]); setFixtures([]); setCalendar([]); setLastResults([]); setShowResults(false);
+        setCompetitions([]); setFixturesByComp({}); setStandingsByComp({}); setPanelCompId(null); setSeasonTrophies([]); setAllCompetitionResults([]);
       }
     } catch (e) { console.error(e); }
     setStartingNewSeason(false);
@@ -612,67 +613,155 @@ export default function DashboardPage() {
 
   if (seasonFinished) {
     const sortedStandings = [...standings].sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
+
+    // ── Итоги сезона для клуба пользователя ──
+    const withRating = seasonPlayerStats.filter((p: any) => p.matches_played >= 5);
+    const bestPlayer = [...withRating].sort((a: any, b: any) => (b.total_rating / b.matches_played) - (a.total_rating / a.matches_played))[0];
+    const bestScorer = [...seasonPlayerStats].sort((a: any, b: any) => b.goals - a.goals || (b.assists ?? 0) - (a.assists ?? 0))[0];
+    // Лучший матч — не просто крупная победа: считаем "зрелищность" —
+    // много голов, мало разрыва (4:3 интереснее 5:0), победа и важная
+    // стадия турнира (полуфинал/финал) добавляют очки.
+    const playedUserMatches = calendar.filter((m: any) => m.played && (m.home_club === userClub || m.away_club === userClub));
+    const matchScore = (m: any) => {
+      const hg = m.home_goals ?? 0, ag = m.away_goals ?? 0;
+      const isHome = m.home_club === userClub;
+      const won = (isHome ? hg > ag : ag > hg);
+      const stageBonus = /final|semi/i.test(m.round_name ?? "") ? 1.5 : /quarter/i.test(m.round_name ?? "") ? 0.7 : 0;
+      return (hg + ag) - Math.abs(hg - ag) * 0.4 + (won ? 0.8 : 0) + stageBonus;
+    };
+    const bestMatch = [...playedUserMatches].sort((a: any, b: any) => matchScore(b) - matchScore(a))[0];
+    // ── Итоги по КАЖДОМУ турниру, где играл клуб пользователя ──
+    const ru = locale === "ru";
+    const STAGE_RU: Record<string, string> = {
+      "Playoff Round": "стыковых матчах", "Round of 16": "1/8 финала", "Quarter-final": "1/4 финала", "Quarter-finals": "1/4 финала",
+      "Semi-final": "1/2 финала", "Semi-finals": "1/2 финала", "Round of 32": "1/16 финала", "Round of 64": "1/32 финала",
+    };
+    const stageText = (name: string) => ru ? (STAGE_RU[name] ?? name) : name;
+    const tournaments = competitions
+      .map((c: any) => {
+        const fx: any[] = fixturesByComp[c.id] ?? [];
+        const mine = fx.filter(f => f.home_club === userClub || f.away_club === userClub);
+        if (mine.length === 0) return null;
+        const phaseRounds = c.league_phase_rounds ?? 0;
+        const isNewEuro = c.type === "continental" && phaseRounds > 0;
+        const won = c.winner_club === userClub;
+        const last = [...mine].sort((a, b) => b.round - a.round)[0];
+        let result = "";
+        let tone: "gold" | "good" | "neutral" | "bad" = "neutral";
+        if (won) { result = ru ? "🏆 Победа в турнире" : "🏆 Champions"; tone = "gold"; }
+        else if (!c.winner_club) { result = ru ? "Турнир не завершён" : "Not finished"; }
+        else if (isNewEuro && last.round <= phaseRounds) {
+          const pos = (standingsByComp[c.id] ?? []).findIndex((r: any) => r.club === userClub) + 1;
+          result = ru ? `Вылет в лига-фазе${pos ? ` (${pos}-е место)` : ""}` : `Out in league phase${pos ? ` (#${pos})` : ""}`;
+          tone = "bad";
+        } else if (/^final$/i.test(last.round_name ?? "") && last.played) { result = ru ? "🥈 Финалист" : "🥈 Runners-up"; tone = "good"; }
+        else {
+          const name = last.round_name ?? "";
+          result = ru ? `Вылет в ${stageText(name) || "кубке"}` : `Out in ${name || "the cup"}`;
+          tone = "bad";
+        }
+        const played = mine.filter(f => f.played && !f.is_bye);
+        const w = played.filter(f => (f.home_club === userClub ? (f.home_goals ?? 0) > (f.away_goals ?? 0) : (f.away_goals ?? 0) > (f.home_goals ?? 0))).length;
+        const gf = played.reduce((n, f) => n + (f.home_club === userClub ? (f.home_goals ?? 0) : (f.away_goals ?? 0)), 0);
+        const ga = played.reduce((n, f) => n + (f.home_club === userClub ? (f.away_goals ?? 0) : (f.home_goals ?? 0)), 0);
+        return { id: c.id, name: c.name, type: c.type, winner: c.winner_club as string | null, result, tone, played: played.length, wins: w, gf, ga };
+      })
+      .filter(Boolean) as any[];
+    const leagueRow = {
+      id: "league", name: selectedLeague?.name || selectedClub?.league || (ru ? "Лига" : "League"), type: "league",
+      winner: sortedStandings[0]?.club_id as string | null,
+      result: userPos === 1 ? (ru ? "🏆 Чемпионы лиги" : "🏆 League champions") : (ru ? `${userPos}-е место из ${sortedStandings.length}` : `Finished #${userPos} of ${sortedStandings.length}`),
+      tone: (userPos === 1 ? "gold" : Number(userPos) <= 4 ? "good" : "neutral") as "gold" | "good" | "neutral" | "bad",
+      played: sortedStandings.find(r => r.club_id === userClub)?.played ?? 0,
+      wins: sortedStandings.find(r => r.club_id === userClub)?.won ?? 0,
+      gf: sortedStandings.find(r => r.club_id === userClub)?.gf ?? 0,
+      ga: sortedStandings.find(r => r.club_id === userClub)?.ga ?? 0,
+    };
+    const allTournaments = [leagueRow, ...tournaments];
+    const toneColor = (t: string) => t === "gold" ? "#eab308" : t === "good" ? "#22c55e" : t === "bad" ? "#f87171" : undefined;
+    const tIcon = (t: string) => t === "league" ? "🏟️" : t === "domestic_cup" ? "🏆" : t === "super_cup" ? "⚡" : "🌍";
+    const statTile = (icon: string, label: string, name: string, value: string, color?: string) => (
+      <div className={`flex items-center gap-3 p-3 rounded-2xl text-left min-w-0 ${ui.cardAlt}`}>
+        <span className="text-2xl shrink-0">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className={`text-[9px] uppercase tracking-widest ${ui.muted}`}>{label}</div>
+          <div className={`text-sm font-black truncate ${ui.text}`}>{name}</div>
+        </div>
+        <div className="text-lg font-display font-black shrink-0" style={color ? { color } : undefined}>{value}</div>
+      </div>
+    );
     return (
       <DashboardLayout>
         <main className={`min-h-screen relative overflow-hidden flex items-center justify-center p-6 ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
-          <div className={`w-full max-w-lg p-8 rounded-3xl text-center ${ui.card} animate-fade-in-up`}>
+          <div className={`w-full max-w-2xl p-6 sm:p-8 rounded-3xl text-center ${ui.card} animate-fade-in-up`}>
             <div className="text-5xl mb-3 animate-floaty-sm inline-block">🏁</div>
-            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>Season Complete</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>{locale === "ru" ? `Сезон ${seasonLabel(seasonNum)} завершён` : `Season ${seasonLabel(seasonNum)} complete`}</div>
             <h1 className={`text-2xl font-display font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
-            <div className={`text-sm mb-5 ${ui.muted}`}>Final league position: #{userPos} of {sortedStandings.length}</div>
+            <div className={`text-sm mb-5 ${ui.muted}`}>{locale === "ru" ? `Итоговое место в лиге: ${userPos} из ${sortedStandings.length}` : `Final league position: #${userPos} of ${sortedStandings.length}`}</div>
 
-            {/* Трофеи сезона — раньше здесь был виден только результат в лиге,
-                выигранные кубки/еврокубки нигде явно не отображались. */}
-            {seasonTrophies.length > 0 ? (
-              <div className="flex flex-wrap justify-center gap-3 mb-6">
-                {seasonTrophies.map((t: any) => (
-                  <div key={t.id} className={`flex flex-col items-center gap-1 px-4 py-3 rounded-2xl animate-fade-in-up ${ui.card}`} style={{ borderTop: "2px solid #eab308" }}>
-                    <span className="text-2xl">🏆</span>
-                    <span className={`text-[11px] font-bold ${ui.text}`}>{t.name}</span>
+            {/* Итоги клуба: лучший игрок, бомбардир, лучший матч */}
+            {(bestPlayer || bestScorer?.goals > 0 || bestMatch) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
+                {bestPlayer && statTile("⭐", locale === "ru" ? "Лучший игрок клуба" : "Club player of the season", bestPlayer.player_name, (bestPlayer.total_rating / bestPlayer.matches_played).toFixed(2), getRatingColorDash(bestPlayer.total_rating / bestPlayer.matches_played))}
+                {bestScorer && bestScorer.goals > 0 && statTile("⚽", locale === "ru" ? "Лучший бомбардир клуба" : "Club top scorer", bestScorer.player_name, `${bestScorer.goals} ${locale === "ru" ? "гол." : "G"}`)}
+                {bestMatch && (
+                  <div className="sm:col-span-2">
+                    <div className={`text-[10px] uppercase tracking-widest mb-1.5 text-left ${ui.muted}`}>🔥 {locale === "ru" ? "Лучший матч сезона" : "Match of the season"} · {bestMatch.competition_name === "League" ? (locale === "ru" ? "Лига" : "League") : bestMatch.competition_name}</div>
+                    <div className={`rounded-2xl p-1 ${ui.cardAlt}`}>
+                      <MatchRow fix={bestMatch} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Все турниры сезона, где играл клуб: результат клуба + победитель */}
+            <div className={`text-left rounded-2xl p-4 mb-6 ${ui.card}`}>
+              <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>
+                {ru ? "Турниры сезона" : "Season competitions"}
+              </div>
+              <div className="space-y-2.5">
+                {allTournaments.map((t: any) => (
+                  <div key={t.id} className={`rounded-xl p-3 ${ui.cardAlt}`} style={t.tone === "gold" ? { borderLeft: "3px solid #eab308" } : undefined}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-lg shrink-0">{tIcon(t.type)}</span>
+                      <span className={`text-sm font-black truncate min-w-0 flex-1 ${ui.text}`}>{t.name}</span>
+                      <span className="text-[11px] font-black text-right shrink-0 max-w-[55%]" style={{ color: toneColor(t.tone) }}>{t.result}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
+                      <div className={`text-[11px] flex items-center gap-1.5 min-w-0 ${ui.muted}`}>
+                        {ru ? "Победитель:" : "Winner:"}
+                        {t.winner ? (
+                          <span className={`font-bold flex items-center gap-1.5 min-w-0 ${t.winner === userClub ? "text-emerald-400" : ui.text}`}>
+                            <img src={getClubLogo(t.winner)} className="w-4 h-4 object-contain shrink-0" alt="" onError={e => (e.currentTarget.style.display = "none")} />
+                            <span className="truncate">{t.winner}</span>
+                          </span>
+                        ) : <span>—</span>}
+                      </div>
+                      {t.played > 0 && (
+                        <div className={`text-[11px] shrink-0 ${ui.muted}`}>
+                          {ru ? `${t.played} матч. · ${t.wins} поб. · мячи ${t.gf}:${t.ga}` : `${t.played} played · ${t.wins} W · GF/GA ${t.gf}:${t.ga}`}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className={`text-xs mb-6 ${ui.muted}`}>
-                {locale === "ru" ? "В этом сезоне без трофеев — в следующем получится." : "No trophies this season — next time."}
-              </div>
-            )}
-
-            <div className="flex justify-center gap-2 mb-4">
-              <img src={getClubLogo(sortedStandings[0]?.club_id || "")} className="w-10 h-10 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-              <div className="text-left">
-                <div className={`text-[10px] uppercase ${ui.muted}`}>{locale === "ru" ? "Чемпион лиги" : "League Champion"}</div>
-                <div className={`text-sm font-black ${ui.text}`}>{sortedStandings[0]?.club_id}</div>
-              </div>
             </div>
-
-            {/* Победители ВСЕХ турниров сезона — раньше тут был виден только
-                результат своей лиги и трофеи, выигранные лично пользователем. */}
-            {allCompetitionResults.length > 0 && (
-              <div className={`text-left rounded-2xl p-4 mb-6 ${ui.card}`}>
-                <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>
-                  {locale === "ru" ? "Победители сезона" : "Season winners"}
-                </div>
-                <div className="space-y-2">
-                  {allCompetitionResults.map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between text-sm">
-                      <span className={ui.muted}>{c.name}</span>
-                      <span className={`font-bold flex items-center gap-1.5 ${c.winner_club === userClub ? "text-emerald-400" : ui.text}`}>
-                        <img src={getClubLogo(c.winner_club)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                        {c.winner_club}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <button onClick={handleStartNewSeason} disabled={startingNewSeason}
               className={`w-full py-4 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-transform hover:scale-[1.02] ${ui.btnPrimary}`}>
               <Zap size={16} />
-              {startingNewSeason ? "Starting new season…" : "Start New Season →"}
+              {startingNewSeason ? (locale === "ru" ? "Запускаем новый сезон…" : "Starting new season…") : (locale === "ru" ? "Начать новый сезон →" : "Start New Season →")}
             </button>
           </div>
+          {reportFix && (
+            <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} locale={locale} onClose={() => setReportFix(null)} />
+          )}
+          {drawQueue.length > 0 && (
+            <DrawModal draw={drawQueue[0]} theme={theme as any} locale={locale as "en" | "ru"} userClub={userClub}
+              remaining={drawQueue.length - 1} onClose={() => setDrawQueue(q => q.slice(1))} />
+          )}
         </main>
       </DashboardLayout>
     );
@@ -731,7 +820,7 @@ export default function DashboardPage() {
               <div className={`${ui.subLabel} mb-1`}>{copy.dashTitle}</div>
               <h2 className="text-xl sm:text-2xl font-display font-black truncate"
                 style={theme === "classic" ? { fontFamily: "'Bebas Neue',sans-serif", fontSize: "2rem" } : theme === "maleficent" ? { fontFamily: "'Share Tech Mono',monospace" } : {}}>
-                {selectedClub?.name} — Season 2025/26
+                {selectedClub?.name} — {locale === "ru" ? "Сезон" : "Season"} {seasonLabel(seasonNum)}
               </h2>
               {recentForm.length > 0 && (
                 <div className="flex items-center gap-1.5 mt-2">
@@ -842,9 +931,11 @@ export default function DashboardPage() {
                     </div>
                     {!lineupValid && (
                       <div className="mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                        ⚠️ You need {MIN_LINEUP_SIZE} available players to play ({lineupCount}/{MIN_LINEUP_SIZE} available).
-                    {unavailableInLineup.length > 0 && <> Unavailable: <b>{unavailableInLineup.join(", ")}</b>.</>}
-                    {" "}<Link href="/squad" className="underline">Set up your Squad →</Link>
+                        ⚠️ {locale === "ru"
+                          ? `Нужно ${MIN_LINEUP_SIZE} доступных игроков для матча (доступно ${lineupCount}/${MIN_LINEUP_SIZE}).`
+                          : `You need ${MIN_LINEUP_SIZE} available players to play (${lineupCount}/${MIN_LINEUP_SIZE} available).`}
+                    {unavailableInLineup.length > 0 && <> {locale === "ru" ? "Недоступны" : "Unavailable"}: <b>{unavailableInLineup.join(", ")}</b>.</>}
+                    {" "}<Link href="/squad" className="underline">{locale === "ru" ? "Настроить состав →" : "Set up your Squad →"}</Link>
                       </div>
                     )}
                   </div>
@@ -877,7 +968,7 @@ export default function DashboardPage() {
                       })()}
                       <div className="min-w-0">
                         <div className={`${ui.subLabel} mb-1 flex items-center gap-1.5`}>
-                          Matchday {matchday}
+                          {locale === "ru" ? "Тур" : "Matchday"} {matchday}
                           <HelpHint id="dash-simulate" theme={theme as any}
                             title={locale === "ru" ? "Симуляция" : "Simulation"}
                             text={locale === "ru"
@@ -1052,24 +1143,29 @@ export default function DashboardPage() {
             ) : null}
           </div>
 
-          {/* RIGHT: standings */}
-          <div className="xl:col-span-2 fade-in">
-            <div className={`p-5 ${ui.card} animate-fade-in-up`}>
-              <div className="flex items-center gap-2 mb-4">
-                <img src={getLeagueLogo(selectedLeague?.name || selectedClub?.league || "")} alt="" className="w-6 h-6 object-contain" onError={e => (e.currentTarget.style.display = "none")} />
-                <div className={`${ui.subLabel}`}>{selectedLeague?.name || selectedClub?.league || "League Table"}</div>
-              </div>
-              {!seasonId ? (
-                <div className={`${ui.muted} text-sm text-center py-4`}>Start a career to see standings</div>
-              ) : (
-                <StandingsTable standings={standings} userClub={userClub} ui={ui} theme={theme} glowColor={glowColor} leagueName={selectedLeague?.name || selectedClub?.league} />
-              )}
-            </div>
+          {/* RIGHT: таблица лиги / таблица или сетка текущего турнира */}
+          <div className="xl:col-span-2 fade-in min-w-0">
+            {!seasonId ? (
+              <div className={`p-5 ${ui.card} ${ui.muted} text-sm text-center py-4`}>{locale === "ru" ? "Начни карьеру, чтобы увидеть таблицу" : "Start a career to see standings"}</div>
+            ) : (
+              <LiveCompetitionPanel
+                ui={ui} theme={theme as any} userClub={userClub} locale={locale as "en" | "ru"}
+                leagueName={selectedLeague?.name || selectedClub?.league || ""}
+                leagueLogo={<img src={getLeagueLogo(selectedLeague?.name || selectedClub?.league || "")} alt="" className="w-6 h-6 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />}
+                standings={standings} competitions={competitions} fixturesByComp={fixturesByComp} standingsByComp={standingsByComp}
+                activeId={panelCompId} onSelect={setPanelCompId} live={liveMode}
+                onClubClick={(c) => router.push(`/clubs/${encodeURIComponent(c)}`)}
+              />
+            )}
 
             {/* Top performer этого сезона — раньше на дашборде вообще не
                 было ни одной сводки по игрокам, только таблица клубов. */}
             {(() => {
-              const eligible = seasonPlayerStats.filter((p: any) => p.matches_played >= 2);
+              // Только игроки, которые СЕЙЧАС в клубе — проданный игрок не должен
+              // оставаться лучшим бомбардиром/рейтингом (его статистика
+              // записана на клуб, пока он там играл).
+              const currentIds = new Set(clubContracts.map((c: any) => c.player_id));
+              const eligible = seasonPlayerStats.filter((p: any) => p.matches_played >= 2 && (currentIds.size === 0 || currentIds.has(p.player_id)));
               const topScorer = [...eligible].sort((a, b) => b.goals - a.goals)[0];
               const topRated = [...eligible].sort((a, b) => (b.total_rating / b.matches_played) - (a.total_rating / a.matches_played))[0];
               if (!topScorer && !topRated) return null;
@@ -1108,6 +1204,18 @@ export default function DashboardPage() {
 
       {reportFix && (
         <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} locale={locale} onClose={() => setReportFix(null)} />
+      )}
+      {drawQueue.length > 0 && (
+        <DrawModal draw={drawQueue[0]} theme={theme as any} locale={locale as "en" | "ru"} userClub={userClub}
+          remaining={drawQueue.length - 1}
+          onClose={() => {
+            setDrawQueue(q => {
+              const next = q.slice(1);
+              // Если автопромотку поставила на паузу жеребьёвка — продолжаем после закрытия последнего окна
+              if (next.length === 0 && drawPausedRef.current) { drawPausedRef.current = false; simPausedRef.current = false; setSimPaused(false); }
+              return next;
+            });
+          }} />
       )}
     </main>
     </DashboardLayout>

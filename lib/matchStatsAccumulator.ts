@@ -23,7 +23,7 @@ export interface StatusUpdateAcc {
   competitionType: string | null; existing?: any;
 }
 export interface SeasonStatAcc {
-  playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; assists: number; yellow_cards: number; red_cards: number;
+  playerId: string; playerName: string; matches_played: number; total_rating: number; goals: number; assists: number; yellow_cards: number; red_cards: number; clean_sheets: number;
 }
 
 export function accumulateCardsAndInjuries(
@@ -93,6 +93,8 @@ export function accumulateSeasonStats(
   events: any[], side: "home" | "away", clubId: string, playerRatings: any[],
   seasonStatsAccum: Record<string, SeasonStatAcc>,
 ) {
+  // Сухой матч — вратарь играл, а команда не пропустила (голы соперника)
+  const conceded = events.filter((e: any) => e.type === "goal" && e.team !== side).length;
   for (const pr of playerRatings) {
     const pid = pr.playerId ?? pr.name;
     const key = `${clubId}::${pid}`;
@@ -100,7 +102,8 @@ export function accumulateSeasonStats(
     const yellow = events.some((e: any) => e.team === side && e.type === "yellow" && (e.playerId ?? e.player) === pid) ? 1 : 0;
     const red = events.some((e: any) => e.team === side && e.type === "red" && (e.playerId ?? e.player) === pid) ? 1 : 0;
 
-    const prev = seasonStatsAccum[key] ?? { playerId: pid, playerName: pr.name, matches_played: 0, total_rating: 0, goals: 0, assists: 0, yellow_cards: 0, red_cards: 0 };
+    const prev = seasonStatsAccum[key] ?? { playerId: pid, playerName: pr.name, matches_played: 0, total_rating: 0, goals: 0, assists: 0, yellow_cards: 0, red_cards: 0, clean_sheets: 0 };
+    const cleanSheet = pr.position === "GK" && conceded === 0 ? 1 : 0;
     seasonStatsAccum[key] = {
       playerId: pid, playerName: pr.name,
       matches_played: prev.matches_played + 1,
@@ -109,8 +112,21 @@ export function accumulateSeasonStats(
       assists: prev.assists + (pr.stats?.assists ?? pr.assists ?? 0),
       yellow_cards: prev.yellow_cards + yellow,
       red_cards: prev.red_cards + red,
+      clean_sheets: (prev.clean_sheets ?? 0) + cleanSheet,
     };
   }
+}
+
+// Если миграция 0005_clean_sheets.sql ещё не накачена, колонки clean_sheets
+// нет — запись целиком падала бы и статистика терялась. Тогда повторяем
+// запись без этого поля.
+async function writeStats(run: () => PromiseLike<any>, payload: any, retry: (p: any) => PromiseLike<any>) {
+  const res: any = await run();
+  if (res?.error && /clean_sheets/i.test(res.error.message ?? "")) {
+    const { clean_sheets, ...rest } = payload;
+    return retry(rest);
+  }
+  return res;
 }
 
 // Пишет накопленные статусы/статистику в БД — общий "Шаг 3/4" для любого
@@ -147,7 +163,7 @@ export async function persistStatusAndStats(
     const clubId = key.split("::")[0];
     const existing = existingStatsMap[key];
     if (existing) {
-      writes.push(supabase.from("player_season_stats").update({
+      const patch: any = {
         player_id: upd.playerId,
         matches_played: (existing.matches_played ?? 0) + upd.matches_played,
         total_rating: (existing.total_rating ?? 0) + upd.total_rating,
@@ -155,13 +171,19 @@ export async function persistStatusAndStats(
         assists: (existing.assists ?? 0) + upd.assists,
         yellow_cards: (existing.yellow_cards ?? 0) + upd.yellow_cards,
         red_cards: (existing.red_cards ?? 0) + upd.red_cards,
-      }).eq("id", existing.id));
+        clean_sheets: (existing.clean_sheets ?? 0) + (upd.clean_sheets ?? 0),
+      };
+      writes.push(writeStats(() => supabase.from("player_season_stats").update(patch).eq("id", existing.id), patch,
+        (p: any) => supabase.from("player_season_stats").update(p).eq("id", existing.id)));
     } else {
-      writes.push(supabase.from("player_season_stats").insert({
+      const row: any = {
         season_id: seasonId, club_id: clubId, player_id: upd.playerId, player_name: upd.playerName,
         matches_played: upd.matches_played, total_rating: upd.total_rating,
         goals: upd.goals, assists: upd.assists, yellow_cards: upd.yellow_cards, red_cards: upd.red_cards,
-      }));
+        clean_sheets: upd.clean_sheets ?? 0,
+      };
+      writes.push(writeStats(() => supabase.from("player_season_stats").insert(row), row,
+        (p: any) => supabase.from("player_season_stats").insert(p)));
     }
   }
 

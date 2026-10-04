@@ -13,7 +13,7 @@
 //                            // тогда финализация не просто обновит контракт на
 //                            // месте, а переедет на club_id этого клуба
 // }
-import { startOrContinueNegotiation, finalizeAgreedNegotiation, NEGOTIATION_COOLDOWN_MATCHDAYS } from "@/lib/contracts";
+import { startOrContinueNegotiation, finalizeAgreedNegotiation, getLatestAgreedNegotiation, sameOffer, NEGOTIATION_COOLDOWN_MATCHDAYS } from "@/lib/contracts";
 import { finalizeFreeAgentSigning } from "@/lib/contracts-server";
 import { supabase } from "@/lib/supabase";
 import { pushNotification } from "@/lib/notifications";
@@ -52,6 +52,30 @@ export async function POST(req: Request) {
     currentMatchday = season?.matchday ?? undefined;
   }
 
+  // ── ПРИНЯТИЕ уже согласованных условий ─────────────────────────────────
+  // Принять можно ТОЛЬКО ровно те условия, на которые игрок уже согласился
+  // (последняя запись переговоров по контракту со статусом "agreed"). Если
+  // хоть один параметр (зарплата, срок, бонус, роль) отличается — это новое
+  // предложение, его нужно отправить заново через обычный раунд. Раньше
+  // сервер в режиме accept просто пересчитывал новый оффер и подписывал его.
+  if (accept) {
+    try {
+      const agreed = await getLatestAgreedNegotiation(contractId);
+      if (!agreed || !sameOffer(agreed.club_offer, clubOffer)) {
+        return Response.json({
+          error: "Terms changed after the player agreed — send a new offer first.",
+          code: "OFFER_CHANGED",
+        }, { status: 409 });
+      }
+      const contract = signingClubId
+        ? await finalizeFreeAgentSigning(agreed.id, signingClubId)
+        : await finalizeAgreedNegotiation(agreed.id);
+      return Response.json({ negotiation: agreed, contract });
+    } catch (e: any) {
+      return Response.json({ error: e.message ?? "Negotiation failed" }, { status: 500 });
+    }
+  }
+
   try {
     const negotiation = await startOrContinueNegotiation(
       contractId, clubOffer, player, club ?? {}, deadlineMatchday, currentMatchday
@@ -69,14 +93,7 @@ export async function POST(req: Request) {
       });
     }
 
-    let contract = null;
-    if (accept && negotiation.status === "agreed") {
-      contract = signingClubId
-        ? await finalizeFreeAgentSigning(negotiation.id, signingClubId)
-        : await finalizeAgreedNegotiation(negotiation.id);
-    }
-
-    return Response.json({ negotiation, contract });
+    return Response.json({ negotiation, contract: null });
   } catch (e: any) {
     return Response.json({ error: e.message ?? "Negotiation failed" }, { status: 500 });
   }

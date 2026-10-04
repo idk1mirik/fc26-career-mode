@@ -212,13 +212,41 @@ export function invalidateOverridesCache(seasonId: string) {
 // кэш безопасен (в худшем случае лишний запрос, никогда не устаревшие данные).
 let careerIdCache: Record<string, string> = {};
 
+let seasonNumCache: Record<string, number> = {};
+
 async function getCareerIdForSeason(seasonId: string): Promise<string> {
   if (careerIdCache[seasonId]) return careerIdCache[seasonId];
   const { supabase } = await import("./supabase");
-  const { data } = await supabase.from("seasons").select("career_id").eq("id", seasonId).maybeSingle();
+  const { data } = await supabase.from("seasons").select("career_id, season_num").eq("id", seasonId).maybeSingle();
   const careerId = data?.career_id ?? seasonId; // фолбэк для сезонов до миграции — каждый сам себе карьера
   careerIdCache[seasonId] = careerId;
+  seasonNumCache[seasonId] = data?.season_num ?? 1;
   return careerId;
+}
+
+// Возраст в CSV — на момент первого сезона. В каждом следующем сезоне
+// карьеры все игроки на год старше (раньше возраст не менялся никогда).
+export async function getSeasonAgeOffset(seasonId: string): Promise<number> {
+  await getCareerIdForSeason(seasonId);
+  return Math.max(0, (seasonNumCache[seasonId] ?? 1) - 1);
+}
+
+// Прогресс (рост/старение) + возраст сезона поверх произвольного списка
+// игроков из CSV — нужен там, где игроки берутся не через getPlayersByClub
+// (рынок трансферов и т.п.), иначе чужие игроки выглядели "замороженными".
+export async function applyCareerState<T extends Player>(players: T[], seasonId: string): Promise<T[]> {
+  const careerId = await getCareerIdForSeason(seasonId);
+  const [progression, ageOffset] = await Promise.all([getProgressionForCareer(careerId), getSeasonAgeOffset(seasonId)]);
+  if (progression.size === 0 && ageOffset === 0) return players;
+  return players.map(p => {
+    const prog = progression.get(p.id);
+    let out: Player = prog ? applyProgression(p, prog) : p;
+    if (ageOffset > 0 && out.age > 0) {
+      const age = out.age + ageOffset;
+      out = { ...out, age, market_value: computeMarketValue(out.overall, age, out.potential, out.position) };
+    }
+    return out as T;
+  });
 }
 
 // player_progression, в отличие от career_id выше, МЕНЯЕТСЯ на каждой смене
@@ -229,8 +257,15 @@ async function getCareerIdForSeason(seasonId: string): Promise<string> {
 // перезапустится. Читаем без кэша.
 async function getProgressionForCareer(careerId: string): Promise<Map<string, { overall: number; potential: number | null }>> {
   const { supabase } = await import("./supabase");
-  const { data } = await supabase.from("player_progression").select("player_id, overall, potential").eq("career_id", careerId);
-  return new Map((data ?? []).map((r: any) => [r.player_id, { overall: r.overall, potential: r.potential ?? null }]));
+  const rows: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supabase.from("player_progression").select("player_id, overall, potential")
+      .eq("career_id", careerId).order("id").range(from, from + 999);
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  return new Map(rows.map((r: any) => [r.player_id, { overall: r.overall, potential: r.potential ?? null }]));
 }
 
 // Сохранена для обратной совместимости вызовов из API-роутов (сейчас no-op).
@@ -254,7 +289,7 @@ export async function getPlayersByClub(clubName: string, seasonId?: string): Pro
   if (!seasonId) return base;
 
   const [overrides, careerId] = await Promise.all([getOverridesForSeason(seasonId), getCareerIdForSeason(seasonId)]);
-  const progression = await getProgressionForCareer(careerId);
+  const [progression, ageOffset] = await Promise.all([getProgressionForCareer(careerId), getSeasonAgeOffset(seasonId)]);
 
   let squad: Player[];
   if (overrides.size === 0) {
@@ -290,9 +325,14 @@ export async function getPlayersByClub(clubName: string, seasonId?: string): Pro
     squad = [...squad, ...promotedRows.map((r: any) => r.attrs as Player)];
   }
 
-  if (progression.size === 0) return squad;
+  if (progression.size === 0 && ageOffset === 0) return squad;
   return squad.map(p => {
     const prog = progression.get(p.id);
-    return prog !== undefined ? applyProgression(p, prog) : p;
+    let out = prog !== undefined ? applyProgression(p, prog) : p;
+    if (ageOffset > 0 && out.age > 0) {
+      const age = out.age + ageOffset;
+      out = { ...out, age, market_value: computeMarketValue(out.overall, age, out.potential, out.position) };
+    }
+    return out;
   });
 }

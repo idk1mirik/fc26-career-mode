@@ -6,6 +6,8 @@ interface CareerState {
   selectedClub:    any;
   selectedLeague:  any;
   seasonId:        string | null;
+  /** Номер сезона карьеры (1, 2, 3 …) — для подписи "2025/26", "2026/27" и т.д. */
+  seasonNum:       number;
   matchday:        number;
   lineup:          Record<string, any>;
   lineupsByFormation: Record<string, Record<string, any>>;
@@ -21,6 +23,7 @@ interface CareerState {
   setSelectedClub:   (club: any)              => void;
   setSelectedLeague: (league: any)            => void;
   setSeasonId:       (id: string)             => void;
+  setSeasonNum:      (n: number)              => void;
   setMatchday:       (day: number)            => void;
   setLineup:         (lineup: Record<string, any>) => void;
   setLineupForFormation: (formation: string, lineup: Record<string, any>) => void;
@@ -42,6 +45,7 @@ export const useCareerStore = create<CareerState>()(
       selectedClub:   null,
       selectedLeague: null,
       seasonId:       null,
+      seasonNum:      1,
       matchday:       1,
       lineup:         {},
       lineupsByFormation: {},
@@ -57,6 +61,7 @@ export const useCareerStore = create<CareerState>()(
       setSelectedClub:   (club)    => set({ selectedClub: club }),
       setSelectedLeague: (league)  => set({ selectedLeague: league }),
       setSeasonId:       (id)      => set({ seasonId: id }),
+      setSeasonNum:      (n)       => set({ seasonNum: Math.max(1, Math.floor(n || 1)) }),
       setMatchday:       (day)     => set({ matchday: day }),
       setLineup:         (lineup)  => set({ lineup, lineupConfirmed: false }),
       setLineupForFormation: (formation, lineup) => set(state => ({
@@ -90,7 +95,7 @@ export const useCareerStore = create<CareerState>()(
         };
       }),
       resetCareer: () => set({
-        selectedClub: null, selectedLeague: null, seasonId: null, matchday: 1,
+        selectedClub: null, selectedLeague: null, seasonId: null, seasonNum: 1, matchday: 1,
         lineup: {}, formation: "4-3-3", tactic: "Balanced",
         customTactic: { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
         lineupsByFormation: {}, customFormations: {},

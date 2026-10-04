@@ -9,7 +9,7 @@
 // мог попасть в список, если не сузить поиск до конкретной лиги. Отсюда и
 // "не могу найти на рынке никого ниже ~84".
 import { supabase } from "@/lib/supabase";
-import { loadAllPlayers } from "@/lib/players";
+import { loadAllPlayers, applyCareerState } from "@/lib/players";
 import { normalizeName } from "@/lib/normalize";
 
 function numParam(searchParams: URLSearchParams, key: string): number | undefined {
@@ -43,11 +43,15 @@ export async function GET(req: Request) {
 
   if (!seasonId || !userClubId) return Response.json({ error: "seasonId and clubId required" }, { status: 400 });
 
-  const [all, overridesRes] = await Promise.all([
+  const [allRaw, overridesRes] = await Promise.all([
     loadAllPlayers(),
     supabase.from("squad_overrides").select("player_id, club_id").eq("season_id", seasonId),
   ]);
   const overrideMap = new Map<string, string>((overridesRes.data ?? []).map((r: any) => [r.player_id, r.club_id]));
+  // Рост/старение и возраст текущего сезона карьеры — раньше рынок отдавал
+  // "сырые" данные из CSV, поэтому у игроков других клубов рейтинг никогда
+  // не менялся.
+  const all = await applyCareerState(allRaw, seasonId);
 
   let players = all
     .map(p => ({ ...p, team: overrideMap.get(p.id) ?? p.team }))

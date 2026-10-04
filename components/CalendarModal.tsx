@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, X, Play, Pause, Square, CalendarClock } from
 import { useCareerStore } from "@/app/store/careerStore";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
+import { runTimeline, getNextEventDate } from "@/lib/simClient";
+import { displayYear, formatGameDate } from "@/lib/seasonLabel";
 
 // Тот же диапазон, что и в lib/seasonCalendar.ts (старт сезона 16 августа,
 // один тур в неделю) — используется только для отрисовки сетки календаря,
@@ -104,13 +106,27 @@ export default function CalendarModal({
   const seasonId = useCareerStore(s => s.seasonId);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const matchday = useCareerStore(s => s.matchday);
+  const seasonNum = useCareerStore(s => s.seasonNum);
   const tactic = useCareerStore(s => s.tactic);
   const customTactic = useCareerStore(s => s.customTactic);
   const lineup = useCareerStore(s => s.lineup);
   const setMatchday = useCareerStore(s => s.setMatchday);
   const userClub = selectedClub?.name || "";
 
-  const currentMatchdayDate = useMemo(() => new Date(`${getLeagueMatchdayDate(matchday)}T00:00:00Z`), [matchday]);
+  const leagueMatchdayDate = useMemo(() => new Date(`${getLeagueMatchdayDate(matchday)}T00:00:00Z`), [matchday]);
+
+  // "Сегодня" в игре — дата БЛИЖАЙШЕГО несыгранного события: тура лиги ИЛИ
+  // раунда любого кубка. Раньше это была дата только следующего тура лиги,
+  // поэтому дни между турами (где идут кубковые матчи) считались прошедшими
+  // и выбрать, скажем, день прямо перед матчем ЛЧ было нельзя.
+  const [nextEventIso, setNextEventIso] = useState<string>(() => getLeagueMatchdayDate(matchday));
+  useEffect(() => {
+    if (!seasonId || !userClub) return;
+    let cancelled = false;
+    getNextEventDate(seasonId, userClub, matchday).then(d => { if (!cancelled) setNextEventIso(d); });
+    return () => { cancelled = true; };
+  }, [seasonId, userClub, matchday]);
+  const currentMatchdayDate = useMemo(() => new Date(`${nextEventIso}T00:00:00Z`), [nextEventIso]);
 
   // Единый календарь клуба — лига + все кубки, где он участвует (тот же
   // эндпоинт, что уже питает виджет "следующий матч" на дашборде).
@@ -145,7 +161,8 @@ export default function CalendarModal({
     return [...seen.values()];
   }, [calendarMatches]);
 
-  const [viewDate, setViewDate] = useState(() => new Date(currentMatchdayDate));
+  const [viewDate, setViewDate] = useState(() => new Date(leagueMatchdayDate));
+  useEffect(() => { setViewDate(new Date(currentMatchdayDate)); }, [currentMatchdayDate]);
   const [selected, setSelected] = useState<Date | null>(null);
 
   const [simulating, setSimulating] = useState(false);
@@ -158,41 +175,19 @@ export default function CalendarModal({
   const t = {
     title: locale === "ru" ? "Календарь сезона" : "Season Calendar",
     subtitle: locale === "ru"
-      ? "Выбери любую дату — все матчи до неё будут сыграны, и симуляция остановится"
-      : "Pick any date — every match up to it will be played, then the sim stops",
+      ? "Выбери любую дату — все матчи (лига и кубки) до неё включительно будут сыграны, и симуляция остановится"
+      : "Pick any date — every match (league and cups) up to it will be played, then the sim stops",
     simulate: locale === "ru" ? "Промотать до этой даты" : "Simulate to this date",
     close: locale === "ru" ? "Закрыть" : "Close",
     pause: locale === "ru" ? "Пауза" : "Pause",
     resume: locale === "ru" ? "Продолжить" : "Resume",
     stop: locale === "ru" ? "Остановить" : "Stop",
-    today: locale === "ru" ? "Текущий тур" : "Current matchday",
+    today: locale === "ru" ? "Ближайший матч" : "Next fixture",
     windowOpen: locale === "ru" ? "Открыто трансферное окно" : "Transfer window open",
     playing: locale === "ru" ? "Играем тур" : "Playing matchday",
     noneSelected: locale === "ru" ? "Выбери дату в календаре" : "Pick a date on the calendar",
     alreadyPast: locale === "ru" ? "Эта дата уже позади" : "That date is already behind you",
     doneCount: (n: number) => locale === "ru" ? `Сыграно туров: ${n}. Обновляю…` : `${n} matchday${n === 1 ? "" : "s"} played. Refreshing…`,
-  };
-
-  const advanceDueCups = async (currentDateStr: string, ignoreDate = false) => {
-    let safety = ignoreDate ? 20 : 6;
-    while (safety-- > 0) {
-      const dueRes = await fetch(`/api/competitions/due?seasonId=${seasonId}`);
-      if (!dueRes.ok) return;
-      const { due } = await dueRes.json();
-      let advancedAny = false;
-      for (const d of due as { competitionId: string; matchDate: string | null }[]) {
-        if (!ignoreDate && d.matchDate && d.matchDate > currentDateStr) continue;
-        await fetch("/api/cup/advance", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            competitionId: d.competitionId, userClubId: userClub, userTactic: tactic,
-            userLineup: Object.values(lineup || {}).filter(Boolean),
-          }),
-        });
-        advancedAny = true;
-      }
-      if (!advancedAny) break;
-    }
   };
 
   const simulateToDate = async () => {
@@ -205,39 +200,21 @@ export default function CalendarModal({
     setPaused(false);
 
     let played = 0;
-    let currentMd = matchday;
-    let finished = false;
-    const SAFETY_CAP = 80;
-    let iterations = 0;
-
     try {
-      while (!finished && iterations < SAFETY_CAP) {
-        if (getLeagueMatchdayDate(currentMd) > targetIso) break; // следующий тур уже после выбранной даты — стоп
-
-        while (pausedRef.current && !stopRef.current) await simSleep(200);
-        if (stopRef.current) break;
-
-        const res = await fetch("/api/season/advance", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            seasonId, userClubId: userClub, userTactic: tactic,
-            userCustomTactic: tactic === "Custom" ? customTactic : undefined,
-            userLineup: Object.values(lineup || {}).filter(Boolean),
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) break;
-        iterations++;
-        played++;
-        finished = !!data.finished;
-        currentMd = data.nextMatchday;
-        setMatchday(data.nextMatchday);
-        setProgress({ played, matchday: data.nextMatchday });
-
-        await advanceDueCups(getLeagueMatchdayDate(currentMd));
-        if (!finished && !stopRef.current) await simSleep(250);
-      }
-      if (finished && !stopRef.current) await advanceDueCups("9999-12-31", true);
+      const result = await runTimeline(
+        { seasonId, userClubId: userClub, tactic: tactic || "Balanced", customTactic, lineup: Object.values(lineup || {}).filter(Boolean) },
+        matchday, targetIso,
+        {
+          shouldStop: () => stopRef.current,
+          waitIfPaused: async () => { while (pausedRef.current && !stopRef.current) await simSleep(200); },
+          stepDelayMs: 200,
+          onEvent: (e) => {
+            if (e.kind === "league") { played++; setMatchday(e.matchday); }
+            setProgress({ played, matchday: e.matchday });
+          },
+        },
+      );
+      played = result.leaguePlayed + result.cupRoundsPlayed;
     } catch (e) {
       console.error("simulateToDate failed", e);
     }
@@ -293,7 +270,7 @@ export default function CalendarModal({
                 disabled={!canGoPrev} className={`w-8 h-8 flex items-center justify-center rounded-lg disabled:opacity-20 ${ui.btnGhost}`}>
                 <ChevronLeft size={16} />
               </button>
-              <span className="text-sm font-black">{MONTH_NAMES[locale][viewDate.getUTCMonth()]} {viewDate.getUTCFullYear()}</span>
+              <span className="text-sm font-black">{MONTH_NAMES[locale][viewDate.getUTCMonth()]} {displayYear(viewDate.getUTCFullYear(), seasonNum)}</span>
               <button onClick={() => canGoNext && setViewDate(new Date(Date.UTC(viewDate.getUTCFullYear(), viewDate.getUTCMonth() + 1, 1)))}
                 disabled={!canGoNext} className={`w-8 h-8 flex items-center justify-center rounded-lg disabled:opacity-20 ${ui.btnGhost}`}>
                 <ChevronRight size={16} />
@@ -363,7 +340,7 @@ export default function CalendarModal({
               className={`w-full py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${ui.btn}`}
             >
               <Play size={14} />
-              {selected ? `${t.simulate} — ${toISODate(selected)}` : t.noneSelected}
+              {selected ? `${t.simulate} — ${formatGameDate(toISODate(selected), seasonNum, locale)}` : t.noneSelected}
             </button>
           </>
         ) : (

@@ -12,6 +12,7 @@ import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStat
 import { payWeeklyWages } from "@/lib/contracts";
 import { notifyReadyNegotiations } from "@/lib/contracts-server";
 import { resolveListingOffers } from "@/lib/transferOffers";
+import { runAiTransfers } from "@/lib/aiTransfers";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
@@ -259,6 +260,8 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   // открытым лотам на рынке (см. lib/transferOffers.ts). Best-effort: сбой
   // здесь не должен ломать симуляцию тура.
   try { await resolveListingOffers(seasonId); } catch (e) { console.error("resolveListingOffers failed", e); }
+  // ИИ-клубы тоже торгуют между собой и подписывают свободных агентов
+  try { await runAiTransfers(seasonId, userClubId); } catch (e) { console.error("runAiTransfers failed", e); }
   try { await notifyReadyNegotiations(seasonId, matchday); } catch (e) { console.error("notifyReadyNegotiations failed", e); }
 
   const { count } = await supabase.from("fixtures")

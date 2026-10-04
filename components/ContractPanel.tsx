@@ -155,11 +155,17 @@ export function ContractPanel({
     fetch(`/api/contracts/negotiate?contractId=${encodeURIComponent(player.contractId)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (cancelled || !data?.negotiation) return;
+        // "expired" — уже израсходованная (подписанная) запись, окно открываем с чистого листа
+        if (cancelled || !data?.negotiation || data.negotiation.status === "expired") return;
         const neg = data.negotiation;
         setNegotiation(neg);
         setHistory([{ round: neg.round, offer: neg.club_offer?.wage ?? wage, outcome: neg.status }]);
-        if (neg.status === "open" && neg.player_demand?.wage) setWage(neg.player_demand.wage);
+        // Если игрок уже согласился — подставляем ровно те условия, на которые
+        // он согласился, иначе кнопка "принять" не совпадёт с ними.
+        if (neg.status === "agreed" && neg.club_offer) {
+          setWage(neg.club_offer.wage); setYears(neg.club_offer.years);
+          setBonus(neg.club_offer.bonus ?? 0); setRole(neg.club_offer.role);
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -189,12 +195,19 @@ export function ContractPanel({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Negotiation failed");
+      if (!res.ok) {
+        if (data?.code === "OFFER_CHANGED") throw new Error(t.termsChanged);
+        throw new Error(data.error ?? "Negotiation failed");
+      }
 
-      setNegotiation(data.negotiation);
-      setHistory(h => [...h, { round: data.negotiation.round, offer: wage, outcome: data.negotiation.status }]);
-      if (data.negotiation.status === "open") {
-        setWage(data.negotiation.player_demand.wage);
+      // Принятие уже согласованных условий — в журнал новый раунд не пишем
+      if (!accept) {
+        setNegotiation(data.negotiation);
+        setHistory(h => [...h, { round: data.negotiation.round, offer: wage, outcome: data.negotiation.status }]);
+        // Ползунок зарплаты больше НЕ прыгает сам на встречное предложение
+        // игрока — раньше это выглядело как "зарплата растёт сама". Запрос
+        // игрока показывается отдельной строкой ниже, подставить его можно
+        // кнопкой.
       }
       if (data.contract && onSigned) onSigned(data.contract);
     } catch (e: any) {
@@ -202,7 +215,7 @@ export function ContractPanel({
     } finally {
       setLoading(false);
     }
-  }, [player, wage, years, bonus, role, clubReputationDiscount, onSigned]);
+  }, [player, wage, years, bonus, role, clubReputationDiscount, onSigned, t]);
 
   const reactionText =
     negotiation?.status === "agreed" ? t.reactionHappy :
@@ -212,6 +225,17 @@ export function ContractPanel({
   const turnsUntilRetry = negotiation?.blocked && negotiation?.retry_after_matchday
     ? Math.max(0, negotiation.retry_after_matchday - currentMatchday)
     : 0;
+
+  // Условия, на которые игрок уже согласился. Если после этого хоть что-то
+  // (зарплата, срок, бонус, роль) изменили — принять нельзя, нужно отправить
+  // предложение заново (сервер проверяет то же самое).
+  const agreedOffer = negotiation?.status === "agreed" ? negotiation.club_offer : null;
+  const offerChanged = !!agreedOffer && !(
+    Number(agreedOffer.wage) === wage && Number(agreedOffer.years) === years &&
+    Number(agreedOffer.bonus ?? 0) === bonus && agreedOffer.role === role
+  );
+  const canAccept = negotiation?.status === "agreed" && !offerChanged;
+  const playerAsk: number | null = negotiation?.status === "open" ? (negotiation.player_demand?.wage ?? null) : null;
 
   const gapPct = Math.round(((wage - marketWage) / marketWage) * 100);
   const gapClamped = Math.max(-40, Math.min(40, gapPct)); // для позиции маркера на шкале ниже
@@ -239,12 +263,24 @@ export function ContractPanel({
           <div className={`mb-4 p-3 rounded-xl text-sm font-bold ${s.infoBg}`}>
             ⏳ {t.statusOnCooldown(turnsUntilRetry)}
           </div>
+        ) : offerChanged ? (
+          <div className={`mb-4 p-3 rounded-xl text-sm font-bold ${s.infoBg}`}>
+            ✏️ {t.termsChanged}
+          </div>
         ) : reactionText ? (
           <div className={`mb-4 p-3 rounded-xl ${s.card}`}>
             <div className={`font-bold ${s.reaction}`}>{reactionText}</div>
             <div className={`${s.sub} mt-0.5`}>
               {negotiation.status === "agreed" ? t.statusAgreed : negotiation.status === "rejected" ? t.statusRejected : t.statusOpen}
             </div>
+            {playerAsk != null && (
+              <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm font-black min-w-0">{t.playerAsks}: €{playerAsk.toLocaleString()}/{ru ? "нед" : "wk"}</span>
+                <button type="button" onClick={() => setWage(playerAsk)} className={`${s.secondaryBtn} !px-3 !py-1.5 text-xs font-bold`}>
+                  {t.takeTheAsk}
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -423,14 +459,14 @@ export function ContractPanel({
           ) : <span />}
           <div className="flex gap-2.5">
             <button className={`${s.secondaryBtn} text-sm py-3 px-5`} onClick={onClose} disabled={loading}>{t.cancelButton}</button>
-            {negotiation?.status === "agreed" ? (
+            {canAccept ? (
               <button className={`${s.primaryBtn} text-sm py-3 px-6`} onClick={() => sendOffer(true)} disabled={loading}>
                 {isFreeAgent ? (ru ? "Подписать" : "Sign player") : t.acceptButton}
               </button>
             ) : (
               <button className={`${s.primaryBtn} text-sm py-3 px-6`} onClick={() => sendOffer(false)}
                 disabled={loading || (negotiation?.status === "rejected" && !negotiation?.blocked) || (negotiation?.blocked && turnsUntilRetry > 0)}>
-                {loading ? "…" : t.offerButton}
+                {loading ? "…" : offerChanged ? t.resendOffer : t.offerButton}
               </button>
             )}
           </div>

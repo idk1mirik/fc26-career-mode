@@ -20,6 +20,7 @@ export interface ContractsCopy {
   wantsRenewal: string; contractExpiring: string; freeAgentSoon: string;
   round: string;
   overview: string; currentDeal: string; marketRate: string; yourOffer: string; log: string; howItWorks: string;
+  termsChanged: string; playerAsks: string; takeTheAsk: string; resendOffer: string;
 }
 
 export const CONTRACTS_COPY: Record<Locale, ContractsCopy> = {
@@ -35,6 +36,8 @@ export const CONTRACTS_COPY: Record<Locale, ContractsCopy> = {
     wantsRenewal: "wants a new contract", contractExpiring: "Contract expires this season", freeAgentSoon: "Will become a free agent",
     round: "Round",
     overview: "Overview", currentDeal: "Current deal", marketRate: "Market rate", yourOffer: "Your offer", log: "Negotiation log", howItWorks: "How this works",
+    termsChanged: "You changed the terms after the player agreed — send the offer again.",
+    playerAsks: "Player asks", takeTheAsk: "Use this", resendOffer: "Send updated offer",
   },
   ru: {
     title: "Переговоры с игроком",
@@ -48,5 +51,7 @@ export const CONTRACTS_COPY: Record<Locale, ContractsCopy> = {
     wantsRenewal: "хочет новый контракт", contractExpiring: "Контракт истекает в этом сезоне", freeAgentSoon: "Станет свободным агентом",
     round: "Раунд",
     overview: "Обзор", currentDeal: "Текущий контракт", marketRate: "Рыночная ставка", yourOffer: "Твоё предложение", log: "Ход переговоров", howItWorks: "Как это работает",
+    termsChanged: "Ты изменил условия после согласия игрока — отправь предложение заново.",
+    playerAsks: "Игрок просит", takeTheAsk: "Подставить", resendOffer: "Отправить новое предложение",
   },
 };

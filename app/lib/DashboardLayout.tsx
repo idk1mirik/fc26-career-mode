@@ -10,6 +10,7 @@ import CalendarModal from "@/components/CalendarModal";
 import { useThemeStore } from "@/app/store/themeStore";
 import { useCareerStore } from "@/app/store/careerStore";
 import { getThemeCopy } from "@/lib/i18n";
+import { seasonLabel } from "@/lib/seasonLabel";
 import { prewarmClubLogos } from "@/lib/clubLogoResolver";
 import { prewarmPhotoBucket } from "@/lib/photoResolver";
 
@@ -78,6 +79,7 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const matchday       = useCareerStore(s => s.matchday);
   const seasonId       = useCareerStore(s => s.seasonId);
+  const seasonNum      = useCareerStore(s => s.seasonNum);
   const locale         = useCareerStore(s => s.locale) || "en";
   const copy = getThemeCopy(locale, theme);
 
@@ -104,13 +106,13 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
       {/* Скроллится независимо от кнопки "Покинуть игру" ниже — так кнопка
           выхода всегда видна и не уезжает за пределы экрана, даже если
           список пунктов меню когда-нибудь станет длиннее. */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
       <div className={`mb-5 p-3 flex items-center gap-3 rounded-2xl transition-transform hover:scale-[1.02] ${theme === "classic" ? "bg-white/[0.03] border border-white/[0.07]" : theme === "aurora" ? "bg-white/60 border border-pink-100" : "bg-purple-950/20 border border-fuchsia-900/30"}`}>
         <img src={getClubLogo(selectedClub?.name || "")} alt="" className="w-9 h-9 object-contain animate-floaty-sm"
           onError={e => (e.currentTarget.style.display = "none")} />
         <div>
           <div className="text-sm font-black truncate max-w-[140px]">{selectedClub?.name || "No Club"}</div>
-          <div className="text-[10px] opacity-40">{selectedLeague?.name || ""}</div>
+          <div className="text-[10px] opacity-40 truncate max-w-[140px]">{selectedLeague?.name || ""}</div>
         </div>
       </div>
 
@@ -120,11 +122,11 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
 
       <div className={`mb-5 p-3 rounded-2xl ${theme === "classic" ? "bg-white/[0.03] border border-white/[0.07]" : theme === "aurora" ? "bg-white/50 border border-violet-100" : "bg-black/40 border border-purple-900/30"}`}>
         <div className="flex justify-between items-center mb-1">
-          <span className="text-[9px] uppercase tracking-widest opacity-30">Season</span>
-          <span className="text-sm font-black">2025/26</span>
+          <span className="text-[9px] uppercase tracking-widest opacity-30">{locale === "ru" ? "Сезон" : "Season"}</span>
+          <span className="text-sm font-black">{seasonLabel(seasonNum)}</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-[9px] uppercase tracking-widest opacity-30">Matchday</span>
+          <span className="text-[9px] uppercase tracking-widest opacity-30">{locale === "ru" ? "Тур" : "Matchday"}</span>
           <span className="text-xl font-display font-black animate-soft-pulse rounded-md px-1" style={{ color: glowColor }}>{matchday}</span>
         </div>
       </div>
@@ -150,7 +152,7 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
               <div className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all duration-200 relative ${active ? NAV_ACTIVE[theme] : NAV_IDLE[theme]}`}>
                 {active && <div className="absolute left-0 w-[3px] h-6 rounded-r-full" style={{ background: glowColor }} />}
                 <Icon size={15} />
-                <span className={`text-sm font-bold ${NAV_FONT[theme]}`}>{label}</span>
+                <span className={`text-sm font-bold min-w-0 truncate ${NAV_FONT[theme]}`}>{label}</span>
                 {showBadge && (
                   <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center text-white" style={{ background: glowColor }}>
                     {newListingsCount > 9 ? "9+" : newListingsCount}
@@ -196,6 +198,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // пронумерованные варианты гербов (см. lib/clubLogoResolver.ts). Ставим
   // тут, а не на конкретной странице, потому что DashboardLayout оборачивает
   // почти весь авторизованный интерфейс.
+  // Номер сезона (для подписи "2026/27") берём из БД — он там уже есть
+  // (seasons.season_num) и растёт при каждом новом сезоне.
+  const setSeasonNum = useCareerStore(s => s.setSeasonNum);
+  useEffect(() => {
+    if (!seasonId) return;
+    let cancelled = false;
+    fetch(`/api/season?id=${seasonId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(s => { if (!cancelled && s?.season_num) setSeasonNum(s.season_num); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [seasonId, setSeasonNum]);
+
   useEffect(() => {
     prewarmClubLogos();
     prewarmPhotoBucket("players");

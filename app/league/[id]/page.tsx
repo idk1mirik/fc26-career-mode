@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, memo, useMemo } from "react";
+import { ThemedSelect } from "@/components/ThemedSelect";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getLeagueTheme, getOverallColor } from "@/constants/themes";
@@ -392,15 +393,16 @@ export default function LeaguePage() {
               onChange={e => setSearch(e.target.value)}
               className={`px-4 py-3 text-sm outline-none w-44 ${ui.searchBg}`}
             />
-            <select
+            <ThemedSelect
               value={sortBy}
-              onChange={e => setSortBy(e.target.value as any)}
+              onChange={v => setSortBy(v as any)}
               className={`px-3 py-3 text-sm outline-none cursor-pointer ${ui.searchBg}`}
-            >
-              <option value="overall">{text.sortOvr}</option>
-              <option value="budget">{text.sortBudget}</option>
-              <option value="name">{text.sortName}</option>
-            </select>
+              options={[
+                { value: "overall", label: text.sortOvr },
+                { value: "budget", label: text.sortBudget },
+                { value: "name", label: text.sortName },
+              ]}
+            />
             <Link href="/leagues">
               <button className={`px-5 py-3 text-sm font-black transition-colors duration-200 ${ui.backBtn}`}>
                 {text.backLeagues}
