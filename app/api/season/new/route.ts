@@ -1,6 +1,9 @@
 // app/api/season/new/route.ts
 // Создаёт новый сезон для той же карьеры (тот же клуб), на основе результатов прошлого
 import { supabase } from "@/lib/supabase";
+
+// Новый сезон пересчитывает прогресс всех игроков — даём функции больше времени
+export const maxDuration = 60;
 import leagues from "@/data/leagues.json";
 import { createSeasonCompetitions } from "@/lib/createCompetitions";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";

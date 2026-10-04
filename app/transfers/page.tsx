@@ -482,12 +482,39 @@ export default function TransfersPage() {
     setBusyId(null);
   };
 
+  // Быструю продажу нельзя откатить, поэтому после подтверждения даём 6 секунд
+  // на отмену — и только потом реально шлём запрос.
+  const [pendingSale, setPendingSale] = useState<{ p: any; withBuyback: boolean; left: number } | null>(null);
+  const pendingSaleTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelPendingSale = () => {
+    if (pendingSaleTimer.current) clearInterval(pendingSaleTimer.current);
+    pendingSaleTimer.current = null; setPendingSale(null);
+  };
+  useEffect(() => () => { if (pendingSaleTimer.current) clearInterval(pendingSaleTimer.current); }, []);
+
   const handleQuickSell = async (p: any) => {
-    if (!seasonId) return;
+    if (!seasonId || pendingSale) return;
     if (squad.length <= 15) { showToast("Squad too small to sell — need at least 15 players", "err"); return; }
     const withBuyback = window.confirm(locale === "ru"
       ? `Продать ${p.name}?\n\nOK — с опцией обратного выкупа (сможешь выкупить обратно позже за ~140% суммы продажи)\nОтмена — обычная продажа без выкупа`
       : `Sell ${p.name}?\n\nOK — with a buyback option (you can buy them back later for ~140% of the sale price)\nCancel — sell outright, no buyback`);
+    setPendingSale({ p, withBuyback, left: 6 });
+    pendingSaleTimer.current = setInterval(() => {
+      setPendingSale(cur => {
+        if (!cur) return cur;
+        if (cur.left <= 1) {
+          if (pendingSaleTimer.current) clearInterval(pendingSaleTimer.current);
+          pendingSaleTimer.current = null;
+          setTimeout(() => executeQuickSell(cur.p, cur.withBuyback), 0);
+          return null;
+        }
+        return { ...cur, left: cur.left - 1 };
+      });
+    }, 1000);
+  };
+
+  const executeQuickSell = async (p: any, withBuyback: boolean) => {
+    if (!seasonId) return;
     setBusyId(p.id);
     try {
       const res = await fetch("/api/transfers/sell", {
@@ -963,6 +990,16 @@ export default function TransfersPage() {
         )}
 
         {/* ── Toast ── */}
+        {pendingSale && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl bg-black/90 border border-white/15 text-white text-sm max-w-[92vw]">
+            <span className="min-w-0 break-words">
+              {locale === "ru" ? `Продажа ${pendingSale.p.name} через ${pendingSale.left} с` : `Selling ${pendingSale.p.name} in ${pendingSale.left}s`}
+            </span>
+            <button onClick={cancelPendingSale} className="shrink-0 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-black uppercase">
+              {locale === "ru" ? "Отменить" : "Undo"}
+            </button>
+          </div>
+        )}
         {toast && (
           <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-2xl text-sm font-black shadow-2xl ${
             toast.kind === "ok" ? "bg-emerald-500 text-black" : "bg-red-500 text-white"

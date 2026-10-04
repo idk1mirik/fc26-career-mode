@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap, CalendarClock } from "lucide-react";
+import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap, CalendarClock, History, GitCompare, FolderOpen, Search } from "lucide-react";
+import SearchModal from "@/components/SearchModal";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotificationBell from "@/components/NotificationBell";
@@ -23,6 +24,13 @@ const NAV_ICONS = [
   { key: "navFixtures",  icon: CalendarDays,    href: "/fixtures" },
   { key: "navTable",     icon: Trophy,          href: "/table" },
   { key: "navCups",      icon: Award,           href: "/cups" },
+] as const;
+
+// Дополнительные разделы (подписи не в общем словаре i18n — задаём здесь)
+const EXTRA_NAV = [
+  { href: "/history",  icon: History,    en: "History",  ru: "Архив" },
+  { href: "/compare",  icon: GitCompare, en: "Compare",  ru: "Сравнение" },
+  { href: "/careers",  icon: FolderOpen, en: "Careers",  ru: "Карьеры" },
 ] as const;
 
 const SIDEBAR = {
@@ -141,6 +149,13 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
         {locale === "ru" ? "Календарь" : "Calendar"}
       </button>
 
+      <button onClick={() => window.dispatchEvent(new Event("open-global-search"))}
+        className={`mb-3 w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold transition-all ${NAV_IDLE[theme]} border ${theme === "aurora" ? "border-pink-200" : theme === "maleficent" ? "border-purple-900/50" : "border-white/10"}`}>
+        <Search size={14} />
+        <span className="flex-1 text-left opacity-70">{locale === "ru" ? "Поиск" : "Search"}</span>
+        <kbd className="text-[9px] opacity-40 font-mono">Ctrl K</kbd>
+      </button>
+
       <nav className="space-y-1">
         {NAV_ICONS.map(item => {
           const Icon = item.icon;
@@ -158,6 +173,19 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
                     {newListingsCount > 9 ? "9+" : newListingsCount}
                   </span>
                 )}
+              </div>
+            </Link>
+          );
+        })}
+        {EXTRA_NAV.map(item => {
+          const Icon = item.icon;
+          const active = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} onClick={onNavigate}>
+              <div className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all duration-200 relative ${active ? NAV_ACTIVE[theme] : NAV_IDLE[theme]}`}>
+                {active && <div className="absolute left-0 w-[3px] h-6 rounded-r-full" style={{ background: glowColor }} />}
+                <Icon size={15} />
+                <span className={`text-sm font-bold min-w-0 truncate ${NAV_FONT[theme]}`}>{locale === "ru" ? item.ru : item.en}</span>
               </div>
             </Link>
           );
@@ -190,6 +218,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const glowColor = GLOW[theme] ?? "#ffffff";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(o => !o); }
+    };
+    const onOpen = () => setSearchOpen(true);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("open-global-search", onOpen);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("open-global-search", onOpen); };
+  }, []);
   const seasonId     = useCareerStore(s => s.seasonId);
   const selectedClub = useCareerStore(s => s.selectedClub);
   const locale        = (useCareerStore(s => s.locale) || "en") as "en" | "ru";
@@ -275,6 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {calendarOpen && (
         <CalendarModal theme={theme} locale={locale} glowColor={glowColor} onClose={() => setCalendarOpen(false)} />
       )}
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} seasonId={seasonId} theme={theme} locale={locale} />
     </div>
   );
 }

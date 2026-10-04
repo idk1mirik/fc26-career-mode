@@ -1,3 +1,4 @@
+import { withCupDefaults, withCupDefaultsOne } from "@/lib/cupRows";
 // lib/createCompetitions.ts — создаёт все турниры сезона с реальными составами 2025/26
 import { supabase } from "@/lib/supabase";
 import leagues from "@/data/leagues.json";
@@ -42,7 +43,7 @@ export async function createSeasonCompetitions(
           played: true, winner_club: byeTeam, is_bye: true,
         });
       }
-      const { error: domCupErr } = await supabase.from("cup_fixtures").insert(rows);
+      const { error: domCupErr } = await supabase.from("cup_fixtures").insert(withCupDefaults(rows));
       if (domCupErr) console.error(`Domestic cup round 1 insert failed for ${cupDef.name}:`, domCupErr);
       created.push({ name: cupDef.name, id: comp.id });
     }
@@ -85,7 +86,7 @@ export async function createSeasonCompetitions(
             });
           }
         });
-        const { error: leaguePhaseErr } = await supabase.from("cup_fixtures").insert(rows);
+        const { error: leaguePhaseErr } = await supabase.from("cup_fixtures").insert(withCupDefaults(rows));
         if (leaguePhaseErr) {
           // Если эта вставка молча проваливалась (как раньше происходило
           // ниже по пайплайну), у турнира формально была бы лиг-фаза
@@ -125,10 +126,10 @@ export async function createSeasonCompetitions(
 
       if (comp) {
         const semiDate = getSuperCupRoundDate(1);
-        await supabase.from("cup_fixtures").insert([
+        await supabase.from("cup_fixtures").insert(withCupDefaults([
           { competition_id: comp.id, round: 1, round_name: "Semi-final", home_club: four[0], away_club: four[1], match_date: semiDate },
           { competition_id: comp.id, round: 1, round_name: "Semi-final", home_club: four[2], away_club: four[3], match_date: semiDate },
-        ]);
+        ]));
         created.push({ name: superDef.name, id: comp.id });
       }
     } else if (clubs.length >= 2) {
@@ -145,10 +146,10 @@ export async function createSeasonCompetitions(
       }).select().single();
 
       if (comp) {
-        await supabase.from("cup_fixtures").insert({
+        await supabase.from("cup_fixtures").insert(withCupDefaultsOne({
           competition_id: comp.id, round: 1, round_name: "Final",
           home_club: home, away_club: away, match_date: getSuperCupDate(leagueName),
-        });
+        }));
         created.push({ name: superDef.name, id: comp.id });
       }
     }

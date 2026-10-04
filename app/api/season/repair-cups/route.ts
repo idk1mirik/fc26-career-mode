@@ -1,3 +1,4 @@
+import { withCupDefaults } from "@/lib/cupRows";
 // app/api/season/repair-cups/route.ts
 // Турниры, созданные ДО фикса формата, могли быть либо "схлопнуты" старым
 // багом (клубы пропадали без матча), либо созданы ещё в старом однораундовом
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
           played: true, winner_club: byeTeam, is_bye: true,
         });
       }
-      await supabase.from("cup_fixtures").insert(rows);
+      await supabase.from("cup_fixtures").insert(withCupDefaults(rows));
       await supabase.from("competitions").update({
         current_round: 1, status: "active", winner_club: null, phase: "knockout", league_phase_rounds: 0,
       }).eq("id", comp.id);
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
           });
         }
       });
-      await supabase.from("cup_fixtures").insert(rows);
+      await supabase.from("cup_fixtures").insert(withCupDefaults(rows));
       await supabase.from("competitions").update({
         current_round: 1, status: "active", winner_club: null,
         phase: "league_phase", league_phase_rounds: phaseConfig.games,

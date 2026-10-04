@@ -17,6 +17,9 @@ import { getThemeCopy } from "@/lib/i18n";
 import { MatchReportModal } from "@/components/MatchReportModal";
 import { HelpHint } from "@/components/HelpHint";
 import { LiveCompetitionPanel } from "@/components/LiveCompetitionPanel";
+import { BoardWidget } from "@/components/BoardWidget";
+import { NewsWidget } from "@/components/NewsWidget";
+import { AwardsBlock } from "@/components/AwardsBlock";
 import { DrawModal } from "@/components/DrawModal";
 import { runTimeline, advanceBackgroundCups, type DrawInfo, type SimContext } from "@/lib/simClient";
 import { seasonLabel, formatGameDate } from "@/lib/seasonLabel";
@@ -699,6 +702,13 @@ export default function DashboardPage() {
             <h1 className={`text-2xl font-display font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
             <div className={`text-sm mb-5 ${ui.muted}`}>{locale === "ru" ? `Итоговое место в лиге: ${userPos} из ${sortedStandings.length}` : `Final league position: #${userPos} of ${sortedStandings.length}`}</div>
 
+            {seasonId && (
+              <div className="mb-5">
+                <BoardWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} />
+              </div>
+            )}
+            {seasonId && <AwardsBlock seasonId={seasonId} userClub={userClub} theme={theme} locale={locale as "en" | "ru"} />}
+
             {/* Итоги клуба: лучший игрок, бомбардир, лучший матч */}
             {(bestPlayer || bestScorer?.goals > 0 || bestMatch) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
@@ -1156,6 +1166,13 @@ export default function DashboardPage() {
                 activeId={panelCompId} onSelect={setPanelCompId} live={liveMode}
                 onClubClick={(c) => router.push(`/clubs/${encodeURIComponent(c)}`)}
               />
+            )}
+
+            {seasonId && userClub && (
+              <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <BoardWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} refreshKey={matchday} compact />
+                <NewsWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} refreshKey={matchday} />
+              </div>
             )}
 
             {/* Top performer этого сезона — раньше на дашборде вообще не
