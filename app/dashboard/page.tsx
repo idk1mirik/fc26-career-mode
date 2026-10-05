@@ -21,6 +21,13 @@ import { BoardWidget } from "@/components/BoardWidget";
 import { NewsWidget } from "@/components/NewsWidget";
 import { AwardsBlock } from "@/components/AwardsBlock";
 import { getFx } from "@/lib/i18nFx";
+import { getDash } from "@/lib/i18nDash";
+import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
+import { DashBackdrop } from "@/components/dashboard/DashBackdrop";
+import { ClubHero } from "@/components/dashboard/ClubHero";
+import { SeasonStrip } from "@/components/dashboard/SeasonStrip";
+import { MatchHero } from "@/components/dashboard/MatchHero";
+import { QuickActions } from "@/components/dashboard/QuickActions";
 import { icons } from "@/lib/themeFlavor";
 import { Stars, SectionTitle } from "@/components/ThemeBits";
 import { DrawModal } from "@/components/DrawModal";
@@ -795,13 +802,7 @@ export default function DashboardPage() {
         @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
       `}</style>
 
-      {/* BG */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[150px] animate-floaty"
-          style={{ backgroundColor: `${glowColor}10` }} />
-        <div className="absolute bottom-[-15%] right-[-5%] w-[400px] h-[400px] rounded-full blur-[120px] animate-floaty"
-          style={{ backgroundColor: `${glowColor}08`, animationDelay: "-2s", animationDuration: "6s" }} />
-      </div>
+      <DashBackdrop theme={theme} glowColor={glowColor} />
 
       {/* Main */}
       <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
@@ -817,78 +818,27 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Top bar — герб + название + быстрые статы в одну строку */}
-        <div className={`relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6 mb-8 p-6 rounded-3xl animate-fade-in-up shadow-lg ${ui.card}`}
-          style={{ borderLeft: `3px solid ${glowColor}` }}>
-          {/* Подложка — мягкий градиент цвета клуба, эффект стадионного освещения */}
-          <div className="absolute inset-0 pointer-events-none opacity-70"
-            style={{ background: `radial-gradient(120% 100% at 0% 0%, ${glowColor}14 0%, transparent 55%)` }} />
-          <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl pointer-events-none opacity-20"
-            style={{ background: glowColor }} />
-
-          <div className="relative flex items-center gap-4 flex-1 min-w-0">
-            <div className="relative shrink-0">
-              <div className="absolute inset-0 rounded-full blur-xl opacity-50 animate-floaty-sm" style={{ background: glowColor }} />
-              <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center"
-                style={{ background: `${glowColor}12`, border: `1.5px solid ${glowColor}35` }}>
-                <img src={getClubLogo(selectedClub?.name || "")} alt="" className="w-11 h-11 object-contain"
-                  onError={e => (e.currentTarget.style.display = "none")} />
-              </div>
-            </div>
-            <div className="min-w-0">
-              <div className={`${ui.subLabel} mb-1`}>{copy.dashTitle}</div>
-              <h2 className="text-xl sm:text-2xl font-display font-black truncate"
-                style={theme === "classic" ? { fontFamily: "'Bebas Neue',sans-serif", fontSize: "2rem" } : theme === "maleficent" ? { fontFamily: "'Share Tech Mono',monospace" } : {}}>
-                {selectedClub?.name} — {locale === "ru" ? "Сезон" : "Season"} {seasonLabel(seasonNum)}
-              </h2>
-              {recentForm.length > 0 && (
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className={`text-[9px] uppercase tracking-widest font-black mr-1 ${ui.muted}`}>{locale === "ru" ? "Форма" : "Form"}</span>
-                  {recentForm.map((r, i) => (
-                    <span key={i}
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white animate-fade-in-up shadow-sm"
-                      style={{
-                        background: r === "W" ? "#22c55e" : r === "L" ? "#ef4444" : "#94a3b8",
-                        animationDelay: `${i * 60}ms`,
-                        boxShadow: `0 0 0 2px ${(r === "W" ? "#22c55e" : r === "L" ? "#ef4444" : "#94a3b8")}25`,
-                      }}>
-                      {r}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Быстрые статы — плашки с иконкой вместо мелких бейджей вперемешку */}
-          <div className="relative flex items-center gap-2 sm:gap-2.5 flex-wrap">
-            <HelpHint id="dash-quickstats" theme={theme as any}
-              title={locale === "ru" ? "Быстрые статы" : "Quick stats"}
-              text={locale === "ru"
-                ? "Место и очки — из турнирной таблицы лиги. Бюджет — сколько денег осталось на трансферы после вычета зарплат. Тур — какой матчдей лиги сейчас."
-                : "Position and points come from the league table. Budget is what's left for transfers after wages. Matchday is the current league round."} />
-            <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[64px]" style={{ background: `${glowColor}10`, border: `1px solid ${glowColor}25` }}>
-              <span className="text-lg font-display font-black leading-none" style={{ color: glowColor }}>{userPos}</span>
-              <span className={`text-[8px] uppercase tracking-widest font-black mt-1 ${ui.muted}`}>{locale === "ru" ? "Место" : "Position"}</span>
-            </div>
-            <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[64px]" style={{ background: `${glowColor}10`, border: `1px solid ${glowColor}25` }}>
-              <span className="text-lg font-display font-black leading-none">{userRow?.points ?? 0}</span>
-              <span className={`text-[8px] uppercase tracking-widest font-black mt-1 ${ui.muted}`}>{locale === "ru" ? "Очки" : "Points"}</span>
-            </div>
-            {userRow?.budget != null && (
-              <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[72px]" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)" }}>
-                <span className="text-lg font-display font-black leading-none text-emerald-500">
-                  {userRow.budget >= 1_000_000 ? `€${(userRow.budget / 1_000_000).toFixed(1)}M` : `€${Math.round(userRow.budget / 1000)}K`}
-                </span>
-                <span className={`text-[8px] uppercase tracking-widest font-black mt-1 ${ui.muted}`}>{locale === "ru" ? "Бюджет" : "Budget"}</span>
-              </div>
-            )}
-            <div className="flex flex-col items-center px-3.5 py-2 rounded-2xl min-w-[64px]" style={{ background: `${glowColor}10`, border: `1px solid ${glowColor}25` }}>
-              <span className="text-lg font-display font-black leading-none">⚽ {matchday}</span>
-              <span className={`text-[8px] uppercase tracking-widest font-black ${ui.muted}`}>{locale === "ru" ? "Тур" : "Matchday"}</span>
-            </div>
-          </div>
-        </div>
+        {/* Шапка: герб, кольцо прогресса сезона, анимированные цифры, форма */}
+        {(() => {
+          const leagueTotal = standings.length || (selectedLeague?.clubs?.length ?? 20);
+          const dd = getDash(locale, theme);
+          const zc = typeof userPos === "number" ? getZoneColor(userPos - 1, selectedLeague?.name || selectedClub?.league || "", leagueTotal) : null;
+          const zoneLabel = zc === "#22c55e" ? dd.zoneCL : zc === "#3b82f6" ? dd.zoneEL : zc === "#ef4444" ? dd.zoneRel : dd.zoneMid;
+          const totalMd = Math.max(1, ((selectedLeague?.clubs?.length ?? 20) - 1) * 2);
+          return (
+            <>
+              <ClubHero theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor}
+                clubName={selectedClub?.name ?? ""} leagueName={selectedLeague?.name || selectedClub?.league || ""} seasonText={seasonLabel(seasonNum)}
+                position={typeof userPos === "number" ? userPos : null} totalClubs={leagueTotal} zoneColor={zc} zoneLabel={zoneLabel}
+                points={userRow?.points ?? 0} goalDiff={(userRow?.gf ?? 0) - (userRow?.ga ?? 0)} budget={userRow?.budget ?? null}
+                matchday={matchday} totalMatchdays={totalMd} form={recentForm} />
+              <QuickActions theme={theme} locale={locale as "en" | "ru"} lineupOk={lineupValid} lineupConfirmed={lineupConfirmed} tacticConfirmed={tacticConfirmed}
+                tacticName={tactic || "—"} windowOpen={isTransferWindowOpenForDate(getLeagueMatchdayDate(matchday))}
+                expiring={clubContracts.filter((c: any) => c.years_left <= 1).length} />
+              <SeasonStrip theme={theme} locale={locale as "en" | "ru"} calendar={calendar} userClub={userClub} onOpen={setReportFix} />
+            </>
+          );
+        })()}
 
         {/* Предупреждение о скором конце сезона, если есть непродлённые
             контракты в последнем году — раньше игроки просто пропадали в
@@ -932,22 +882,13 @@ export default function DashboardPage() {
 
               if (cupReady) {
                 return (
-                  <div className={`p-6 ${ui.card} animate-fade-in-up`} style={{ borderLeft: `3px solid ${glowColor}` }}>
-                    <div className={`${ui.subLabel} mb-2 flex items-center gap-2`}>
-                      <span>🏆 {nextMatch.competition_name} — {nextMatch.round_name}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <div className={`text-lg font-black ${ui.text} flex items-center gap-2`}>
-                        <img src={getClubLogo(nextMatch.home_club)} className="w-6 h-6 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                        {nextMatch.home_club} vs {nextMatch.away_club}
-                        <img src={getClubLogo(nextMatch.away_club)} className="w-6 h-6 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
-                      </div>
-                      <button onClick={advanceCupRound} disabled={simulatingCup || !lineupValid}
-                        className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
-                        <Zap size={16} />
-                        {simulatingCup ? copy.dashSimulating : copy.dashPlayMatch}
-                      </button>
-                    </div>
+                  <div className="space-y-4">
+                    <MatchHero theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor} userClub={userClub}
+                      home={nextMatch.home_club} away={nextMatch.away_club}
+                      competition={nextMatch.competition_name} competitionType={(nextMatch.competition_type as any) ?? "domestic_cup"} round={nextMatch.round_name}
+                      dateLabel={formatGameDate(nextMatch.match_date ?? careerDate, seasonNum, locale as "en" | "ru")}
+                      playLabel={copy.dashPlayMatch} playingLabel={copy.dashSimulating} playing={simulatingCup}
+                      playDisabled={simulatingCup || !lineupValid} onPlay={advanceCupRound} />
                     {!lineupValid && (
                       <div className="mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
                         ⚠️ {locale === "ru"
@@ -971,59 +912,46 @@ export default function DashboardPage() {
               }
 
               return (
-                <div className={`p-6 ${ui.card} animate-fade-in-up`}>
-                  <div className="flex items-center justify-between gap-4 mb-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {(() => {
-                        const myMatch = currentFixtures.find(f => f.home_club === userClub || f.away_club === userClub);
-                        const opponent = myMatch ? (myMatch.home_club === userClub ? myMatch.away_club : myMatch.home_club) : null;
-                        const isHome = myMatch?.home_club === userClub;
-                        return opponent ? (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <img src={getClubLogo(opponent)} className="w-11 h-11 object-contain" alt=""
-                              onError={e => (e.currentTarget.style.display = "none")} />
-                          </div>
-                        ) : null;
-                      })()}
-                      <div className="min-w-0">
-                        <div className={`${ui.subLabel} mb-1 flex items-center gap-1.5`}>
-                          {locale === "ru" ? "Тур" : "Matchday"} {matchday}
-                          <HelpHint id="dash-simulate" theme={theme as any}
-                            title={locale === "ru" ? "Симуляция" : "Simulation"}
-                            text={locale === "ru"
-                              ? "«Симулировать тур» играет матч твоего клуба по выбранной тактике/составу. «Весь сезон» доигрывает ИИ все оставшиеся туры разом, включая твои — используй, если просто хочешь долистать до конца сезона."
-                              : "\"Simulate\" plays your club's match with your chosen tactic/lineup. \"Sim Season\" has the AI play out every remaining round at once, including yours — use it to fast-forward to season's end."} />
+                <div className="space-y-4">
+                  {(() => {
+                    const myMatch = currentFixtures.find(f => f.home_club === userClub || f.away_club === userClub);
+                    const date = getLeagueMatchdayDate(matchday);
+                    const seasonBtn = {
+                      label: simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season"),
+                      disabled: simulating || simulatingSeason || seasonFinished || !readyForSeasonSim,
+                      onClick: simulateWholeSeason,
+                      title: !readyForSeasonSim
+                        ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
+                        : (locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours"),
+                    };
+                    const playDisabled = simulating || simulatingSeason || currentFixtures.every(f => f.played) || !lineupValid;
+                    const help = (
+                      <HelpHint id="dash-simulate" theme={theme as any}
+                        title={locale === "ru" ? "Симуляция" : "Simulation"}
+                        text={locale === "ru"
+                          ? "«Симулировать тур» играет матч твоего клуба по выбранной тактике/составу. «Весь сезон» доигрывает ИИ все оставшиеся туры сразу, включая твои — используй, чтобы перемотать до конца сезона."
+                          : "\"Simulate\" plays your club's match with your chosen tactic/lineup. \"Sim Season\" has the AI play out every remaining round at once, including yours — use it to fast-forward to season's end."} />
+                    );
+                    return myMatch ? (
+                      <MatchHero theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor} userClub={userClub}
+                        home={myMatch.home_club} away={myMatch.away_club}
+                        competition={selectedLeague?.name || selectedClub?.league || "League"} competitionType="league"
+                        round={`${locale === "ru" ? "Тур" : "Matchday"} ${matchday}`}
+                        dateLabel={formatGameDate(date, seasonNum, locale as "en" | "ru")}
+                        playLabel={copy.dashSimulate} playingLabel={copy.dashSimulating} playing={simulating}
+                        playDisabled={playDisabled} onPlay={advanceMatchday} seasonBtn={seasonBtn} help={help} />
+                    ) : (
+                      <div className={`p-6 ${ui.card} flex items-center justify-between gap-4 flex-wrap`}>
+                        <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={advanceMatchday} disabled={playDisabled} className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 ${ui.btnPrimary}`}>
+                            <Zap size={16} />{simulating ? copy.dashSimulating : copy.dashSimulate}
+                          </button>
                         </div>
-                        {(() => {
-                          const myMatch = currentFixtures.find(f => f.home_club === userClub || f.away_club === userClub);
-                          const opponent = myMatch ? (myMatch.home_club === userClub ? myMatch.away_club : myMatch.home_club) : null;
-                          const isHome = myMatch?.home_club === userClub;
-                          return opponent ? (
-                            <div className={`text-lg font-display font-black truncate ${ui.text}`}>
-                              {isHome ? locale === "ru" ? "дома против" : "vs" : locale === "ru" ? "в гостях у" : "at"} {opponent}
-                            </div>
-                          ) : (
-                            <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>
-                          );
-                        })()}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={advanceMatchday} disabled={simulating || simulatingSeason || currentFixtures.every(f => f.played) || !lineupValid}
-                        className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${ui.btnPrimary}`}>
-                        <Zap size={16} />
-                        {simulating ? copy.dashSimulating : copy.dashSimulate}
-                      </button>
-                      <button onClick={simulateWholeSeason} disabled={simulating || simulatingSeason || seasonFinished || !readyForSeasonSim}
-                        title={!readyForSeasonSim
-                          ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
-                          : (locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours")}
-                        className="px-4 py-3 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl border transition-transform hover:scale-[1.03]"
-                        style={{ borderColor: `${glowColor}40`, color: glowColor, background: `${glowColor}0d` }}>
-                        ⏩ {simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season")}
-                      </button>
-                    </div>
-                  </div>
+                    );
+                  })()}
+                  <div className={`p-5 ${ui.card} animate-fade-in-up`}>
                   {!readyForSeasonSim && !simulatingSeason && !seasonFinished && (
                     <div className="mb-3 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 flex-wrap"
                       style={{ background: "rgba(234,179,8,0.1)", color: "#eab308", border: "1px solid rgba(234,179,8,0.3)" }}>
@@ -1107,6 +1035,7 @@ export default function DashboardPage() {
                   ))}
                   <Link href="/squad" className="text-[10px] underline opacity-50 hover:opacity-100">{copy.dashManageSquad}</Link>
                 </div>
+              </div>
               </div>
               );
             })()}
