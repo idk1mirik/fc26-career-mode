@@ -27,7 +27,11 @@ export function NewsWidget({ seasonId, clubId, theme, locale, refreshKey = 0 }: 
 
   if (!data || (data.rumors.length === 0 && data.transfers.length === 0)) return null;
   // «Температура» слуха: огоньки в classic, искры в aurora, деления шкалы в maleficent
-  const heat = (n: number) => theme === "aurora" ? "✨".repeat(n) : isM ? "▮".repeat(n) + "▯".repeat(3 - n) : "🔥".repeat(n);
+  // n приходит с сервера — зажимаем в 1..3, чтобы repeat() никогда не получил отрицательное число
+  const heat = (raw: number) => {
+    const n = Math.max(1, Math.min(3, Math.round(Number(raw) || 1)));
+    return theme === "aurora" ? "✨".repeat(n) : isM ? "▮".repeat(n) + "▯".repeat(3 - n) : "🔥".repeat(n);
+  };
 
   return (
     <div className={`p-5 ${t.card} ${t.shadow} ${t.text} text-left`} style={t.font}>
@@ -39,7 +43,7 @@ export function NewsWidget({ seasonId, clubId, theme, locale, refreshKey = 0 }: 
           <div className="space-y-2">
             {data.rumors.map((r: any) => (
               <div key={r.playerId} className={`flex items-center gap-2.5 p-2.5 ${t.cardAlt}`}>
-                <img src={getClubLogo(r.club)} alt="" className="w-7 h-7 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
+                <img src={getClubLogo(r.club ?? "")} alt="" className="w-7 h-7 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
                 <div className="min-w-0 flex-1 text-[12px] leading-snug">
                   <b className="break-words">{r.club}</b>{" "}
                   <span className={t.muted}>{fx.interested}</span>{" "}
@@ -59,7 +63,7 @@ export function NewsWidget({ seasonId, clubId, theme, locale, refreshKey = 0 }: 
           <div className="space-y-1.5">
             {data.transfers.slice(0, 6).map((tr: any, i: number) => (
               <div key={i} className={`flex items-center gap-2 text-[12px] py-1.5 ${i > 0 ? `border-t ${t.divider}` : ""}`}>
-                <img src={getClubLogo(tr.to_club)} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
+                <img src={getClubLogo(tr.to_club ?? "")} alt="" className="w-5 h-5 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
                 <div className="min-w-0 flex-1 break-words leading-snug">
                   <b>{tr.player_name}</b>{" "}
                   <span className={t.muted}>→ {tr.to_club}{tr.type === "ai_free_agent" ? ` (${fx.freeAgentTag})` : ""}</span>

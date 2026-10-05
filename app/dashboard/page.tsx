@@ -25,6 +25,7 @@ import { getDash } from "@/lib/i18nDash";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
 import { DashBackdrop } from "@/components/dashboard/DashBackdrop";
 import { ClubHero } from "@/components/dashboard/ClubHero";
+import { SafeBoundary } from "@/components/SafeBoundary";
 import { SeasonStrip } from "@/components/dashboard/SeasonStrip";
 import { MatchHero } from "@/components/dashboard/MatchHero";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -722,10 +723,10 @@ export default function DashboardPage() {
 
             {seasonId && (
               <div className="mb-5">
-                <BoardWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} />
+                <SafeBoundary name="BoardWidget"><BoardWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} /></SafeBoundary>
               </div>
             )}
-            {seasonId && <AwardsBlock seasonId={seasonId} userClub={userClub} theme={theme} locale={locale as "en" | "ru"} />}
+            {seasonId && <SafeBoundary name="AwardsBlock"><AwardsBlock seasonId={seasonId} userClub={userClub} theme={theme} locale={locale as "en" | "ru"} /></SafeBoundary>}
 
             {/* Итоги клуба: лучший игрок, бомбардир, лучший матч */}
             {(bestPlayer || bestScorer?.goals > 0 || bestMatch) && (
@@ -827,15 +828,15 @@ export default function DashboardPage() {
           const totalMd = Math.max(1, ((selectedLeague?.clubs?.length ?? 20) - 1) * 2);
           return (
             <>
-              <ClubHero theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor}
+              <SafeBoundary name="ClubHero"><ClubHero theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor}
                 clubName={selectedClub?.name ?? ""} leagueName={selectedLeague?.name || selectedClub?.league || ""} seasonText={seasonLabel(seasonNum)}
                 position={typeof userPos === "number" ? userPos : null} totalClubs={leagueTotal} zoneColor={zc} zoneLabel={zoneLabel}
                 points={userRow?.points ?? 0} goalDiff={(userRow?.gf ?? 0) - (userRow?.ga ?? 0)} budget={userRow?.budget ?? null}
-                matchday={matchday} totalMatchdays={totalMd} form={recentForm} />
-              <QuickActions theme={theme} locale={locale as "en" | "ru"} lineupOk={lineupValid} lineupConfirmed={lineupConfirmed} tacticConfirmed={tacticConfirmed}
+                matchday={matchday} totalMatchdays={totalMd} form={recentForm} /></SafeBoundary>
+              <SafeBoundary name="QuickActions"><QuickActions theme={theme} locale={locale as "en" | "ru"} lineupOk={lineupValid} lineupConfirmed={lineupConfirmed} tacticConfirmed={tacticConfirmed}
                 tacticName={tactic || "—"} windowOpen={isTransferWindowOpenForDate(getLeagueMatchdayDate(matchday))}
-                expiring={clubContracts.filter((c: any) => c.years_left <= 1).length} />
-              <SeasonStrip theme={theme} locale={locale as "en" | "ru"} calendar={calendar} userClub={userClub} onOpen={setReportFix} />
+                expiring={clubContracts.filter((c: any) => c.years_left <= 1).length} /></SafeBoundary>
+              <SafeBoundary name="SeasonStrip"><SeasonStrip theme={theme} locale={locale as "en" | "ru"} calendar={calendar} userClub={userClub} onOpen={setReportFix} /></SafeBoundary>
             </>
           );
         })()}
@@ -1096,20 +1097,20 @@ export default function DashboardPage() {
             {!seasonId ? (
               <div className={`p-5 ${ui.card} ${ui.muted} text-sm text-center py-4`}>{locale === "ru" ? "Начни карьеру, чтобы увидеть таблицу" : "Start a career to see standings"}</div>
             ) : (
-              <LiveCompetitionPanel
+              <SafeBoundary name="LiveCompetitionPanel"><LiveCompetitionPanel
                 ui={ui} theme={theme as any} userClub={userClub} locale={locale as "en" | "ru"}
                 leagueName={selectedLeague?.name || selectedClub?.league || ""}
                 leagueLogo={<img src={getLeagueLogo(selectedLeague?.name || selectedClub?.league || "")} alt="" className="w-6 h-6 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />}
                 standings={standings} competitions={competitions} fixturesByComp={fixturesByComp} standingsByComp={standingsByComp}
                 activeId={panelCompId} onSelect={setPanelCompId} live={liveMode}
                 onClubClick={(c) => router.push(`/clubs/${encodeURIComponent(c)}`)}
-              />
+              /></SafeBoundary>
             )}
 
             {seasonId && userClub && (
               <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <BoardWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} refreshKey={matchday} compact />
-                <NewsWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} refreshKey={matchday} />
+                <SafeBoundary name="BoardWidget"><BoardWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} refreshKey={matchday} compact /></SafeBoundary>
+                <SafeBoundary name="NewsWidget"><NewsWidget seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} refreshKey={matchday} /></SafeBoundary>
               </div>
             )}
 

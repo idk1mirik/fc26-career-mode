@@ -5,12 +5,7 @@
 // обновлении страницы и меняются по мере хода сезона.
 import { supabase } from "@/lib/supabase";
 import { getPlayersByClub } from "@/lib/players";
-
-function hash(str: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return Math.abs(h >>> 0);
-}
+import { hash32, rumorHeat } from "@/lib/rumors";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -34,14 +29,14 @@ export async function GET(req: Request) {
     const rich = (standings ?? []).filter((s: any) => s.club_id !== clubId && (s.budget ?? 0) > 5_000_000);
     for (const p of squad) {
       if (rumors.length >= 3) break;
-      const h = hash(`${seasonId}:${p.id}:${bucket}`);
+      const h = hash32(`${seasonId}:${p.id}:${bucket}`);
       if (h % 100 >= 28) continue; // ~28% игроков из топ-8 в центре слухов
       const affordable = rich.filter((s: any) => (s.budget ?? 0) >= (p.market_value ?? 0) * 0.7);
       if (!affordable.length) continue;
       const club = affordable[h % affordable.length].club_id;
       rumors.push({
         playerId: p.id, playerName: p.name, club, overall: p.overall, value: p.market_value ?? 0,
-        heat: ((h >> 3) % 3 + 1) as 1 | 2 | 3,
+        heat: rumorHeat(h),
       });
     }
   }
