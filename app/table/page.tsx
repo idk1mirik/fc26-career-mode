@@ -8,6 +8,9 @@ import DashboardLayout from "@/app/lib/DashboardLayout";
 import { HelpHint } from "@/components/HelpHint";
 import { PlayerModal, PosBadge } from "@/app/lib/playerComponents";
 import { seasonLabel } from "@/lib/seasonLabel";
+import { getFx } from "@/lib/i18nFx";
+import { icons, medals } from "@/lib/themeFlavor";
+import { Stars, PageHeader } from "@/components/ThemeBits";
 
 // Страница лидеров: гонки по ВСЕМ турнирам (лига, кубки, еврокубки), а не
 // только по лиге. Данные считает /api/leaders из событий сыгранных матчей.
@@ -75,6 +78,11 @@ export default function LeagueLeadersPage() {
 
   const theme = (themeRaw ?? "classic") as keyof typeof THEME_UI;
   const ui = THEME_UI[theme] ?? THEME_UI.classic;
+  const fx = getFx(locale, theme);
+  const ic = icons(theme);
+  const medalGlyph = medals(theme);
+  const isM = theme === "maleficent";
+  const ratingStars = (r: number) => Math.max(0, Math.min(5, (r - 5) * 1.25));
   const userClub = selectedClub?.name || "";
 
   useEffect(() => {
@@ -104,19 +112,19 @@ export default function LeagueLeadersPage() {
   }, [openRow, seasonId]);
 
   const scopeLabel = (s: { key: string; label: string; type: string }) =>
-    s.key === "all" ? (ru ? "Всего" : "All competitions")
-      : s.type === "league" ? (leagueName || (ru ? "Лига" : "League"))
+    s.key === "all" ? fx.lbScopeAll
+      : s.type === "league" ? (leagueName || fx.lbLeague)
       : s.label;
-  const scopeIcon = (type: string) => type === "league" ? "🏟️" : type === "domestic_cup" ? "🏆" : type === "super_cup" ? "⚡" : type === "continental" ? "🌍" : "📊";
+  const scopeIcon = (type: string) => type === "league" ? ic.league : type === "domestic_cup" ? ic.cup : type === "super_cup" ? ic.super : type === "continental" ? ic.continental : ic.all;
 
   const CATS: { key: CatKey; label: string; icon: string; unit: string; value: (r: any) => string; sub?: (r: any) => string }[] = [
-    { key: "topScorers", label: ru ? "Бомбардиры" : "Top Scorers", icon: "⚽", unit: ru ? "голов" : "goals", value: r => String(r.goals), sub: r => `${r.matches} ${ru ? "матч." : "apps"}` },
-    { key: "topAssists", label: ru ? "Ассистенты" : "Top Assists", icon: "🎯", unit: ru ? "передач" : "assists", value: r => String(r.assists), sub: r => `${r.matches} ${ru ? "матч." : "apps"}` },
-    { key: "contributions", label: ru ? "Гол + пас" : "Goals + Assists", icon: "🔥", unit: "G+A", value: r => String(r.ga), sub: r => `${r.goals}${ru ? "г" : "G"} · ${r.assists}${ru ? "п" : "A"}` },
-    { key: "topRated", label: ru ? "Рейтинг" : "Best Rated", icon: "⭐", unit: ru ? "ср. оценка" : "avg rating", value: r => r.avg_rating.toFixed(2), sub: r => `${r.matches} ${ru ? "матч." : "apps"}` },
-    { key: "cleanSheets", label: ru ? "Сухие матчи" : "Clean Sheets", icon: "🧤", unit: ru ? "сухих" : "clean sheets", value: r => String(r.clean_sheets), sub: r => `${r.matches} ${ru ? "матч." : "apps"}` },
-    { key: "mostCards", label: ru ? "Карточки" : "Most Booked", icon: "🟨", unit: ru ? "карточек" : "cards", value: r => `🟨${r.yellow}${r.red ? ` 🟥${r.red}` : ""}` },
-    { key: "mostPlayed", label: ru ? "Матчи" : "Most Played", icon: "🏃", unit: ru ? "матчей" : "apps", value: r => String(r.matches), sub: r => `★ ${r.avg_rating.toFixed(1)}` },
+    { key: "topScorers", label: fx.cScorers, icon: ic.scorer, unit: fx.uGoals, value: r => String(r.goals), sub: r => `${r.matches} ${fx.appsShort}` },
+    { key: "topAssists", label: fx.cAssists, icon: ic.assist, unit: fx.uAssists, value: r => String(r.assists), sub: r => `${r.matches} ${fx.appsShort}` },
+    { key: "contributions", label: fx.cContrib, icon: ic.contrib, unit: "G+A", value: r => String(r.ga), sub: r => `${r.goals}${ru ? "г" : "G"} · ${r.assists}${ru ? "п" : "A"}` },
+    { key: "topRated", label: fx.cRated, icon: ic.rating, unit: fx.uRating, value: r => r.avg_rating.toFixed(2), sub: r => `${r.matches} ${fx.appsShort}` },
+    { key: "cleanSheets", label: fx.cSheets, icon: ic.glove, unit: fx.uSheets, value: r => String(r.clean_sheets), sub: r => `${r.matches} ${fx.appsShort}` },
+    { key: "mostCards", label: fx.cCards, icon: ic.cards, unit: fx.uCards, value: r => `${r.yellow}Y${r.red ? ` ${r.red}R` : ""}` },
+    { key: "mostPlayed", label: fx.cPlayed, icon: ic.played, unit: fx.uApps, value: r => String(r.matches), sub: r => `${r.avg_rating.toFixed(1)} ★` },
   ];
 
   const scopes = data?.scopes ?? [];
@@ -137,25 +145,16 @@ export default function LeagueLeadersPage() {
   return (
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
-        <div className="flex items-center gap-3 mb-6">
-          <img src={getLeagueLogo(leagueName)} alt="" className="w-10 h-10 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
-          <div className="flex-1 min-w-0">
-            <div className={`text-[10px] uppercase tracking-widest mb-0.5 ${ui.muted}`}>{ru ? "Лидеры сезона" : "Season Leaders"}</div>
-            <h1 className="text-2xl md:text-3xl font-display font-black truncate">{seasonLabel(seasonNum)}</h1>
-          </div>
-          <HelpHint id="leaders-page-intro-v2" theme={theme as any}
-            title={ru ? "Лидеры" : "Leaders"}
-            text={ru
-              ? "Гонки игроков по каждому турниру отдельно: лига, кубок, еврокубки. Выбери турнир сверху и категорию ниже. Нажми на игрока, чтобы открыть его карточку со статистикой."
-              : "Player races for every competition separately: league, cup, continental. Pick a competition on top and a category below. Click a player to open his card with stats."} />
-        </div>
+        <PageHeader theme={theme} eyebrow={fx.lbEyebrow} title={seasonLabel(seasonNum)}
+          icon={<img src={getLeagueLogo(leagueName)} alt="" className="w-11 h-11 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />}
+          right={<HelpHint id="leaders-page-intro-v2" theme={theme as any} title={fx.lbHintTitle} text={fx.lbHint} />} />
 
         {/* Турниры */}
         <div className="flex gap-2 mb-3 flex-wrap">
           {scopes.map(s => (
             <button key={s.key} onClick={() => setScope(s.key)}
               className={`px-3.5 py-2 text-[11px] font-black uppercase tracking-wide transition-all flex items-center gap-1.5 min-w-0 ${ui.pill} ${activeScope?.key === s.key ? ui.chipActive : ui.chipIdle}`}>
-              <span>{scopeIcon(s.type)}</span><span className="truncate max-w-[180px]">{scopeLabel(s)}</span>
+              <span style={isM ? { color: ui.accent } : undefined}>{scopeIcon(s.type)}</span><span className="truncate max-w-[180px]">{scopeLabel(s)}</span>
             </button>
           ))}
         </div>
@@ -165,34 +164,35 @@ export default function LeagueLeadersPage() {
           {CATS.map(c => (
             <button key={c.key} onClick={() => setCat(c.key)}
               className={`px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${ui.pill} ${cat === c.key ? ui.tabActive : ui.tabIdle}`}>
-              <span>{c.icon}</span>{c.label}
+              <span style={isM ? { color: cat === c.key ? undefined : ui.accent } : undefined}>{c.icon}</span>{c.label}
             </button>
           ))}
         </div>
 
         {loading ? (
-          <div className={`text-center py-16 text-sm ${ui.muted}`}>{ru ? "Загрузка…" : "Loading…"}</div>
+          <div className={`text-center py-16 text-sm ${ui.muted}`}>{fx.lbLoading}</div>
         ) : rows.length === 0 || !activeScope ? (
           <div className={`text-center py-16 text-sm ${ui.card} ${ui.rounded} ${ui.muted}`}>
-            {ru ? "Пока нет данных — сыграйте несколько матчей" : "No data yet — play a few matches"}
+            {fx.lbNoData}
           </div>
         ) : (
           <>
             {/* Пьедестал */}
             <div className={`${ui.hero} ${ui.rounded} p-5 md:p-7 mb-5 animate-fade-in-up`}>
               <div className={`text-[10px] uppercase tracking-[0.3em] font-black mb-4 flex items-center gap-2 ${ui.muted}`}>
-                <span>{activeCat.icon}</span>{activeCat.label} · {scopeLabel(activeScope)}
+                <span style={{ color: ui.accent }}>{activeCat.icon}</span>{activeCat.label} · {scopeLabel(activeScope)}
               </div>
               <div className="grid grid-cols-3 gap-2 md:gap-5 items-end">
                 {podiumOrder.map((item, idx) => item ? (
                   <button key={idx} onClick={() => setOpenRow(item.r)}
                     className={`group flex flex-col items-center text-center min-w-0 p-2 md:p-4 transition-transform hover:-translate-y-1 ${ui.card} ${ui.rounded}`}
                     style={{ borderTop: `3px solid ${medal(item.place)}`, paddingTop: item.place === 0 ? 24 : 16 }}>
-                    <div className="text-xl md:text-2xl font-display font-black mb-1">{item.place === 0 ? "🥇" : item.place === 1 ? "🥈" : "🥉"}</div>
+                    <div className={`${isM ? "text-base tracking-widest" : "text-xl md:text-2xl"} font-display font-black mb-1`} style={{ color: medal(item.place) }}>{medalGlyph[item.place]}</div>
                     <img src={getClubLogo(item.r.club_id)} alt="" className={item.place === 0 ? "w-12 h-12 md:w-16 md:h-16 object-contain" : "w-10 h-10 md:w-12 md:h-12 object-contain"} onError={e => (e.currentTarget.style.display = "none")} />
                     <div className={`mt-2 font-black text-xs md:text-sm leading-tight break-words max-w-full ${item.r.club_id === userClub ? ui.userText : ""}`}>{item.r.player_name}</div>
                     <div className={`text-[10px] truncate max-w-full ${ui.muted}`}>{item.r.club_id}</div>
-                    <div className="mt-2 text-2xl md:text-3xl font-display font-black" style={{ color: medal(item.place) }}>{activeCat.value(item.r)}</div>
+                    <div className="mt-2 text-2xl md:text-3xl font-display font-black" style={{ color: medal(item.place), textShadow: theme !== "classic" ? `0 0 14px ${medal(item.place)}66` : undefined }}>{activeCat.value(item.r)}</div>
+                    {cat === "topRated" && <Stars value={ratingStars(item.r.avg_rating)} theme={theme} size={11} className="mt-1" />}
                     <div className={`text-[9px] uppercase tracking-widest ${ui.muted}`}>{activeCat.unit}</div>
                   </button>
                 ) : <div key={idx} />)}
@@ -207,7 +207,7 @@ export default function LeagueLeadersPage() {
                 return (
                   <button key={`${row.player_id}-${row.club_id}-${i}`} onClick={() => setOpenRow(row)}
                     className={`w-full text-left flex items-center gap-3 px-4 md:px-5 py-3 transition-colors ${ui.rowHover} ${i > 0 ? `border-t ${ui.divider}` : ""} ${isUser ? ui.userRow : ""}`}>
-                    <span className="w-7 text-center text-sm font-black font-display shrink-0" style={{ color: medal(i) }}>{i + 1}</span>
+                    <span className="w-7 text-center text-sm font-black font-display shrink-0" style={{ color: medal(i) }}>{i < 3 ? medalGlyph[i] : i + 1}</span>
                     <img src={getClubLogo(row.club_id)} alt="" className="w-7 h-7 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 min-w-0">
@@ -219,7 +219,8 @@ export default function LeagueLeadersPage() {
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="font-display font-black text-lg leading-none">{activeCat.value(row)}</div>
+                      <div className="font-display font-black text-lg leading-none" style={cat === "topRated" ? { color: ui.gold } : undefined}>{activeCat.value(row)}</div>
+                      {cat === "topRated" && <Stars value={ratingStars(row.avg_rating)} theme={theme} size={9} className="mt-1" />}
                       {activeCat.sub && <div className={`text-[10px] mt-1 ${ui.muted}`}>{activeCat.sub(row)}</div>}
                     </div>
                   </button>
@@ -227,7 +228,7 @@ export default function LeagueLeadersPage() {
               })}
             </div>
             {cat === "topRated" && leaders?.minMatches ? (
-              <div className={`text-[11px] mt-3 ${ui.muted}`}>{ru ? `В рейтинге — игроки от ${leaders.minMatches} матчей.` : `Rated list includes players with ${leaders.minMatches}+ matches.`}</div>
+              <div className={`text-[11px] mt-3 ${ui.muted}`}>{fx.lbMinMatches(leaders.minMatches)}</div>
             ) : null}
           </>
         )}

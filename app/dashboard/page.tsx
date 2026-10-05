@@ -20,6 +20,9 @@ import { LiveCompetitionPanel } from "@/components/LiveCompetitionPanel";
 import { BoardWidget } from "@/components/BoardWidget";
 import { NewsWidget } from "@/components/NewsWidget";
 import { AwardsBlock } from "@/components/AwardsBlock";
+import { getFx } from "@/lib/i18nFx";
+import { icons } from "@/lib/themeFlavor";
+import { Stars, SectionTitle } from "@/components/ThemeBits";
 import { DrawModal } from "@/components/DrawModal";
 import { runTimeline, advanceBackgroundCups, type DrawInfo, type SimContext } from "@/lib/simClient";
 import { seasonLabel, formatGameDate } from "@/lib/seasonLabel";
@@ -651,7 +654,7 @@ export default function DashboardPage() {
         const last = [...mine].sort((a, b) => b.round - a.round)[0];
         let result = "";
         let tone: "gold" | "good" | "neutral" | "bad" = "neutral";
-        if (won) { result = ru ? "🏆 Победа в турнире" : "🏆 Champions"; tone = "gold"; }
+        if (won) { result = ru ? "★ Победа в турнире" : "★ Champions"; tone = "gold"; }
         else if (!c.winner_club) { result = ru ? "Турнир не завершён" : "Not finished"; }
         else if (isNewEuro && last.round <= phaseRounds) {
           const pos = (standingsByComp[c.id] ?? []).findIndex((r: any) => r.club === userClub) + 1;
@@ -673,7 +676,7 @@ export default function DashboardPage() {
     const leagueRow = {
       id: "league", name: selectedLeague?.name || selectedClub?.league || (ru ? "Лига" : "League"), type: "league",
       winner: sortedStandings[0]?.club_id as string | null,
-      result: userPos === 1 ? (ru ? "🏆 Чемпионы лиги" : "🏆 League champions") : (ru ? `${userPos}-е место из ${sortedStandings.length}` : `Finished #${userPos} of ${sortedStandings.length}`),
+      result: userPos === 1 ? (ru ? "★ Чемпионы лиги" : "★ League champions") : (ru ? `${userPos}-е место из ${sortedStandings.length}` : `Finished #${userPos} of ${sortedStandings.length}`),
       tone: (userPos === 1 ? "gold" : Number(userPos) <= 4 ? "good" : "neutral") as "gold" | "good" | "neutral" | "bad",
       played: sortedStandings.find(r => r.club_id === userClub)?.played ?? 0,
       wins: sortedStandings.find(r => r.club_id === userClub)?.won ?? 0,
@@ -681,26 +684,34 @@ export default function DashboardPage() {
       ga: sortedStandings.find(r => r.club_id === userClub)?.ga ?? 0,
     };
     const allTournaments = [leagueRow, ...tournaments];
-    const toneColor = (t: string) => t === "gold" ? "#eab308" : t === "good" ? "#22c55e" : t === "bad" ? "#f87171" : undefined;
-    const tIcon = (t: string) => t === "league" ? "🏟️" : t === "domestic_cup" ? "🏆" : t === "super_cup" ? "⚡" : "🌍";
-    const statTile = (icon: string, label: string, name: string, value: string, color?: string) => (
-      <div className={`flex items-center gap-3 p-3 rounded-2xl text-left min-w-0 ${ui.cardAlt}`}>
-        <span className="text-2xl shrink-0">{icon}</span>
+    const fxs = getFx(locale, theme);
+    const ics = icons(theme);
+    const isMal = theme === "maleficent", isAur = theme === "aurora";
+    const goldC = isMal ? "#e879f9" : isAur ? "#f59e0b" : "#eab308";
+    const toneColor = (t: string) => t === "gold" ? goldC : t === "good" ? "#22c55e" : t === "bad" ? "#f87171" : undefined;
+    const tIcon = (t: string) => t === "league" ? ics.league : t === "domestic_cup" ? ics.cup : t === "super_cup" ? ics.super : ics.continental;
+    const ratingStarsDash = (r: number) => Math.max(0, Math.min(5, (r - 5) * 1.25));
+    const statTile = (icon: string, label: string, name: string, value: string, color?: string, stars?: number) => (
+      <div className={`flex items-center gap-3 p-3 ${isMal ? "" : "rounded-2xl"} text-left min-w-0 ${ui.cardAlt}`}>
+        <span className="text-2xl shrink-0" style={isMal ? { color: "#e879f9", textShadow: "0 0 10px #e879f988" } : undefined}>{icon}</span>
         <div className="min-w-0 flex-1">
           <div className={`text-[9px] uppercase tracking-widest ${ui.muted}`}>{label}</div>
           <div className={`text-sm font-black truncate ${ui.text}`}>{name}</div>
         </div>
-        <div className="text-lg font-display font-black shrink-0" style={color ? { color } : undefined}>{value}</div>
+        <div className="text-right shrink-0">
+          {stars != null && <Stars value={stars} theme={theme} size={10} />}
+          <div className="text-lg font-display font-black leading-tight" style={color ? { color } : undefined}>{value}</div>
+        </div>
       </div>
     );
     return (
       <DashboardLayout>
         <main className={`min-h-screen relative overflow-hidden flex items-center justify-center p-6 ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
           <div className={`w-full max-w-2xl p-6 sm:p-8 rounded-3xl text-center ${ui.card} animate-fade-in-up`}>
-            <div className="text-5xl mb-3 animate-floaty-sm inline-block">🏁</div>
-            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>{locale === "ru" ? `Сезон ${seasonLabel(seasonNum)} завершён` : `Season ${seasonLabel(seasonNum)} complete`}</div>
+            <div className="text-5xl mb-3 animate-floaty-sm inline-block" style={isMal ? { color: "#e879f9", textShadow: "0 0 24px #e879f988" } : undefined}>{isMal ? "◈" : isAur ? "👑" : "🏁"}</div>
+            <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.subLabel}`}>{fxs.seasonDone(seasonLabel(seasonNum))}</div>
             <h1 className={`text-2xl font-display font-black mb-1 ${ui.text}`}>{selectedClub.name}</h1>
-            <div className={`text-sm mb-5 ${ui.muted}`}>{locale === "ru" ? `Итоговое место в лиге: ${userPos} из ${sortedStandings.length}` : `Final league position: #${userPos} of ${sortedStandings.length}`}</div>
+            <div className={`text-sm mb-5 ${ui.muted}`}>{fxs.finalPos(Number(userPos) || 0, sortedStandings.length)}{userPos === 1 && <Stars value={5} theme={theme} size={14} className="ml-2 align-middle" />}</div>
 
             {seasonId && (
               <div className="mb-5">
@@ -712,12 +723,12 @@ export default function DashboardPage() {
             {/* Итоги клуба: лучший игрок, бомбардир, лучший матч */}
             {(bestPlayer || bestScorer?.goals > 0 || bestMatch) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
-                {bestPlayer && statTile("⭐", locale === "ru" ? "Лучший игрок клуба" : "Club player of the season", bestPlayer.player_name, (bestPlayer.total_rating / bestPlayer.matches_played).toFixed(2), getRatingColorDash(bestPlayer.total_rating / bestPlayer.matches_played))}
-                {bestScorer && bestScorer.goals > 0 && statTile("⚽", locale === "ru" ? "Лучший бомбардир клуба" : "Club top scorer", bestScorer.player_name, `${bestScorer.goals} ${locale === "ru" ? "гол." : "G"}`)}
+                {bestPlayer && statTile(ics.awards, fxs.clubPlayer, bestPlayer.player_name, (bestPlayer.total_rating / bestPlayer.matches_played).toFixed(2), getRatingColorDash(bestPlayer.total_rating / bestPlayer.matches_played), ratingStarsDash(bestPlayer.total_rating / bestPlayer.matches_played))}
+                {bestScorer && bestScorer.goals > 0 && statTile(ics.scorer, fxs.clubScorer, bestScorer.player_name, `${bestScorer.goals} ${locale === "ru" ? "гол." : "G"}`)}
                 {bestMatch && (
                   <div className="sm:col-span-2">
-                    <div className={`text-[10px] uppercase tracking-widest mb-1.5 text-left ${ui.muted}`}>🔥 {locale === "ru" ? "Лучший матч сезона" : "Match of the season"} · {bestMatch.competition_name === "League" ? (locale === "ru" ? "Лига" : "League") : bestMatch.competition_name}</div>
-                    <div className={`rounded-2xl p-1 ${ui.cardAlt}`}>
+                    <div className={`text-[10px] uppercase tracking-widest mb-1.5 text-left ${ui.muted}`}><span style={isMal ? { color: "#e879f9" } : undefined}>{ics.match}</span> {fxs.matchOfSeason} · {bestMatch.competition_name === "League" ? fxs.panelLeague : bestMatch.competition_name}</div>
+                    <div className={`${isMal ? "" : "rounded-2xl"} p-1 ${ui.cardAlt}`}>
                       <MatchRow fix={bestMatch} userClub={userClub} ui={ui} theme={theme} onOpenReport={setReportFix} />
                     </div>
                   </div>
@@ -727,22 +738,20 @@ export default function DashboardPage() {
 
             {/* Все турниры сезона, где играл клуб: результат клуба + победитель */}
             <div className={`text-left rounded-2xl p-4 mb-6 ${ui.card}`}>
-              <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>
-                {ru ? "Турниры сезона" : "Season competitions"}
-              </div>
+              <SectionTitle theme={theme} icon={ics.tournament}>{ru ? "Турниры сезона" : "Season competitions"}</SectionTitle>
               <div className="space-y-2.5">
                 {allTournaments.map((t: any) => (
-                  <div key={t.id} className={`rounded-xl p-3 ${ui.cardAlt}`} style={t.tone === "gold" ? { borderLeft: "3px solid #eab308" } : undefined}>
+                  <div key={t.id} className={`${isMal ? "" : "rounded-xl"} p-3 ${ui.cardAlt}`} style={t.tone === "gold" ? { borderLeft: `3px solid ${goldC}`, boxShadow: theme !== "classic" ? `0 0 18px ${goldC}22` : undefined } : undefined}>
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-lg shrink-0">{tIcon(t.type)}</span>
+                      <span className="text-lg shrink-0" style={isMal ? { color: "#e879f9" } : undefined}>{tIcon(t.type)}</span>
                       <span className={`text-sm font-black truncate min-w-0 flex-1 ${ui.text}`}>{t.name}</span>
-                      <span className="text-[11px] font-black text-right shrink-0 max-w-[55%]" style={{ color: toneColor(t.tone) }}>{t.result}</span>
+                      <span className="text-[11px] font-black text-right shrink-0 max-w-[55%] flex items-center gap-1.5 justify-end" style={{ color: toneColor(t.tone) }}>{t.tone === "gold" && <Stars value={1} max={1} theme={theme} size={12} />}{t.result}</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
                       <div className={`text-[11px] flex items-center gap-1.5 min-w-0 ${ui.muted}`}>
                         {ru ? "Победитель:" : "Winner:"}
                         {t.winner ? (
-                          <span className={`font-bold flex items-center gap-1.5 min-w-0 ${t.winner === userClub ? "text-emerald-400" : ui.text}`}>
+                          <span className={`font-bold flex items-center gap-1.5 min-w-0 ${t.winner === userClub ? (isMal ? "text-fuchsia-400" : isAur ? "text-violet-600" : "text-emerald-400") : ui.text}`}>
                             <img src={getClubLogo(t.winner)} className="w-4 h-4 object-contain shrink-0" alt="" onError={e => (e.currentTarget.style.display = "none")} />
                             <span className="truncate">{t.winner}</span>
                           </span>
@@ -762,7 +771,7 @@ export default function DashboardPage() {
             <button onClick={handleStartNewSeason} disabled={startingNewSeason}
               className={`w-full py-4 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-transform hover:scale-[1.02] ${ui.btnPrimary}`}>
               <Zap size={16} />
-              {startingNewSeason ? (locale === "ru" ? "Запускаем новый сезон…" : "Starting new season…") : (locale === "ru" ? "Начать новый сезон →" : "Start New Season →")}
+              {startingNewSeason ? fxs.startingNew : fxs.startNew}
             </button>
           </div>
           {reportFix && (
@@ -1186,14 +1195,16 @@ export default function DashboardPage() {
               const topScorer = [...eligible].sort((a, b) => b.goals - a.goals)[0];
               const topRated = [...eligible].sort((a, b) => (b.total_rating / b.matches_played) - (a.total_rating / a.matches_played))[0];
               if (!topScorer && !topRated) return null;
+              const fxl = getFx(locale, theme); const icl = icons(theme);
+              const starOf = (r: number) => Math.max(0, Math.min(5, (r - 5) * 1.25));
               return (
                 <div className={`p-5 mt-5 shadow-lg ${ui.card} animate-fade-in-up`}>
-                  <div className={`${ui.subLabel} mb-3`}>{locale === "ru" ? "Лидеры сезона" : "Season leaders"}</div>
+                  <SectionTitle theme={theme} icon={icl.awards}>{fxl.lbEyebrow}</SectionTitle>
                   <div className="space-y-3">
                     {topScorer && topScorer.goals > 0 && (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-base shrink-0">⚽</span>
+                          <span className="text-base shrink-0" style={theme === "maleficent" ? { color: "#e879f9" } : undefined}>{icl.scorer}</span>
                           <span className={`text-sm font-bold truncate ${ui.text}`}>{topScorer.player_name}</span>
                         </div>
                         <span className={`text-sm font-display font-black shrink-0 ${ui.muted}`}>{topScorer.goals} {locale === "ru" ? "гол." : "G"}</span>
@@ -1202,11 +1213,14 @@ export default function DashboardPage() {
                     {topRated && (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-base shrink-0">⭐</span>
+                          <span className="text-base shrink-0" style={theme === "maleficent" ? { color: "#e879f9" } : undefined}>{icl.rating}</span>
                           <span className={`text-sm font-bold truncate ${ui.text}`}>{topRated.player_name}</span>
                         </div>
-                        <span className="text-sm font-display font-black shrink-0" style={{ color: getRatingColorDash(topRated.total_rating / topRated.matches_played) }}>
-                          {(topRated.total_rating / topRated.matches_played).toFixed(2)}
+                        <span className="shrink-0 text-right">
+                          <Stars value={starOf(topRated.total_rating / topRated.matches_played)} theme={theme} size={10} />
+                          <span className="block text-sm font-display font-black leading-tight" style={{ color: getRatingColorDash(topRated.total_rating / topRated.matches_played) }}>
+                            {(topRated.total_rating / topRated.matches_played).toFixed(2)}
+                          </span>
                         </span>
                       </div>
                     )}

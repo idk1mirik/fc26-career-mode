@@ -172,22 +172,45 @@ export default function CalendarModal({
   const pausedRef = useRef(false);
   const stopRef = useRef(false);
 
+  // Тексты в голосе темы: classic — нейтрально, aurora — сказочно, maleficent — терминал
+  const ru = locale === "ru";
+  const V = {
+    classic: {
+      title: ru ? "Календарь сезона" : "Season Calendar",
+      subtitle: ru ? "Выбери любую дату — все матчи (лига и кубки) до неё включительно будут сыграны, и симуляция остановится"
+        : "Pick any date — every match (league and cups) up to it will be played, then the sim stops",
+      simulate: ru ? "Промотать до этой даты" : "Simulate to this date",
+      today: ru ? "Ближайший матч" : "Next fixture", windowOpen: ru ? "Открыто трансферное окно" : "Transfer window open",
+      playing: ru ? "Играем тур" : "Playing matchday", noneSelected: ru ? "Выбери дату в календаре" : "Pick a date on the calendar",
+      alreadyPast: ru ? "Эта дата уже позади" : "That date is already behind you",
+      done: (n: number) => ru ? `Сыграно туров: ${n}. Обновляю…` : `${n} matchday${n === 1 ? "" : "s"} played. Refreshing…`,
+    },
+    aurora: {
+      title: ru ? "✦ Календарь сезона" : "✦ Season Calendar",
+      subtitle: ru ? "Выбери любой день — мы сыграем всё до него (лигу и кубки) и мягко остановимся ✦"
+        : "Pick any day — we'll play everything up to it (league and cups) and gently stop ✦",
+      simulate: ru ? "Перелистнуть до этого дня ✦" : "Turn the pages to this day ✦",
+      today: ru ? "Следующий матч" : "Next match", windowOpen: ru ? "Окно трансферов открыто ✦" : "Transfer window is open ✦",
+      playing: ru ? "Играем страницу" : "Playing page", noneSelected: ru ? "Выбери день в календаре ✦" : "Choose a day on the calendar ✦",
+      alreadyPast: ru ? "Этот день уже в прошлом" : "That day is already behind us",
+      done: (n: number) => ru ? `Страниц перевёрнуто: ${n}. Обновляю ✦` : `${n} page${n === 1 ? "" : "s"} turned. Refreshing ✦`,
+    },
+    maleficent: {
+      title: ru ? ">_ КАЛЕНДАРЬ СЕЗОНА" : ">_ SEASON CALENDAR",
+      subtitle: ru ? ">_ ВЫБЕРИТЕ ДАТУ — ВСЕ МАТЧИ (ЛИГА И КУБКИ) ДО НЕЁ БУДУТ ОТЫГРАНЫ, ЗАТЕМ СИМУЛЯЦИЯ ОСТАНОВИТСЯ"
+        : ">_ SELECT A DATE — ALL MATCHES (LEAGUE AND CUPS) UP TO IT WILL BE EXECUTED, THEN THE SIM HALTS",
+      simulate: ru ? "ВЫПОЛНИТЬ ДО ЭТОЙ ДАТЫ" : "EXECUTE TO THIS DATE",
+      today: ru ? "БЛИЖАЙШИЙ МАТЧ" : "NEXT FIXTURE", windowOpen: ru ? "ОКНО ТРАНСФЕРОВ ОТКРЫТО" : "TRANSFER WINDOW OPEN",
+      playing: ru ? "ИДЁТ ТУР" : "EXECUTING MATCHDAY", noneSelected: ru ? ">_ ДАТА НЕ ВЫБРАНА" : ">_ NO DATE SELECTED",
+      alreadyPast: ru ? "ЭТА ДАТА УЖЕ В ПРОШЛОМ" : "THAT DATE IS ALREADY PAST",
+      done: (n: number) => ru ? `>_ ТУРОВ СЫГРАНО: ${n}. ОБНОВЛЕНИЕ…` : `>_ ${n} MATCHDAY${n === 1 ? "" : "S"} EXECUTED. REFRESHING…`,
+    },
+  }[theme];
   const t = {
-    title: locale === "ru" ? "Календарь сезона" : "Season Calendar",
-    subtitle: locale === "ru"
-      ? "Выбери любую дату — все матчи (лига и кубки) до неё включительно будут сыграны, и симуляция остановится"
-      : "Pick any date — every match (league and cups) up to it will be played, then the sim stops",
-    simulate: locale === "ru" ? "Промотать до этой даты" : "Simulate to this date",
-    close: locale === "ru" ? "Закрыть" : "Close",
-    pause: locale === "ru" ? "Пауза" : "Pause",
-    resume: locale === "ru" ? "Продолжить" : "Resume",
-    stop: locale === "ru" ? "Остановить" : "Stop",
-    today: locale === "ru" ? "Ближайший матч" : "Next fixture",
-    windowOpen: locale === "ru" ? "Открыто трансферное окно" : "Transfer window open",
-    playing: locale === "ru" ? "Играем тур" : "Playing matchday",
-    noneSelected: locale === "ru" ? "Выбери дату в календаре" : "Pick a date on the calendar",
-    alreadyPast: locale === "ru" ? "Эта дата уже позади" : "That date is already behind you",
-    doneCount: (n: number) => locale === "ru" ? `Сыграно туров: ${n}. Обновляю…` : `${n} matchday${n === 1 ? "" : "s"} played. Refreshing…`,
+    title: V.title, subtitle: V.subtitle, simulate: V.simulate,
+    close: ru ? "Закрыть" : "Close", pause: ru ? "Пауза" : "Pause", resume: ru ? "Продолжить" : "Resume", stop: ru ? "Остановить" : "Stop",
+    today: V.today, windowOpen: V.windowOpen, playing: V.playing, noneSelected: V.noneSelected, alreadyPast: V.alreadyPast,
+    doneCount: V.done,
   };
 
   const simulateToDate = async () => {

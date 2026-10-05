@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap, CalendarClock, History, GitCompare, FolderOpen, Search } from "lucide-react";
 import SearchModal from "@/components/SearchModal";
+import { getFx } from "@/lib/i18nFx";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotificationBell from "@/components/NotificationBell";
@@ -28,9 +29,9 @@ const NAV_ICONS = [
 
 // Дополнительные разделы (подписи не в общем словаре i18n — задаём здесь)
 const EXTRA_NAV = [
-  { href: "/history",  icon: History,    en: "History",  ru: "Архив" },
-  { href: "/compare",  icon: GitCompare, en: "Compare",  ru: "Сравнение" },
-  { href: "/careers",  icon: FolderOpen, en: "Careers",  ru: "Карьеры" },
+  { href: "/history",  icon: History,    key: "navHistory" },
+  { href: "/compare",  icon: GitCompare, key: "navCompare" },
+  { href: "/careers",  icon: FolderOpen, key: "navCareers" },
 ] as const;
 
 const SIDEBAR = {
@@ -152,7 +153,7 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
       <button onClick={() => window.dispatchEvent(new Event("open-global-search"))}
         className={`mb-3 w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold transition-all ${NAV_IDLE[theme]} border ${theme === "aurora" ? "border-pink-200" : theme === "maleficent" ? "border-purple-900/50" : "border-white/10"}`}>
         <Search size={14} />
-        <span className="flex-1 text-left opacity-70">{locale === "ru" ? "Поиск" : "Search"}</span>
+        <span className="flex-1 text-left opacity-70 truncate">{getFx(locale, theme).navSearch}</span>
         <kbd className="text-[9px] opacity-40 font-mono">Ctrl K</kbd>
       </button>
 
@@ -185,7 +186,7 @@ function SidebarContent({ theme, glowColor, pathname, onNavigate, onOpenCalendar
               <div className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all duration-200 relative ${active ? NAV_ACTIVE[theme] : NAV_IDLE[theme]}`}>
                 {active && <div className="absolute left-0 w-[3px] h-6 rounded-r-full" style={{ background: glowColor }} />}
                 <Icon size={15} />
-                <span className={`text-sm font-bold min-w-0 truncate ${NAV_FONT[theme]}`}>{locale === "ru" ? item.ru : item.en}</span>
+                <span className={`text-sm font-bold min-w-0 truncate ${NAV_FONT[theme]}`}>{getFx(locale, theme)[item.key]}</span>
               </div>
             </Link>
           );

@@ -7,6 +7,8 @@
 import { KnockoutBracket } from "@/components/KnockoutBracket";
 import { getClubLogo } from "@/data/clublogos";
 import { getZoneColor } from "@/lib/europeanZones";
+import { getFx } from "@/lib/i18nFx";
+import { icons } from "@/lib/themeFlavor";
 
 export interface LiveCompetition { id: string; name: string; type: string; league_phase_rounds?: number | null; current_round?: number; status?: string; phase?: string }
 
@@ -20,20 +22,23 @@ export function LiveCompetitionPanel({
   onClubClick: (club: string) => void;
 }) {
   const ru = locale === "ru";
+  const fx = getFx(locale, theme);
+  const ic = icons(theme);
+  const isM = theme === "maleficent";
   const userColor = theme === "classic" ? "text-emerald-400" : theme === "aurora" ? "text-violet-600" : "text-fuchsia-400";
   const comp = activeId ? competitions.find(c => c.id === activeId) ?? null : null;
 
   // Только турниры, где вообще участвует клуб пользователя (чтобы чипов не было десятки)
   const mine = competitions.filter(c => (fixturesByComp[c.id] ?? []).some(f => f.home_club === userClub || f.away_club === userClub));
-  const icon = (t: string) => t === "domestic_cup" ? "🏆" : t === "super_cup" ? "⚡" : "🌍";
+  const icon = (t: string) => t === "domestic_cup" ? ic.cup : t === "super_cup" ? ic.super : ic.continental;
 
   const chip = (active: boolean) =>
     `px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide transition-all flex items-center gap-1 min-w-0 ${theme === "maleficent" ? "" : "rounded-lg"} ${active ? ui.tabActive : ui.tabIdle}`;
 
-  const fx = comp ? (fixturesByComp[comp.id] ?? []) : [];
+  const compFx = comp ? (fixturesByComp[comp.id] ?? []) : [];
   const isNewEuro = !!comp && comp.type === "continental" && (comp.league_phase_rounds ?? 0) > 0;
   const phaseRounds = comp?.league_phase_rounds ?? 0;
-  const koFixtures = isNewEuro ? fx.filter(f => f.round > phaseRounds) : fx;
+  const koFixtures = isNewEuro ? compFx.filter(f => f.round > phaseRounds) : compFx;
   const phaseTable = comp ? (standingsByComp[comp.id] ?? []) : [];
   const phaseCfgDirect = comp?.name?.includes("Conference") ? 8 : 8; // визуальная подсветка зоны прямого выхода
   const phaseDone = isNewEuro && koFixtures.length > 0;
@@ -42,17 +47,17 @@ export function LiveCompetitionPanel({
     <div className={`p-5 ${ui.card} animate-fade-in-up`}>
       <div className="flex items-center gap-2 mb-3 min-w-0">
         {comp ? <span className="text-xl shrink-0">{icon(comp.type)}</span> : leagueLogo}
-        <div className={`${ui.subLabel} truncate min-w-0 flex-1`}>{comp ? comp.name : (leagueName || (ru ? "Таблица лиги" : "League Table"))}</div>
+        <div className={`${ui.subLabel} truncate min-w-0 flex-1`}>{comp ? comp.name : (leagueName || fx.panelLeagueTable)}</div>
         {live && (
-          <span className="shrink-0 flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded-full bg-red-500/15 text-red-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-soft-pulse" />LIVE
+          <span className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${isM ? "border border-red-500/60 text-red-400" : "rounded-full bg-red-500/15 text-red-400"}`}>
+            <span className={`w-1.5 h-1.5 bg-red-500 animate-soft-pulse ${isM ? "" : "rounded-full"}`} />{fx.live.replace("● ", "")}
           </span>
         )}
       </div>
 
       {mine.length > 0 && (
         <div className="flex gap-1.5 mb-4 flex-wrap">
-          <button className={chip(!comp)} onClick={() => onSelect(null)}>🏟️ {ru ? "Лига" : "League"}</button>
+          <button className={chip(!comp)} onClick={() => onSelect(null)}>{ic.league} {fx.panelLeague}</button>
           {mine.map(c => (
             <button key={c.id} className={chip(activeId === c.id)} onClick={() => onSelect(c.id)}>
               <span>{icon(c.type)}</span><span className="truncate max-w-[110px]">{c.name}</span>
@@ -63,7 +68,7 @@ export function LiveCompetitionPanel({
 
       {!comp ? (
         standings.length === 0 ? (
-          <div className={`text-center py-8 ${ui.muted} text-sm`}>{ru ? "Таблицы пока нет" : "No standings yet"}</div>
+          <div className={`text-center py-8 ${ui.muted} text-sm`}>{fx.panelNoStandings}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -111,7 +116,7 @@ export function LiveCompetitionPanel({
         <>
           {isNewEuro && phaseTable.length > 0 && (
             <div className="overflow-x-auto mb-4">
-              <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{ru ? "Лига-фаза" : "League phase"}</div>
+              <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{fx.panelPhase}</div>
               <table className="w-full text-xs">
                 <thead>
                   <tr className={`text-[9px] uppercase tracking-widest ${ui.tableHeader} border-b ${ui.divider}`}>
@@ -145,12 +150,12 @@ export function LiveCompetitionPanel({
           )}
           {koFixtures.length > 0 && (
             <div>
-              {isNewEuro && <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{ru ? "Плей-офф" : "Knockout"}</div>}
+              {isNewEuro && <div className={`text-[10px] uppercase tracking-widest mb-2 ${ui.muted}`}>{fx.panelKnockout}</div>}
               <KnockoutBracket fixtures={koFixtures} userClub={userClub} getClubLogo={getClubLogo} theme={theme} />
             </div>
           )}
           {!phaseDone && !phaseTable.length && koFixtures.length === 0 && (
-            <div className={`text-center py-8 ${ui.muted} text-sm`}>{ru ? "Расписание появится позже" : "Fixtures will appear later"}</div>
+            <div className={`text-center py-8 ${ui.muted} text-sm`}>{fx.panelSoon}</div>
           )}
         </>
       )}

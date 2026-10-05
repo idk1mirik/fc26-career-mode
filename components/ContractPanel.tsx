@@ -8,7 +8,8 @@
 // зарплате, встроенная короткая подсказка "как это работает".
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { CONTRACTS_COPY } from "@/lib/i18nContracts";
+import { getContractsCopy } from "@/lib/i18nContracts";
+import { Stars } from "@/components/ThemeBits";
 import { calculateWageDemand, type SquadRole } from "@/lib/contracts";
 import type { Locale } from "@/lib/i18n";
 import { HelpHint } from "@/components/HelpHint";
@@ -104,8 +105,16 @@ export function ContractPanel({
   /** текущий тур сезона — нужен, чтобы посчитать, сколько туров осталось до конца "остывания" после отказа */
   currentMatchday?: number;
 }) {
-  const t = CONTRACTS_COPY[locale];
+  const t = getContractsCopy(locale, theme);
   const s = PANEL_STYLES[theme];
+  // Акцентные цвета темы для мест, где раньше были жёстко зашиты classic-цвета
+  const goodC = theme === "aurora" ? "#16a34a" : theme === "maleficent" ? "#4ade80" : "#34d399";
+  const badC = theme === "aurora" ? "#e11d48" : "#f87171";
+  const accentC = theme === "aurora" ? "#8b5cf6" : theme === "maleficent" ? "#e879f9" : "#10b981";
+  const isMal = theme === "maleficent";
+  const dangerBtn = theme === "aurora" ? "bg-rose-500 text-white hover:bg-rose-400 rounded-lg"
+    : isMal ? "bg-black border border-red-700 text-red-400 hover:bg-red-950/40 rounded-none uppercase tracking-wider"
+    : "bg-red-500 text-white hover:bg-red-400 rounded-lg";
   const ru = locale === "ru";
 
   const [role, setRole] = useState<SquadRole>(player.currentRole);
@@ -260,15 +269,15 @@ export function ContractPanel({
             под кучей других блоков. Теперь это первое, что видно, если что-то
             вообще происходит. */}
         {negotiation?.blocked ? (
-          <div className={`mb-4 p-3 rounded-xl text-sm font-bold ${s.infoBg}`}>
+          <div className={`mb-4 p-3 ${isMal ? "" : "rounded-xl"} text-sm font-bold ${s.infoBg}`}>
             ⏳ {t.statusOnCooldown(turnsUntilRetry)}
           </div>
         ) : offerChanged ? (
-          <div className={`mb-4 p-3 rounded-xl text-sm font-bold ${s.infoBg}`}>
+          <div className={`mb-4 p-3 ${isMal ? "" : "rounded-xl"} text-sm font-bold ${s.infoBg}`}>
             ✏️ {t.termsChanged}
           </div>
         ) : reactionText ? (
-          <div className={`mb-4 p-3 rounded-xl ${s.card}`}>
+          <div className={`mb-4 p-3 ${isMal ? "" : "rounded-xl"} ${s.card}`}>
             <div className={`font-bold ${s.reaction}`}>{reactionText}</div>
             <div className={`${s.sub} mt-0.5`}>
               {negotiation.status === "agreed" ? t.statusAgreed : negotiation.status === "rejected" ? t.statusRejected : t.statusOpen}
@@ -308,7 +317,11 @@ export function ContractPanel({
                   ? "Растёт от справедливой сделки и игрового времени, падает от заниженной зарплаты и простоя на скамейке."
                   : "Rises from a fair deal and playing time, drops from lowball wages and bench time."} />
             </div>
-            <div className="text-sm font-bold mt-1">{player.happiness}/100 {player.happiness >= 70 ? "😊" : player.happiness >= 40 ? "😐" : "😠"}</div>
+            <div className="text-sm font-bold mt-1 flex items-center gap-2 flex-wrap">
+              <span>{player.happiness}/100</span>
+              <Stars value={player.happiness / 20} theme={theme} size={12} />
+              <span>{isMal ? (player.happiness >= 70 ? "[ :) ]" : player.happiness >= 40 ? "[ :| ]" : "[ >:( ]") : (player.happiness >= 70 ? "😊" : player.happiness >= 40 ? "😐" : "😠")}</span>
+            </div>
             <div className={`h-1.5 rounded-full mt-1.5 ${s.barBg}`}>
               <div className={`h-1.5 rounded-full transition-all ${s.barFill}`} style={{ width: `${player.happiness}%` }} />
             </div>
@@ -352,12 +365,12 @@ export function ContractPanel({
             </div>
             <div className="flex items-center justify-between">
               <span className={`text-[10px] ${s.sub}`}>{ru ? "ниже рынка" : "below market"}</span>
-              <span className={`text-[11px] font-bold ${gapPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <span className="text-[11px] font-bold" style={{ color: gapPct >= 0 ? goodC : badC }}>
                 {gapPct >= 0 ? "+" : ""}{gapPct}%
               </span>
               <span className={`text-[10px] ${s.sub}`}>{ru ? "выше рынка" : "above market"}</span>
             </div>
-            <input type="range" className="w-full mt-2 accent-emerald-500" min={Math.round(marketWage * 0.5)} max={Math.round(marketWage * 1.8)} step={500}
+            <input type="range" className="w-full mt-2" style={{ accentColor: accentC }} min={Math.round(marketWage * 0.5)} max={Math.round(marketWage * 1.8)} step={500}
               value={wage} onChange={(e) => setWage(Number(e.target.value))} />
             <div className="flex items-center gap-2 mt-1">
               <button type="button" className={`w-7 h-7 rounded-lg flex items-center justify-center font-black transition ${s.chip}`}
@@ -403,7 +416,7 @@ export function ContractPanel({
                 <div key={i} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ${s.chip}`}>
                   <span className="opacity-60">{t.round} {h.round}</span>
                   <span>€{(h.offer / 1000).toFixed(1)}k</span>
-                  <span className={h.outcome === "agreed" ? "text-emerald-400" : h.outcome === "rejected" ? "text-red-400" : "opacity-50"}>
+                  <span className={h.outcome === "open" ? "opacity-50" : ""} style={h.outcome === "agreed" ? { color: goodC } : h.outcome === "rejected" ? { color: badC } : undefined}>
                     {h.outcome === "agreed" ? "✓" : h.outcome === "rejected" ? "✕" : "…"}
                   </span>
                 </div>
@@ -440,7 +453,7 @@ export function ContractPanel({
                     }
                   }}
                   disabled={releasing || loading}
-                  className="text-xs font-black px-2.5 py-1 rounded-lg bg-red-500 text-white hover:bg-red-400 transition disabled:opacity-40">
+                  className={`text-xs font-black px-2.5 py-1 transition disabled:opacity-40 ${dangerBtn}`}>
                   {releasing ? "…" : (ru ? "Да, отпустить" : "Yes, release")}
                 </button>
                 <button onClick={() => setConfirmingRelease(false)} disabled={releasing}

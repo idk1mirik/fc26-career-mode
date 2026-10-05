@@ -55,3 +55,48 @@ export const CONTRACTS_COPY: Record<Locale, ContractsCopy> = {
     playerAsks: "Игрок просит", takeTheAsk: "Подставить", resendOffer: "Отправить новое предложение",
   },
 };
+
+// ── Тематические формулировки (голос темы, как в lib/i18n.ts) ─────────────
+// aurora — тёплый, сказочный; maleficent — терминальный/тёмный.
+const THEMED: Record<Locale, { aurora: Partial<ContractsCopy>; maleficent: Partial<ContractsCopy> }> = {
+  en: {
+    aurora: {
+      title: "A Little Chat About the Future", offerButton: "Make an offer ✦", acceptButton: "Seal the deal ✦",
+      statusAgreed: "They'd love to stay on these terms ✦", statusRejected: "They were hurt — the talks ended.", statusOpen: "Waiting for a kind answer…",
+      reactionHappy: "\"That sounds lovely.\"", reactionCounter: "\"Let's find something in the middle.\"", reactionAngry: "\"That's not what I dreamed of.\"",
+      wantsRenewal: "dreams of a new contract", howItWorks: "How the story goes", log: "Chat so far", takeTheAsk: "Take their wish",
+      termsChanged: "You changed the terms after they agreed — please send the offer once more ✦", resendOffer: "Send the new offer ✦",
+    },
+    maleficent: {
+      title: ">_ CONTRACT NEGOTIATION", offerButton: "TRANSMIT OFFER", acceptButton: "EXECUTE CONTRACT",
+      statusAgreed: "TARGET ACCEPTS YOUR TERMS.", statusRejected: "NEGOTIATIONS TERMINATED.", statusOpen: "AWAITING RESPONSE…",
+      reactionHappy: "\"ACCEPTABLE.\"", reactionCounter: "\"MEET ME HALFWAY.\"", reactionAngry: "\"INSULTING. TRY AGAIN.\"",
+      wantsRenewal: "demands a new contract", howItWorks: "PROTOCOL", log: "TRANSMISSION LOG", playerAsks: "TARGET DEMANDS", takeTheAsk: "APPLY",
+      termsChanged: "TERMS ALTERED AFTER ACCEPTANCE — RE-TRANSMIT THE OFFER.", resendOffer: "RE-TRANSMIT OFFER",
+    },
+  },
+  ru: {
+    aurora: {
+      title: "Небольшой разговор о будущем", offerButton: "Предложить ✦", acceptButton: "Скрепить договор ✦",
+      statusAgreed: "Игрок с радостью останется на этих условиях ✦", statusRejected: "Игрок расстроен — разговор окончен.", statusOpen: "Ждём доброго ответа…",
+      reactionHappy: "«Звучит чудесно».", reactionCounter: "«Давайте найдём золотую середину».", reactionAngry: "«Я мечтал совсем не об этом».",
+      wantsRenewal: "мечтает о новом контракте", howItWorks: "Как складывается история", log: "Наш разговор", takeTheAsk: "Исполнить желание",
+      termsChanged: "Ты изменил условия после согласия — отправь предложение ещё раз ✦", resendOffer: "Отправить новое предложение ✦",
+    },
+    maleficent: {
+      title: ">_ ПЕРЕГОВОРЫ ПО КОНТРАКТУ", offerButton: "ОТПРАВИТЬ ПРЕДЛОЖЕНИЕ", acceptButton: "ЗАКЛЮЧИТЬ КОНТРАКТ",
+      statusAgreed: "ЦЕЛЬ ПРИНИМАЕТ УСЛОВИЯ.", statusRejected: "ПЕРЕГОВОРЫ ПРЕКРАЩЕНЫ.", statusOpen: "ОЖИДАНИЕ ОТВЕТА…",
+      reactionHappy: "«ПРИЕМЛЕМО».", reactionCounter: "«ВСТРЕТИМСЯ НА СЕРЕДИНЕ».", reactionAngry: "«ОСКОРБИТЕЛЬНО. ПОПРОБУЙ СНОВА».",
+      wantsRenewal: "требует новый контракт", howItWorks: "ПРОТОКОЛ", log: "ЖУРНАЛ ПЕРЕДАЧ", playerAsks: "ЦЕЛЬ ТРЕБУЕТ", takeTheAsk: "ПРИМЕНИТЬ",
+      termsChanged: "УСЛОВИЯ ИЗМЕНЕНЫ ПОСЛЕ СОГЛАСИЯ — ОТПРАВЬ ПРЕДЛОЖЕНИЕ ЗАНОВО.", resendOffer: "ОТПРАВИТЬ ЗАНОВО",
+    },
+  },
+};
+
+export function getContractsCopy(locale: Locale | string, theme: string): ContractsCopy {
+  const l = (locale === "ru" ? "ru" : "en") as Locale;
+  const base = CONTRACTS_COPY[l];
+  if (theme === "aurora") return { ...base, ...THEMED[l].aurora };
+  if (theme === "maleficent") return { ...base, ...THEMED[l].maleficent };
+  return base;
+}

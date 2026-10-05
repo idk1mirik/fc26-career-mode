@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { ThemedSelect } from "@/components/ThemedSelect";
+import { pageTheme } from "@/lib/pageTheme";
+import { getFx } from "@/lib/i18nFx";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
 import { TransferSigningModal } from "@/components/TransferSigningModal";
@@ -990,16 +992,19 @@ export default function TransfersPage() {
         )}
 
         {/* ── Toast ── */}
-        {pendingSale && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl bg-black/90 border border-white/15 text-white text-sm max-w-[92vw]">
-            <span className="min-w-0 break-words">
-              {locale === "ru" ? `Продажа ${pendingSale.p.name} через ${pendingSale.left} с` : `Selling ${pendingSale.p.name} in ${pendingSale.left}s`}
-            </span>
-            <button onClick={cancelPendingSale} className="shrink-0 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-black uppercase">
-              {locale === "ru" ? "Отменить" : "Undo"}
-            </button>
-          </div>
-        )}
+        {pendingSale && (() => {
+          const pt = pageTheme(theme); const pfx = getFx(locale, theme); const isM = theme === "maleficent";
+          return (
+            <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-3 px-4 py-3 shadow-2xl max-w-[92vw] text-sm ${pt.panel} ${pt.shadow}`} style={pt.font}>
+              <span className="min-w-0 break-words font-bold" style={isM ? { color: pt.accent } : undefined}>
+                {pfx.undoSelling(pendingSale.p.name, pendingSale.left)}
+              </span>
+              <button onClick={cancelPendingSale} className={`shrink-0 px-3 py-1.5 text-xs font-black uppercase ${pt.btn}`}>
+                {pfx.undoBtn}
+              </button>
+            </div>
+          );
+        })()}
         {toast && (
           <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-2xl text-sm font-black shadow-2xl ${
             toast.kind === "ok" ? "bg-emerald-500 text-black" : "bg-red-500 text-white"
