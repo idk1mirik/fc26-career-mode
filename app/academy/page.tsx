@@ -6,6 +6,10 @@ import { getRatingColor, PlayerModal } from "@/app/lib/playerComponents";
 import DashboardLayout from "@/app/lib/DashboardLayout";
 import { HelpHint } from "@/components/HelpHint";
 import { GraduationCap, TrendingUp, Trash2 } from "lucide-react";
+import { PageBanner, EmptyState } from "@/components/PageKit";
+import { Stars } from "@/components/ThemeBits";
+import { pageTheme } from "@/lib/pageTheme";
+import { icons } from "@/lib/themeFlavor";
 
 const THEME_UI = {
   classic: {
@@ -135,34 +139,36 @@ export default function AcademyPage() {
   };
 
   if (!hydrated) return null;
+  const pt = pageTheme(theme); const ic = icons(theme); const isM = theme === "maleficent"; const ru = locale === "ru";
+  const potStars = (v: number) => Math.max(0, Math.min(5, (v - 55) / 8));
+  const wonderkids = prospects.filter(p => p.potential - p.overall >= 20).length;
+  const bestPot = prospects.reduce((m, p) => Math.max(m, p.potential ?? 0), 0);
+  const avgPot = prospects.length ? Math.round(prospects.reduce((a, p) => a + (p.potential ?? 0), 0) / prospects.length) : 0;
 
   return (
     <DashboardLayout>
-      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>
-        <div className="flex items-center gap-3 mb-2">
-          <GraduationCap size={28} />
-          <div>
-            <div className={`text-[10px] uppercase tracking-widest ${ui.muted}`}>{selectedClub?.name}</div>
-            <h1 className="text-2xl font-display font-black flex items-center gap-2">
-              {locale === "ru" ? "Молодёжная академия" : "Youth Academy"}
-              <HelpHint id="academy-intro" theme={theme as any}
+      <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={pt.font}>
+        <PageBanner theme={theme} eyebrow={selectedClub?.name ?? ""} title={ru ? "Молодёжная академия" : "Youth Academy"}
+          icon={<span className="text-4xl" style={{ color: isM ? pt.accent : undefined }}>{theme === "classic" ? "🎓" : theme === "aurora" ? "🌸" : "▲"}</span>}
+          right={<HelpHint id="academy-intro" theme={theme as any}
                 title={locale === "ru" ? "Как это работает" : "How this works"}
                 text={locale === "ru"
                   ? "Каждый сезон академия выпускает новых проспектов (16-18 лет). Повышение в первую команду создаёт им контракт по роли «резерв» — сразу же появляются в составе. Уровень академии повышает качество и число выпускников."
-                  : "Every season the academy produces new prospects (age 16-18). Promoting one signs them to a fresh contract as a prospect-role player, and they appear in your squad immediately. Academy level improves both quality and intake size."} />
-            </h1>
-          </div>
-        </div>
+                  : "Every season the academy produces new prospects (age 16-18). Promoting one signs them to a fresh contract as a prospect-role player, and they appear in your squad immediately. Academy level improves both quality and intake size."} />}
+          tiles={[
+            { icon: ic.young, label: ru ? "Выпускники" : "Intake", value: prospects.length, sub: ru ? "ждут решения" : "awaiting a decision" },
+            { icon: ic.rating, label: ru ? "Ср. потенциал" : "Avg potential", value: avgPot || "—", color: avgPot ? getRatingColor(avgPot, theme) : undefined, stars: potStars(avgPot) },
+            { icon: ic.best, label: ru ? "Лучший потенциал" : "Best potential", value: bestPot || "—", color: bestPot ? getRatingColor(bestPot, theme) : undefined },
+            { icon: ic.awards, label: ru ? "Таланты" : "Wonderkids", value: wonderkids, color: wonderkids ? pt.gold : undefined },
+          ]} />
 
         {/* Уровень академии */}
         {academy && (
-          <div className={`rounded-2xl p-5 mt-6 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between animate-fade-in-up ${ui.card}`}>
+          <div className={`${isM ? "" : "rounded-2xl"} p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between animate-fade-in-up ${ui.card} ${pt.shadow}`}>
             <div>
               <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{locale === "ru" ? "Уровень академии" : "Academy Level"}</div>
               <div className="flex items-center gap-1.5">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <span key={i} className="text-xl" style={{ color: i <= academy.level ? ui.star : ui.starOff }}>★</span>
-                ))}
+                <Stars value={academy.level} theme={theme} size={22} />
                 <span className={`text-sm font-bold ml-2 ${ui.muted}`}>{academy.level}/5</span>
               </div>
             </div>
@@ -185,30 +191,30 @@ export default function AcademyPage() {
         )}
 
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-xl text-xs font-bold" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+          <div className={`mb-4 px-4 py-3 ${isM ? "" : "rounded-xl"} text-xs font-bold`} style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
             ⚠️ {error}
           </div>
         )}
 
         {/* Проспекты */}
-        <div className={`text-[10px] uppercase tracking-widest mb-3 ${ui.muted}`}>
-          {locale === "ru" ? "Выпускники этого сезона" : "This season's intake"} ({prospects.length})
+        <div className={`text-[10px] mb-3 ${pt.eyebrow} ${ui.muted}`}>
+          {theme === "aurora" ? "✦ " : ""}{locale === "ru" ? "Выпускники этого сезона" : "This season's intake"} ({prospects.length})
         </div>
 
         {loading ? (
           <div className={`text-center py-16 text-sm ${ui.muted}`}>{locale === "ru" ? "Загрузка…" : "Loading…"}</div>
         ) : prospects.length === 0 ? (
-          <div className={`text-center py-16 text-sm ${ui.muted}`}>
+          <EmptyState theme={theme} icon={ic.young}>
             {locale === "ru" ? "Пусто — все выпускники этого сезона уже распределены." : "Empty — this season's intake has all been resolved."}
-          </div>
+          </EmptyState>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {prospects.map((p, i) => {
               const gemGap = p.potential - p.overall;
               return (
                 <div key={p.id}
-                  className={`rounded-2xl p-4 transition-all card-lift animate-fade-in-up cursor-pointer ${ui.card} ${ui.cardHover}`}
-                  style={{ animationDelay: `${i * 40}ms` }}
+                  className={`${isM ? "" : "rounded-2xl"} p-4 transition-all card-lift animate-fade-in-up cursor-pointer ${ui.card} ${ui.cardHover} ${pt.shadow}`}
+                  style={{ animationDelay: `${i * 40}ms`, borderTop: gemGap >= 20 ? `2px solid ${pt.gold}` : undefined }}
                   onClick={() => setViewPlayer(p.attrs)}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="min-w-0">
@@ -217,11 +223,21 @@ export default function AcademyPage() {
                     </div>
                     {gemGap >= 20 && (
                       <span className="text-[9px] font-black px-2 py-1 rounded-lg shrink-0" style={{ background: "rgba(234,179,8,0.15)", color: "#eab308" }}>
-                        💎 {locale === "ru" ? "талант" : "wonderkid"}
+                        {theme === "maleficent" ? "◆" : theme === "aurora" ? "🌟" : "💎"} {locale === "ru" ? "талант" : "wonderkid"}
                       </span>
                     )}
                   </div>
 
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-[9px] ${pt.eyebrow} ${ui.muted}`}>{ru ? "Потенциал" : "Potential"}</span>
+                      <Stars value={potStars(p.potential)} theme={theme} size={11} />
+                    </div>
+                    <div className={`h-1.5 overflow-hidden ${pt.bar} ${isM ? "" : "rounded-full"} relative`}>
+                      <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${Math.min(100, p.potential)}%`, background: getRatingColor(p.potential, theme) }} />
+                      <div className="absolute inset-y-0 left-0" style={{ width: `${Math.min(100, p.overall)}%`, background: getRatingColor(p.overall, theme) }} />
+                    </div>
+                  </div>
                   <div className="flex items-center gap-3 mb-4">
                     <div className={`flex-1 rounded-xl p-2.5 text-center ${ui.badge}`}>
                       <div className="text-lg font-display font-black" style={{ color: getRatingColor(p.overall, theme) }}>{p.overall}</div>

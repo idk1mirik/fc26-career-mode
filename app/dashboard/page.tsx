@@ -23,7 +23,6 @@ import { AwardsBlock } from "@/components/AwardsBlock";
 import { getFx } from "@/lib/i18nFx";
 import { getDash } from "@/lib/i18nDash";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
-import { DashBackdrop } from "@/components/dashboard/DashBackdrop";
 import { ClubHero } from "@/components/dashboard/ClubHero";
 import { SafeBoundary } from "@/components/SafeBoundary";
 import { SeasonStrip } from "@/components/dashboard/SeasonStrip";
@@ -802,8 +801,6 @@ export default function DashboardPage() {
         .fade-in { animation: fadeIn 0.4s ease both; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
       `}</style>
-
-      <DashBackdrop theme={theme} glowColor={glowColor} />
 
       {/* Main */}
       <div className={`relative z-10 p-6 md:p-8 pt-16 lg:pt-8 ${ui.text}`}>

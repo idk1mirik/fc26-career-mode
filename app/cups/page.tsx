@@ -5,6 +5,10 @@ import { useCareerStore } from "@/app/store/careerStore";
 import { useThemeStore } from "@/app/store/themeStore";
 import { getClubLogo } from "@/data/clublogos";
 import DashboardLayout from "@/app/lib/DashboardLayout";
+import { PageBanner, EmptyState } from "@/components/PageKit";
+import { Stars } from "@/components/ThemeBits";
+import { pageTheme } from "@/lib/pageTheme";
+import { icons } from "@/lib/themeFlavor";
 import { Trophy, Zap, Lock } from "lucide-react";
 import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
 import { getStageInfo, getStageDisplayName } from "@/lib/continentalKnockout";
@@ -127,38 +131,41 @@ export default function CupsPage() {
   };
 
   if (!hydrated) return null;
+  const pt = pageTheme(theme); const ic = icons(theme); const isM = theme === "maleficent"; const ru = locale === "ru";
+  const compIcon = (t: string) => t === "domestic_cup" ? ic.cup : t === "super_cup" ? ic.super : t === "continental" ? ic.continental : ic.trophy;
+  const mine = competitions.filter(c => (fixturesByComp[c.id] ?? []).some((f: any) => f.home_club === userClub || f.away_club === userClub));
+  const alive = mine.filter(c => c.status !== "finished");
+  const won = competitions.filter(c => c.status === "finished" && c.winner_club === userClub);
+  const prizePool = mine.reduce((sum, c) => sum + (c.prize_winner ?? 0), 0);
 
   return (
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.cupsHeaderLabel}</div>
-            <h1 className="text-2xl font-black">{copy.cupsTitle}</h1>
-          </div>
-        </div>
+        <PageBanner theme={theme} eyebrow={copy.cupsHeaderLabel} title={copy.cupsTitle}
+          icon={<span className="text-4xl" style={isM ? { color: pt.accent, textShadow: `0 0 18px ${pt.accent}` } : undefined}>{ic.trophy}</span>}
+          tiles={[
+            { icon: ic.tournament, label: ru ? "Турниров у клуба" : "Competitions", value: mine.length, sub: `${alive.length} ${ru ? "идут" : "active"}` },
+            { icon: ic.champion, label: ru ? "Трофеи" : "Trophies", value: won.length, color: won.length ? pt.gold : undefined, stars: Math.min(5, won.length) },
+            { icon: ic.best, label: ru ? "Призовой фонд" : "Prize pool", value: formatMoney(prizePool), color: pt.good, sub: ru ? "за победы" : "for winning" },
+          ]} />
 
         {!lineupValid && (
-          <div className="mb-5 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+          <div className={`mb-5 px-4 py-3 ${isM ? "" : "rounded-xl"} text-xs font-bold flex items-center gap-2`} style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
             ⚠️ {locale === "ru" ? `Нужно ${MIN_LINEUP_SIZE} ${copy.cupsLineupWarning}` : `You need ${MIN_LINEUP_SIZE} ${copy.cupsLineupWarning}`} ({lineupCount}/{MIN_LINEUP_SIZE})
           </div>
         )}
 
         {cupError && (
-          <div className="mb-5 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+          <div className={`mb-5 px-4 py-3 ${isM ? "" : "rounded-xl"} text-xs font-bold flex items-center justify-between gap-2`} style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
             <span>⚠️ {cupError}</span>
             <button onClick={() => setCupError(null)} className="opacity-60 hover:opacity-100 px-2">✕</button>
           </div>
         )}
 
         {!seasonId ? (
-          <div className={`p-6 rounded-2xl text-center ${ui.card}`}>
-            <p className={ui.muted}>{copy.cupsNoSeason}</p>
-          </div>
+          <EmptyState theme={theme} icon={ic.cup}>{copy.cupsNoSeason}</EmptyState>
         ) : competitions.length === 0 ? (
-          <div className={`p-6 rounded-2xl text-center ${ui.card}`}>
-            <p className={ui.muted}>{copy.cupsNoCompetitions}</p>
-          </div>
+          <EmptyState theme={theme} icon={ic.cup}>{copy.cupsNoCompetitions}</EmptyState>
         ) : (
           <div className="space-y-5">
             {competitions.map(comp => {
@@ -184,10 +191,11 @@ export default function CupsPage() {
               if (comp.status !== "finished" && isUserInComp) roundLabel += ` · ${copy.cupsYoureIn}`;
 
               return (
-                <div key={comp.id} className={`rounded-2xl overflow-hidden card-lift animate-fade-in-up ${ui.card}`}>
+                <div key={comp.id} className={`${isM ? "" : "rounded-2xl"} overflow-hidden card-lift animate-fade-in-up ${ui.card} ${pt.shadow}`}
+                  style={{ borderTop: `2px solid ${comp.status === "finished" ? pt.gold : isUserInComp ? pt.accent : "transparent"}` }}>
                   <div className={`flex items-center justify-between px-5 py-4 border-b ${ui.divider}`}>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{COMP_ICON[comp.type] ?? "🏆"}</span>
+                      <span className="text-2xl" style={isM ? { color: pt.accent, textShadow: `0 0 12px ${pt.accent}88` } : undefined}>{compIcon(comp.type)}</span>
                       <div>
                         <div className="font-black text-sm flex items-center gap-1.5">
                           {comp.name}
@@ -228,7 +236,7 @@ export default function CupsPage() {
                         </button>
                       );
                     })()}
-                    {comp.status === "finished" && <Trophy size={18} className="text-yellow-400" />}
+                    {comp.status === "finished" && <span className="flex items-center gap-1.5"><Stars value={comp.winner_club === userClub ? 3 : 1} max={comp.winner_club === userClub ? 3 : 1} theme={theme} size={12} /><Trophy size={18} style={{ color: pt.gold }} /></span>}
                   </div>
 
                   {isNewFormat && standings.length > 0 && (
@@ -245,7 +253,7 @@ export default function CupsPage() {
                           return (
                             <div key={s.club}
                               className={`grid grid-cols-[24px_1fr_32px_32px_40px] gap-2 items-center text-xs py-1 px-1 rounded-md ${s.club === userClub ? (theme === "aurora" ? "bg-violet-50" : "bg-white/[0.05]") : ""} ${qualifyLine ? `border-b ${ui.divider}` : ""}`}>
-                              <span className={`font-black ${i < 8 ? "text-emerald-400" : i < 24 ? "" : "opacity-40"}`}>{i + 1}</span>
+                              <span className={`font-black ${i < 8 ? "" : i < 24 ? "" : "opacity-40"}`} style={i < 8 ? { color: pt.good } : i < 24 ? { color: "#3b82f6" } : undefined}>{i + 1}</span>
                               <span className="font-bold truncate flex items-center gap-1.5">
                                 <img src={getClubLogo(s.club)} className="w-3.5 h-3.5 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
                                 {s.club}
@@ -290,7 +298,7 @@ export default function CupsPage() {
                         );
                       }
                       return (
-                        <div key={f.id} className={`flex items-center gap-2 py-1.5 rounded-lg ${isUserMatch ? (theme === "aurora" ? "bg-violet-50" : "bg-white/[0.04]") : ""}`}>
+                        <div key={f.id} className={`flex items-center gap-2 py-1.5 ${isM ? "" : "rounded-lg"} ${isUserMatch ? (theme === "aurora" ? "bg-violet-50" : "bg-white/[0.04]") : ""}`} style={isUserMatch ? { borderLeft: `3px solid ${pt.accent}`, paddingLeft: 8 } : undefined}>
                           <div className="flex items-center gap-1.5 flex-1 justify-end">
                             <span className="text-xs font-bold truncate max-w-[100px]">{f.home_club}</span>
                             <img src={getClubLogo(f.home_club)} className="w-4 h-4 object-contain" alt="" onError={e => (e.currentTarget.style.display = "none")} />
@@ -317,8 +325,8 @@ export default function CupsPage() {
                   )}
 
                   <div className={`px-5 py-2.5 flex gap-4 text-[10px] ${ui.muted} border-t ${ui.divider}`}>
-                    <span>🏆 {copy.cupsWinnerLabel}: {formatMoney(comp.prize_winner)}</span>
-                    <span>🥈 {copy.cupsRunnerLabel}: {formatMoney(comp.prize_runner)}</span>
+                    <span><span style={{ color: pt.gold }}>{ic.trophy}</span> {copy.cupsWinnerLabel}: {formatMoney(comp.prize_winner)}</span>
+                    <span><span style={{ color: pt.silver }}>{ic.best}</span> {copy.cupsRunnerLabel}: {formatMoney(comp.prize_runner)}</span>
                   </div>
                 </div>
               );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap, CalendarClock, History, GitCompare, FolderOpen, Search } from "lucide-react";
 import SearchModal from "@/components/SearchModal";
+import { DashBackdrop } from "@/components/dashboard/DashBackdrop";
 import { getFx } from "@/lib/i18nFx";
 import { getClubLogo } from "@/data/clublogos";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -258,12 +259,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className={`min-h-screen flex relative overflow-hidden ${theme === "aurora" ? "bg-[#fef6ff]" : "bg-[#03040a]"}`}>
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full blur-[120px] animate-floaty"
-          style={{ backgroundColor: `${glowColor}10` }} />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[400px] h-[400px] rounded-full blur-[130px] animate-floaty"
-          style={{ backgroundColor: `${glowColor}08`, animationDelay: "-2s", animationDuration: "6s" }} />
-      </div>
+      <DashBackdrop theme={theme} glowColor={glowColor} />
 
       {/* Desktop sidebar */}
       <aside className={`hidden lg:flex w-[240px] h-screen sticky top-0 flex-col p-5 shrink-0 relative z-20 overflow-hidden ${SIDEBAR[theme]}`}>

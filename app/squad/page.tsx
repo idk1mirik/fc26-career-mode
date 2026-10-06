@@ -8,6 +8,9 @@ import { getLeagueTheme } from "@/constants/themes";
 import { useClubColor } from "@/app/hooks/useClubColor";
 import { normalizeName } from "@/lib/normalize";
 import DashboardLayout from "@/app/lib/DashboardLayout";
+import { PageBanner } from "@/components/PageKit";
+import { pageTheme } from "@/lib/pageTheme";
+import { icons } from "@/lib/themeFlavor";
 import { PlayerModal, PlayerCard, getRatingColor, FlagImage } from "@/app/lib/playerComponents";
 import { getAdjustedOverall } from "@/lib/positionPenalty";
 import { ContractPanel } from "@/components/ContractPanel";
@@ -673,14 +676,29 @@ export default function SquadPage() {
   }, [filteredPlayers]);
 
   if (!hydrated) return null;
+  const pt = pageTheme(theme); const ic = icons(theme); const ru = locale === "ru";
+  // Сводка по составу для баннера
+  const withOvr = players.filter(p => (p.overall ?? 0) > 0);
+  const avgOvr = withOvr.length ? withOvr.reduce((a, p) => a + p.overall, 0) / withOvr.length : 0;
+  const avgAge = players.length ? players.reduce((a, p) => a + (p.age ?? 0), 0) / players.length : 0;
+  const top = withOvr.reduce((m, p) => (p.overall > (m?.overall ?? 0) ? p : m), null as any);
+  const totalValue = players.reduce((a, p) => a + (p.market_value ?? 0), 0);
+  const expiringCount = clubContracts.filter((c: any) => c.years_left <= 1).length;
+  const fmtM = (n: number) => n >= 1_000_000 ? `€${(n / 1_000_000).toFixed(1)}M` : `€${Math.round(n / 1000)}K`;
 
   return (
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
-        <div className="mb-5">
-          <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{locale === "ru" ? "Состав" : "Squad"}</div>
-          <h1 className="text-2xl font-black">{selectedClub?.name} — {players.length} Players</h1>
-        </div>
+        <PageBanner theme={theme} eyebrow={ru ? "Состав" : "Squad"} title={selectedClub?.name ?? ""}
+          subtitle={`${players.length} ${ru ? "игроков" : "players"}`}
+          icon={selectedClub?.name ? <img src={getClubLogo(selectedClub.name)} alt="" className="w-14 h-14 object-contain" onError={e => (e.currentTarget.style.display = "none")} /> : undefined}
+          tiles={[
+            { icon: ic.rating, label: ru ? "Средний OVR" : "Avg OVR", value: avgOvr ? avgOvr.toFixed(1) : "—", stars: avgOvr ? (avgOvr - 55) / 8 : 0 },
+            { icon: ic.young, label: ru ? "Средний возраст" : "Avg age", value: avgAge ? avgAge.toFixed(1) : "—" },
+            { icon: ic.best, label: ru ? "Лучший игрок" : "Top player", value: top ? top.overall : "—", sub: top?.name, color: pt.gold },
+            { icon: ic.awards, label: ru ? "Стоимость состава" : "Squad value", value: totalValue ? fmtM(totalValue) : "—", color: pt.good },
+            { icon: ic.risk, label: ru ? "Контракты на исходе" : "Expiring", value: expiringCount, color: expiringCount ? pt.warn : undefined },
+          ]} />
 
         {/* Истекающие контракты — раньше игроки просто пропадали в свободные
             агенты без единого предупреждения ("потерял половину состава").

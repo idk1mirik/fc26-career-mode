@@ -3,6 +3,8 @@ import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { ThemedSelect } from "@/components/ThemedSelect";
 import { pageTheme } from "@/lib/pageTheme";
 import { getFx } from "@/lib/i18nFx";
+import { PageBanner } from "@/components/PageKit";
+import { icons } from "@/lib/themeFlavor";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
 import { TransferSigningModal } from "@/components/TransferSigningModal";
@@ -584,21 +586,20 @@ export default function TransfersPage() {
   return (
     <DashboardLayout>
       <div className={`min-h-screen p-4 md:p-8 pt-16 lg:pt-8 ${ui.text}`} style={ui.font}>
-        {/* ── Header ── */}
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-          <div>
-            <div className={`text-[10px] uppercase tracking-widest mb-1 ${ui.muted}`}>{copy.transfersHeaderLabel}</div>
-            <h1 className="text-2xl font-black">{windowLabel}</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl ${ui.pill}`}>
-              <Wallet size={14} />
-              <span className="text-xs font-black uppercase tracking-widest">
-                {budget === null ? "…" : fmtMoney(budget)}
-              </span>
-            </div>
-          </div>
-        </div>
+        {/* ── Баннер: окно, бюджет, активность ── */}
+        {(() => {
+          const pt = pageTheme(theme); const ic = icons(theme); const ru = locale === "ru"; const isM = theme === "maleficent";
+          return (
+            <PageBanner theme={theme} eyebrow={copy.transfersHeaderLabel} title={windowLabel}
+              icon={<span className="text-4xl" style={isM ? { color: pt.accent, textShadow: `0 0 18px ${pt.accent}` } : undefined}>{isOpen ? (theme === "classic" ? "🟢" : theme === "aurora" ? "🌷" : "◉") : (theme === "classic" ? "🔒" : theme === "aurora" ? "🌙" : "⊘")}</span>}
+              tiles={[
+                { icon: ic.awards, label: ru ? "Бюджет" : "Budget", value: budget === null ? "…" : fmtMoney(budget), color: pt.good },
+                { icon: ic.news, label: ru ? "Окно" : "Window", value: isOpen ? (ru ? "Открыто" : "Open") : (ru ? "Закрыто" : "Closed"), color: isOpen ? pt.good : pt.warn },
+                { icon: ic.rating, label: ru ? "Избранное" : "Favorites", value: favoritePlayerIds.length },
+                { icon: ic.trophy, label: ru ? "Выкупы" : "Buybacks", value: buybacks.length },
+              ]} />
+          );
+        })()}
 
         {/* Избранное и выкупы — доступны всегда, даже когда трансферное окно закрыто */}
         <div className="flex gap-2 mb-4">
