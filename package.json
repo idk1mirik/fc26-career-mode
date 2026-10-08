@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --import ./tests/register.mjs --test tests/*.test.mjs",
+    "test:e2e": "node --import ./tests/register.mjs --test tests/e2e/*.e2e.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",

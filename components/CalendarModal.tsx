@@ -1,110 +1,54 @@
 "use client";
-
+// components/CalendarModal.tsx — календарь сезона и «промотка до даты».
+//
+// Система:
+//  • «Сегодня» — дата БЛИЖАЙШЕГО события (тур лиги или раунд любого кубка), поэтому
+//    можно выбрать и день прямо перед кубковым матчем;
+//  • единая хронология лиги и кубков (lib/simClient.ts → runTimeline), в том числе
+//    после окончания лиги (кубки доигрываются до конца);
+//  • выбор даты показывает превью: какие матчи будут сыграны до неё;
+//  • быстрые переходы: ближайший матч, +неделя, +месяц, смена трансферного окна, конец сезона;
+//  • жеребьёвки, составленные по ходу промотки, не теряются при перезагрузке:
+//    кладутся в sessionStorage и показываются на дашборде.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Play, Pause, Square, CalendarClock } from "lucide-react";
 import { useCareerStore } from "@/app/store/careerStore";
-import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
+import { getLeagueMatchdayDate, totalLeagueMatchdays } from "@/lib/seasonCalendar";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
-import { runTimeline, getNextEventDate } from "@/lib/simClient";
+import { runTimeline, getNextEventDate, fetchDue, type DueCup, type DrawInfo } from "@/lib/simClient";
 import { displayYear, formatGameDate } from "@/lib/seasonLabel";
+import { pageTheme } from "@/lib/pageTheme";
+import { getCal } from "@/lib/i18nCal";
+import { icons } from "@/lib/themeFlavor";
+import { getClubLogo } from "@/data/clublogos";
 
-// Тот же диапазон, что и в lib/seasonCalendar.ts (старт сезона 16 августа,
-// один тур в неделю) — используется только для отрисовки сетки календаря,
-// сама логика дат по-прежнему целиком в lib/seasonCalendar.ts.
-const SEASON_START = new Date("2025-08-16T00:00:00Z");
-const SEASON_END = new Date("2026-06-15T00:00:00Z"); // с запасом дальше любого реалистичного числа туров
+export const PENDING_DRAWS_KEY = "fc26-pending-draws";
 
+const SEASON_START = "2025-08-01";
+const SEASON_END = "2026-06-15";
 const MONTH_NAMES = {
   en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
   ru: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
 } as const;
-const WEEKDAYS = {
-  en: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
-  ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
-} as const;
 
-const THEME_UI = {
-  classic: {
-    overlay: "bg-black/70",
-    card: "bg-[#0a0c16] border border-white/10 text-white",
-    subtle: "text-white/40",
-    dayIdle: "hover:bg-white/[0.06] text-white/70",
-    dayDisabled: "text-white/15",
-    dayToday: "border border-white/30",
-    daySelected: "bg-emerald-500 text-black font-black",
-    dot: "bg-emerald-400",
-    windowBg: "bg-emerald-500/10",
-    btn: "bg-emerald-500 text-black hover:bg-emerald-400",
-    btnGhost: "bg-white/[0.06] hover:bg-white/[0.1] text-white",
-    pauseBtn: "bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30",
-    stopBtn: "bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30",
-  },
-  aurora: {
-    overlay: "bg-pink-950/40",
-    card: "bg-white border border-pink-100 text-pink-950",
-    subtle: "text-pink-900/40",
-    dayIdle: "hover:bg-pink-50 text-pink-900/70",
-    dayDisabled: "text-pink-900/15",
-    dayToday: "border border-violet-300",
-    daySelected: "bg-violet-500 text-white font-black",
-    dot: "bg-violet-400",
-    windowBg: "bg-violet-100",
-    btn: "bg-violet-500 text-white hover:bg-violet-600",
-    btnGhost: "bg-pink-50 hover:bg-pink-100 text-pink-900",
-    pauseBtn: "bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200",
-    stopBtn: "bg-red-100 text-red-600 border border-red-300 hover:bg-red-200",
-  },
-  maleficent: {
-    overlay: "bg-black/80",
-    card: "bg-black border border-purple-900/50 text-purple-100 font-mono",
-    subtle: "text-purple-500/50",
-    dayIdle: "hover:bg-purple-950/40 text-purple-300/70",
-    dayDisabled: "text-purple-900/30",
-    dayToday: "border border-fuchsia-700",
-    daySelected: "bg-fuchsia-700 text-white font-black",
-    dot: "bg-fuchsia-500",
-    windowBg: "bg-fuchsia-950/30",
-    btn: "bg-fuchsia-700 text-white hover:bg-fuchsia-600",
-    btnGhost: "bg-purple-950/30 hover:bg-purple-950/50 text-purple-200",
-    pauseBtn: "bg-amber-950/30 text-amber-400 border border-amber-800/50 hover:bg-amber-950/50",
-    stopBtn: "bg-red-950/30 text-red-400 border border-red-800/50 hover:bg-red-950/50",
-  },
-} as const;
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const fromIso = (s: string) => new Date(`${s}T00:00:00Z`);
+const addDays = (s: string, n: number) => { const d = fromIso(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-function toISODate(d: Date) { return d.toISOString().split("T")[0]; }
-function addDays(d: Date, n: number) { const r = new Date(d); r.setUTCDate(r.getUTCDate() + n); return r; }
-function sameDay(a: Date, b: Date) { return toISODate(a) === toISODate(b); }
+type Kind = "league" | "cup" | "euro" | "super";
+const kindOf = (m: any): Kind => m.source !== "cup" ? "league" : m.competition_type === "continental" ? "euro" : m.competition_type === "super_cup" ? "super" : "cup";
 
-// Раньше в сетке календаря были видны только матчи лиги (точками), даже
-// если в этот день реально играется кубок страны, суперкубок или еврокубок
-// — их не было видно вообще, хотя они там были. Теперь весь день красится
-// цветом реального турнира (а не точкой) — сразу понятно, что за матч.
-const COMPETITION_COLORS: Record<string, string> = {
-  league: "", // особый цвет не нужен — это фон "по умолчанию"
-  domestic_cup: "#f59e0b",
-  super_cup: "#a855f7",
-  continental: "#6366f1",
-};
-function competitionColor(m: { competition_type: string; competition_name?: string }): string {
-  if (m.competition_type === "continental") {
-    const name = m.competition_name ?? "";
-    if (name.includes("Europa") && !name.includes("Conference")) return "#f97316";
-    if (name.includes("Conference")) return "#22c55e";
-    return "#6366f1"; // Champions League и общий случай
-  }
-  return COMPETITION_COLORS[m.competition_type] ?? "";
-}
-
-const simSleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-export default function CalendarModal({
-  theme, locale, glowColor, onClose,
-}: {
+export default function CalendarModal({ theme, locale, glowColor, onClose }: {
   theme: "classic" | "aurora" | "maleficent"; locale: "en" | "ru"; glowColor: string; onClose: () => void;
 }) {
-  const ui = THEME_UI[theme];
+  const t = pageTheme(theme); const c = getCal(locale, theme); const ic = icons(theme);
+  const isM = theme === "maleficent", isA = theme === "aurora";
+  const accent = isA ? "#a855f7" : isM ? "#e879f9" : glowColor;
+
   const seasonId = useCareerStore(s => s.seasonId);
   const selectedClub = useCareerStore(s => s.selectedClub);
+  const selectedLeague = useCareerStore(s => s.selectedLeague);
   const matchday = useCareerStore(s => s.matchday);
   const seasonNum = useCareerStore(s => s.seasonNum);
   const tactic = useCareerStore(s => s.tactic);
@@ -112,275 +56,341 @@ export default function CalendarModal({
   const lineup = useCareerStore(s => s.lineup);
   const setMatchday = useCareerStore(s => s.setMatchday);
   const userClub = selectedClub?.name || "";
+  const leagueClubCount = selectedLeague?.clubs?.length ?? 20;
+  const totalMd = totalLeagueMatchdays(leagueClubCount);
 
-  const leagueMatchdayDate = useMemo(() => new Date(`${getLeagueMatchdayDate(matchday)}T00:00:00Z`), [matchday]);
+  // ── данные ──
+  const [leagueDone, setLeagueDone] = useState(false);
+  const [calendarMatches, setCalendarMatches] = useState<any[]>([]);
+  const [due, setDue] = useState<DueCup[]>([]);
+  const [nextEvent, setNextEvent] = useState<string>(() => getLeagueMatchdayDate(matchday));
 
-  // "Сегодня" в игре — дата БЛИЖАЙШЕГО несыгранного события: тура лиги ИЛИ
-  // раунда любого кубка. Раньше это была дата только следующего тура лиги,
-  // поэтому дни между турами (где идут кубковые матчи) считались прошедшими
-  // и выбрать, скажем, день прямо перед матчем ЛЧ было нельзя.
-  const [nextEventIso, setNextEventIso] = useState<string>(() => getLeagueMatchdayDate(matchday));
   useEffect(() => {
     if (!seasonId || !userClub) return;
     let cancelled = false;
-    getNextEventDate(seasonId, userClub, matchday).then(d => { if (!cancelled) setNextEventIso(d); });
+    (async () => {
+      const [seasonRes, calRes, dueList] = await Promise.all([
+        fetch(`/api/season?id=${seasonId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`/api/calendar?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetchDue(seasonId, userClub),
+      ]);
+      if (cancelled) return;
+      const done = seasonRes?.status === "finished";
+      setLeagueDone(done);
+      setCalendarMatches(calRes?.matches ?? []);
+      setDue(dueList);
+      setNextEvent(await getNextEventDate(seasonId, userClub, matchday, done));
+    })();
     return () => { cancelled = true; };
   }, [seasonId, userClub, matchday]);
-  const currentMatchdayDate = useMemo(() => new Date(`${nextEventIso}T00:00:00Z`), [nextEventIso]);
 
-  // Единый календарь клуба — лига + все кубки, где он участвует (тот же
-  // эндпоинт, что уже питает виджет "следующий матч" на дашборде).
-  const [calendarMatches, setCalendarMatches] = useState<any[]>([]);
-  useEffect(() => {
-    if (!seasonId || !userClub) return;
-    fetch(`/api/calendar?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.matches) setCalendarMatches(data.matches); })
-      .catch(() => {});
-  }, [seasonId, userClub]);
-
-  const matchesByDate = useMemo(() => {
+  // ── события по датам (матчи клуба) ──
+  const eventsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
     for (const m of calendarMatches) {
-      if (!m.match_date) continue;
-      if (!map.has(m.match_date)) map.set(m.match_date, []);
-      map.get(m.match_date)!.push(m);
+      const d = m.match_date ?? (m.matchday ? getLeagueMatchdayDate(m.matchday) : null);
+      if (!d) continue;
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push({ ...m, _date: d });
     }
     return map;
   }, [calendarMatches]);
+  const otherRoundDates = useMemo(() => new Set(due.filter(d => !d.userInvolved && d.matchDate).map(d => d.matchDate as string)), [due]);
 
-  // Какие типы турниров вообще встречаются в этом сезоне клуба — для легенды
-  const activeCompetitions = useMemo(() => {
-    const seen = new Map<string, { label: string; color: string }>();
-    for (const m of calendarMatches) {
-      const color = competitionColor(m);
-      if (!color) continue;
-      const key = m.competition_name ?? m.competition_type;
-      if (!seen.has(key)) seen.set(key, { label: m.competition_name ?? key, color });
-    }
-    return [...seen.values()];
-  }, [calendarMatches]);
+  const today = nextEvent;
+  const [viewMonth, setViewMonth] = useState(() => today.slice(0, 7));
+  const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => { setViewMonth(nextEvent.slice(0, 7)); }, [nextEvent]);
 
-  const [viewDate, setViewDate] = useState(() => new Date(leagueMatchdayDate));
-  useEffect(() => { setViewDate(new Date(currentMatchdayDate)); }, [currentMatchdayDate]);
-  const [selected, setSelected] = useState<Date | null>(null);
+  // ── превью: что будет сыграно до выбранной даты ──
+  const preview = useMemo(() => {
+    if (!selected || selected < today) return null;
+    const mine = calendarMatches.filter(m => !m.played).map(m => ({ ...m, _date: m.match_date ?? (m.matchday ? getLeagueMatchdayDate(m.matchday) : "9999") })).filter(m => m._date <= selected);
+    let leagueRounds = 0;
+    if (!leagueDone) for (let md = matchday; md <= totalMd; md++) if (getLeagueMatchdayDate(md) <= selected) leagueRounds++;
+    const others = due.filter(d => !d.userInvolved && d.matchDate && d.matchDate <= selected).length;
+    return { mine, leagueRounds, others };
+  }, [selected, today, calendarMatches, due, leagueDone, matchday, totalMd]);
 
+  // ── симуляция ──
   const [simulating, setSimulating] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [progress, setProgress] = useState<{ played: number; matchday: number } | null>(null);
+  const [progress, setProgress] = useState<{ played: number; matchday: number; date?: string } | null>(null);
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const pausedRef = useRef(false);
   const stopRef = useRef(false);
 
-  // Тексты в голосе темы: classic — нейтрально, aurora — сказочно, maleficent — терминал
-  const ru = locale === "ru";
-  const V = {
-    classic: {
-      title: ru ? "Календарь сезона" : "Season Calendar",
-      subtitle: ru ? "Выбери любую дату — все матчи (лига и кубки) до неё включительно будут сыграны, и симуляция остановится"
-        : "Pick any date — every match (league and cups) up to it will be played, then the sim stops",
-      simulate: ru ? "Промотать до этой даты" : "Simulate to this date",
-      today: ru ? "Ближайший матч" : "Next fixture", windowOpen: ru ? "Открыто трансферное окно" : "Transfer window open",
-      playing: ru ? "Играем тур" : "Playing matchday", noneSelected: ru ? "Выбери дату в календаре" : "Pick a date on the calendar",
-      alreadyPast: ru ? "Эта дата уже позади" : "That date is already behind you",
-      done: (n: number) => ru ? `Сыграно туров: ${n}. Обновляю…` : `${n} matchday${n === 1 ? "" : "s"} played. Refreshing…`,
-    },
-    aurora: {
-      title: ru ? "✦ Календарь сезона" : "✦ Season Calendar",
-      subtitle: ru ? "Выбери любой день — мы сыграем всё до него (лигу и кубки) и мягко остановимся ✦"
-        : "Pick any day — we'll play everything up to it (league and cups) and gently stop ✦",
-      simulate: ru ? "Перелистнуть до этого дня ✦" : "Turn the pages to this day ✦",
-      today: ru ? "Следующий матч" : "Next match", windowOpen: ru ? "Окно трансферов открыто ✦" : "Transfer window is open ✦",
-      playing: ru ? "Играем страницу" : "Playing page", noneSelected: ru ? "Выбери день в календаре ✦" : "Choose a day on the calendar ✦",
-      alreadyPast: ru ? "Этот день уже в прошлом" : "That day is already behind us",
-      done: (n: number) => ru ? `Страниц перевёрнуто: ${n}. Обновляю ✦` : `${n} page${n === 1 ? "" : "s"} turned. Refreshing ✦`,
-    },
-    maleficent: {
-      title: ru ? ">_ КАЛЕНДАРЬ СЕЗОНА" : ">_ SEASON CALENDAR",
-      subtitle: ru ? ">_ ВЫБЕРИТЕ ДАТУ — ВСЕ МАТЧИ (ЛИГА И КУБКИ) ДО НЕЁ БУДУТ ОТЫГРАНЫ, ЗАТЕМ СИМУЛЯЦИЯ ОСТАНОВИТСЯ"
-        : ">_ SELECT A DATE — ALL MATCHES (LEAGUE AND CUPS) UP TO IT WILL BE EXECUTED, THEN THE SIM HALTS",
-      simulate: ru ? "ВЫПОЛНИТЬ ДО ЭТОЙ ДАТЫ" : "EXECUTE TO THIS DATE",
-      today: ru ? "БЛИЖАЙШИЙ МАТЧ" : "NEXT FIXTURE", windowOpen: ru ? "ОКНО ТРАНСФЕРОВ ОТКРЫТО" : "TRANSFER WINDOW OPEN",
-      playing: ru ? "ИДЁТ ТУР" : "EXECUTING MATCHDAY", noneSelected: ru ? ">_ ДАТА НЕ ВЫБРАНА" : ">_ NO DATE SELECTED",
-      alreadyPast: ru ? "ЭТА ДАТА УЖЕ В ПРОШЛОМ" : "THAT DATE IS ALREADY PAST",
-      done: (n: number) => ru ? `>_ ТУРОВ СЫГРАНО: ${n}. ОБНОВЛЕНИЕ…` : `>_ ${n} MATCHDAY${n === 1 ? "" : "S"} EXECUTED. REFRESHING…`,
-    },
-  }[theme];
-  const t = {
-    title: V.title, subtitle: V.subtitle, simulate: V.simulate,
-    close: ru ? "Закрыть" : "Close", pause: ru ? "Пауза" : "Pause", resume: ru ? "Продолжить" : "Resume", stop: ru ? "Остановить" : "Stop",
-    today: V.today, windowOpen: V.windowOpen, playing: V.playing, noneSelected: V.noneSelected, alreadyPast: V.alreadyPast,
-    doneCount: V.done,
-  };
-
   const simulateToDate = async () => {
-    if (!selected || !seasonId || !userClub || simulating) return;
-    const targetIso = toISODate(selected);
-    setSimulating(true);
-    setDoneMsg(null);
-    pausedRef.current = false;
-    stopRef.current = false;
-    setPaused(false);
-
-    let played = 0;
+    if (!selected || selected < today || !seasonId || !userClub || simulating) return;
+    setSimulating(true); setDoneMsg(null); pausedRef.current = false; stopRef.current = false; setPaused(false);
+    let played = 0; const allDraws: DrawInfo[] = [];
     try {
       const result = await runTimeline(
         { seasonId, userClubId: userClub, tactic: tactic || "Balanced", customTactic, lineup: Object.values(lineup || {}).filter(Boolean) },
-        matchday, targetIso,
+        matchday, selected,
         {
           shouldStop: () => stopRef.current,
-          waitIfPaused: async () => { while (pausedRef.current && !stopRef.current) await simSleep(200); },
+          waitIfPaused: async () => { while (pausedRef.current && !stopRef.current) await sleep(200); },
           stepDelayMs: 200,
-          onEvent: (e) => {
-            if (e.kind === "league") { played++; setMatchday(e.matchday); }
-            setProgress({ played, matchday: e.matchday });
-          },
+          onDraw: d => allDraws.push(d),
+          onEvent: e => { played++; if (e.kind === "league") setMatchday(e.matchday); setProgress({ played, matchday: e.matchday, date: e.date }); },
         },
+        leagueDone,
       );
       played = result.leaguePlayed + result.cupRoundsPlayed;
-    } catch (e) {
-      console.error("simulateToDate failed", e);
-    }
+    } catch (e) { console.error("simulateToDate failed", e); }
 
-    setDoneMsg(t.doneCount(played));
-    setSimulating(false);
-    // Не у всех страниц есть свой well-defined refetch для этого модального
-    // окна (оно смонтировано глобально в DashboardLayout) — надёжнее всего
-    // просто перезагрузить страницу, чтобы дашборд/таблица/состав/трансферы
-    // гарантированно подхватили новый тур и все побочные эффекты (бюджет,
-    // зарплаты, истёкшие контракты и т.д.)
-    if (played > 0) {
-      await simSleep(900);
-      window.location.reload();
-    }
+    setDoneMsg(c.done(played)); setSimulating(false);
+    if (allDraws.length) { try { sessionStorage.setItem(PENDING_DRAWS_KEY, JSON.stringify(allDraws)); } catch { /* не критично */ } }
+    // Перезагрузка — чтобы дашборд, таблицы, состав и трансферы подхватили новое состояние.
+    // Если по ходу были жеребьёвки — ведём на дашборд, где их покажет окно жеребьёвки.
+    if (played > 0) { await sleep(800); if (allDraws.length) window.location.assign("/dashboard"); else window.location.reload(); }
   };
 
-  // ── Сетка календаря ──
-  const monthStart = new Date(Date.UTC(viewDate.getUTCFullYear(), viewDate.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(viewDate.getUTCFullYear(), viewDate.getUTCMonth() + 1, 0));
-  const leadingBlanks = (monthStart.getUTCDay() + 6) % 7; // понедельник = 0
-  const daysInMonth = monthEnd.getUTCDate();
-  const cells: (Date | null)[] = [
-    ...Array(leadingBlanks).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => new Date(Date.UTC(viewDate.getUTCFullYear(), viewDate.getUTCMonth(), i + 1))),
+  // ── быстрые переходы ──
+  const clampDate = (d: string) => d < today ? today : d > SEASON_END ? SEASON_END : d;
+  const nextWindowChange = () => {
+    const open = isTransferWindowOpenForDate(today);
+    for (let d = addDays(today, 1); d <= SEASON_END; d = addDays(d, 1)) if (isTransferWindowOpenForDate(d) !== open) return d;
+    return SEASON_END;
+  };
+  const jumps: { key: string; label: string; date: string }[] = [
+    { key: "next", label: c.qNext, date: today },
+    { key: "week", label: c.qWeek, date: clampDate(addDays(today, 7)) },
+    { key: "month", label: c.qMonth, date: clampDate(addDays(today, 30)) },
+    { key: "window", label: c.qWindow, date: clampDate(nextWindowChange()) },
+    { key: "end", label: c.qEnd, date: getLeagueMatchdayDate(totalMd) > SEASON_END ? SEASON_END : getLeagueMatchdayDate(totalMd) },
   ];
+  const pickDate = (d: string) => { if (d < today || d > SEASON_END) return; setSelected(d); setViewMonth(d.slice(0, 7)); };
 
-  const canGoPrev = monthStart > SEASON_START;
-  const canGoNext = monthEnd < SEASON_END;
+  // ── клавиатура ──
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (simulating) return;
+      const cur = selected ?? today;
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowRight") { e.preventDefault(); pickDate(addDays(cur, 1)); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); pickDate(addDays(cur, -1)); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); pickDate(addDays(cur, 7)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); pickDate(addDays(cur, -7)); }
+      else if (e.key === "Enter" && selected) simulateToDate();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, today, simulating, onClose]);
+
+  // ── сетка месяца ──
+  const [vy, vm] = viewMonth.split("-").map(Number);
+  const monthStart = fromIso(`${viewMonth}-01`);
+  const daysInMonth = new Date(Date.UTC(vy, vm, 0)).getUTCDate();
+  const lead = (monthStart.getUTCDay() + 6) % 7;
+  const cells: (string | null)[] = [...Array(lead).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => `${viewMonth}-${String(i + 1).padStart(2, "0")}`)];
+  const prevMonth = iso(new Date(Date.UTC(vy, vm - 2, 1))).slice(0, 7), nextMonth = iso(new Date(Date.UTC(vy, vm, 1))).slice(0, 7);
+  const canPrev = prevMonth >= SEASON_START.slice(0, 7), canNext = nextMonth <= SEASON_END.slice(0, 7);
+
+  const kindColor = (k: Kind) => k === "league" ? accent : k === "euro" ? "#3b82f6" : k === "super" ? "#a855f7" : t.warn;
+  const kindIcon = (k: Kind) => k === "league" ? ic.league : k === "euro" ? ic.continental : k === "super" ? ic.super : ic.cup;
+  const resOf = (m: any): "W" | "D" | "L" | null => {
+    if (!m.played) return null;
+    const mine = m.home_club === userClub ? m.home_goals : m.away_goals, theirs = m.home_club === userClub ? m.away_goals : m.home_goals;
+    if (mine == null || theirs == null) return null;
+    return mine > theirs ? "W" : mine < theirs ? "L" : "D";
+  };
+  const resColor = (r: "W" | "D" | "L" | null) => r === "W" ? t.good : r === "L" ? t.bad : "#94a3b8";
+
+  // лента сезона: прогресс по датам + окна
+  const seasonSpan = (fromIso(SEASON_END).getTime() - fromIso(SEASON_START).getTime());
+  const pct = (d: string) => Math.max(0, Math.min(100, ((fromIso(d).getTime() - fromIso(SEASON_START).getTime()) / seasonSpan) * 100));
+  const windowSegs = useMemo(() => {
+    const segs: { from: string; to: string }[] = []; let start: string | null = null;
+    for (let d = SEASON_START; d <= SEASON_END; d = addDays(d, 3)) {
+      const open = isTransferWindowOpenForDate(d);
+      if (open && !start) start = d; if (!open && start) { segs.push({ from: start, to: d }); start = null; }
+    }
+    if (start) segs.push({ from: start, to: SEASON_END });
+    return segs;
+  }, []);
+
+  const selectedEvents = selected ? (eventsByDate.get(selected) ?? []) : [];
+  const windowOpen = (d: string) => isTransferWindowOpenForDate(d);
+  const compLabel = (m: any) => m.source === "cup" ? (m.competition_name ?? c.lgCup) : c.lgLeague;
 
   return (
-    <div className={`fixed inset-0 z-[200] flex items-center justify-center p-4 ${ui.overlay}`} onClick={onClose}>
-      <div
-        className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl animate-fade-in ${ui.card}`}
-        style={{ backdropFilter: "blur(20px)" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between mb-1">
-          <div className="flex items-center gap-2.5">
-            <CalendarClock size={20} color={glowColor} />
-            <h2 className="text-lg font-black">{t.title}</h2>
+    <div className={`fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 ${t.overlay}`} onClick={onClose}>
+      <div className={`w-full max-w-5xl max-h-[94vh] overflow-y-auto ${t.panel} ${t.shadow} animate-fade-in ${isM ? "" : isA ? "rounded-[2rem]" : "rounded-3xl"}`}
+        style={{ backdropFilter: "blur(20px)", ...t.font }} onClick={e => e.stopPropagation()}>
+
+        {/* Шапка */}
+        <div className="relative px-5 sm:px-7 pt-5 pb-4">
+          <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(90% 140% at 0% 0%, ${accent}1c, transparent 60%)` }} />
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5">
+                <CalendarClock size={22} color={accent} />
+                <h2 className={`text-xl sm:text-2xl leading-tight ${t.title}`} style={{ color: isM ? "#f5d0fe" : undefined }}>{c.title}</h2>
+              </div>
+              <p className={`text-xs mt-1.5 max-w-2xl ${t.muted}`}>{c.subtitle}</p>
+            </div>
+            <button onClick={onClose} aria-label={c.close} className={`w-9 h-9 shrink-0 flex items-center justify-center ${t.btnGhost}`}><X size={16} /></button>
           </div>
-          <button onClick={onClose} className={`w-8 h-8 flex items-center justify-center rounded-lg ${ui.btnGhost}`}>
-            <X size={16} />
-          </button>
+
+          {/* лента сезона */}
+          <div className="relative mt-4">
+            <div className={`flex items-center justify-between text-[9px] mb-1 ${t.eyebrow} ${t.muted}`}>
+              <span>{c.progress}</span><span>{formatGameDate(today, seasonNum, locale)}</span>
+            </div>
+            <div className={`relative h-2.5 ${t.bar} ${isM ? "" : "rounded-full"} overflow-hidden`}>
+              {windowSegs.map((w, i) => <div key={i} className="absolute inset-y-0" style={{ left: `${pct(w.from)}%`, width: `${pct(w.to) - pct(w.from)}%`, background: `${t.good}33` }} />)}
+              <div className="absolute inset-y-0 left-0" style={{ width: `${pct(today)}%`, background: accent, boxShadow: `0 0 12px ${accent}` }} />
+              {selected && selected >= today && <div className="absolute inset-y-0" style={{ left: `${pct(today)}%`, width: `${Math.max(0, pct(selected) - pct(today))}%`, background: `${accent}55` }} />}
+            </div>
+          </div>
         </div>
-        <p className={`text-xs mb-5 ${ui.subtle}`}>{t.subtitle}</p>
 
-        {!simulating ? (
-          <>
-            <div className="flex items-center justify-between mb-3">
-              <button onClick={() => canGoPrev && setViewDate(new Date(Date.UTC(viewDate.getUTCFullYear(), viewDate.getUTCMonth() - 1, 1)))}
-                disabled={!canGoPrev} className={`w-8 h-8 flex items-center justify-center rounded-lg disabled:opacity-20 ${ui.btnGhost}`}>
-                <ChevronLeft size={16} />
-              </button>
-              <span className="text-sm font-black">{MONTH_NAMES[locale][viewDate.getUTCMonth()]} {displayYear(viewDate.getUTCFullYear(), seasonNum)}</span>
-              <button onClick={() => canGoNext && setViewDate(new Date(Date.UTC(viewDate.getUTCFullYear(), viewDate.getUTCMonth() + 1, 1)))}
-                disabled={!canGoNext} className={`w-8 h-8 flex items-center justify-center rounded-lg disabled:opacity-20 ${ui.btnGhost}`}>
-                <ChevronRight size={16} />
-              </button>
+        {simulating ? (
+          <div className="px-5 sm:px-7 pb-7 pt-2">
+            <div className={`p-6 text-center ${t.cardAlt}`}>
+              <div className="text-4xl mb-3 animate-floaty-sm" style={{ color: accent }}>{isM ? "◈" : isA ? "✦" : "⚽"}</div>
+              <div className={`text-[11px] font-black ${t.eyebrow}`} style={{ color: accent }}>{paused ? c.pause : c.playing}…</div>
+              <div className="text-3xl font-black mt-2" style={{ fontFamily: theme === "classic" ? "'Bebas Neue',sans-serif" : undefined }}>
+                {progress ? `${progress.played}` : "…"} <span className={`text-sm ${t.muted}`}>{progress?.date ? `· ${formatGameDate(progress.date, seasonNum, locale)}` : ""}</span>
+              </div>
+              <div className={`h-2 mt-4 mx-auto max-w-md ${t.bar} ${isM ? "" : "rounded-full"} overflow-hidden`}>
+                <div className="h-full transition-all duration-300" style={{ width: `${progress?.date ? Math.max(3, ((fromIso(progress.date).getTime() - fromIso(today).getTime()) / Math.max(1, fromIso(selected ?? today).getTime() - fromIso(today).getTime())) * 100) : 3}%`, background: accent }} />
+              </div>
+              <div className="flex items-center justify-center gap-2 mt-5">
+                <button onClick={() => { pausedRef.current = !pausedRef.current; setPaused(pausedRef.current); }} className={`px-4 py-2.5 text-xs font-black flex items-center gap-1.5 ${t.btnGhost}`}>
+                  {paused ? <Play size={13} /> : <Pause size={13} />}{paused ? c.resume : c.pause}
+                </button>
+                <button onClick={() => { stopRef.current = true; }} className={`px-4 py-2.5 text-xs font-black flex items-center gap-1.5 ${t.btnGhost}`} style={{ color: t.bad }}>
+                  <Square size={13} />{c.stop}
+                </button>
+              </div>
+              {doneMsg && <div className="mt-4 text-sm font-bold" style={{ color: t.good }}>{doneMsg}</div>}
             </div>
-
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {WEEKDAYS[locale].map(w => (
-                <div key={w} className={`text-center text-[10px] font-bold uppercase py-1 ${ui.subtle}`}>{w}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1 mb-4">
-              {cells.map((d, i) => {
-                if (!d) return <div key={i} />;
-                const iso = toISODate(d);
-                const isPast = d < currentMatchdayDate && !sameDay(d, currentMatchdayDate);
-                const isToday = sameDay(d, currentMatchdayDate);
-                const isSelected = selected && sameDay(d, selected);
-                const dayMatches = matchesByDate.get(iso) ?? [];
-                const isLeagueDay = dayMatches.some((m: any) => m.competition_type === "league");
-                const specialMatch = dayMatches.find((m: any) => competitionColor(m));
-                // Раньше тур лиги обозначался только маленькой точкой, а
-                // цветом заливались только кубковые дни — теперь лига тоже
-                // красит весь день целиком (акцентным цветом темы), просто
-                // кубки/еврокубки имеют приоритет, если в один день почему-то
-                // выпадают оба (крайне редко, но на всякий случай).
-                const cellColor = specialMatch ? competitionColor(specialMatch) : (isLeagueDay ? glowColor : "");
-                const windowOpen = isTransferWindowOpenForDate(iso);
-                return (
-                  <button
-                    key={i}
-                    disabled={isPast}
-                    onClick={() => setSelected(d)}
-                    title={dayMatches.map((m: any) => `${m.competition_name}: ${m.home_club} vs ${m.away_club}`).join("\n")}
-                    style={isSelected ? undefined : cellColor ? {
-                      background: `${cellColor}${isPast ? "35" : "60"}`,
-                      boxShadow: `inset 0 0 0 1.5px ${cellColor}${isPast ? "50" : "90"}`,
-                      color: isPast ? undefined : "#fff",
-                    } : undefined}
-                    className={`relative aspect-square rounded-lg text-xs flex flex-col items-center justify-center gap-0.5 transition-all font-bold
-                      ${isPast ? `cursor-not-allowed ${cellColor ? "" : ui.dayDisabled}` : `cursor-pointer ${cellColor ? "" : ui.dayIdle}`}
-                      ${isSelected ? ui.daySelected : ""}
-                      ${isToday && !isSelected ? ui.dayToday : ""}
-                      ${!isSelected && !isPast && !cellColor && windowOpen ? ui.windowBg : ""}`}
-                  >
-                    <span>{d.getUTCDate()}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-4 text-[10px]">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded" style={{ background: glowColor }} /> {locale === "ru" ? "Тур лиги" : "League matchday"}</span>
-              {activeCompetitions.map(c => (
-                <span key={c.label} className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded" style={{ background: c.color }} /> {c.label}
-                </span>
-              ))}
-              <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded ${ui.windowBg}`} /> {t.windowOpen}</span>
-            </div>
-
-            {doneMsg && <div className={`text-xs mb-3 ${ui.subtle}`}>{doneMsg}</div>}
-
-            <button
-              onClick={simulateToDate}
-              disabled={!selected}
-              className={`w-full py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${ui.btn}`}
-            >
-              <Play size={14} />
-              {selected ? `${t.simulate} — ${formatGameDate(toISODate(selected), seasonNum, locale)}` : t.noneSelected}
-            </button>
-          </>
+          </div>
         ) : (
-          <div className="py-6 text-center">
-            <div className="text-sm font-black mb-1">{t.playing} {progress?.matchday ?? matchday}…</div>
-            <div className={`text-xs mb-5 ${ui.subtle}`}>{progress ? (locale === "ru" ? `Сыграно туров: ${progress.played}` : `${progress.played} played`) : ""}</div>
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={() => { pausedRef.current = !pausedRef.current; setPaused(pausedRef.current); }}
-                className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-1.5 ${ui.pauseBtn}`}>
-                {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t.resume : t.pause}
-              </button>
-              <button
-                onClick={() => { stopRef.current = true; pausedRef.current = false; }}
-                className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-1.5 ${ui.stopBtn}`}>
-                <Square size={13} /> {t.stop}
-              </button>
+          <div className="px-5 sm:px-7 pb-6 grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
+            {/* Календарь */}
+            <div className={`p-4 ${t.card}`}>
+              <div className="flex items-center justify-between mb-3">
+                <button onClick={() => canPrev && setViewMonth(prevMonth)} disabled={!canPrev} className={`w-9 h-9 flex items-center justify-center disabled:opacity-20 ${t.btnGhost}`}><ChevronLeft size={16} /></button>
+                <span className={`text-base font-black ${isA ? "italic" : ""}`}>{MONTH_NAMES[locale][vm - 1]} {displayYear(vy, seasonNum)}</span>
+                <button onClick={() => canNext && setViewMonth(nextMonth)} disabled={!canNext} className={`w-9 h-9 flex items-center justify-center disabled:opacity-20 ${t.btnGhost}`}><ChevronRight size={16} /></button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 mb-1">
+                {c.weekdays.map(w => <div key={w} className={`text-center text-[9px] font-black py-1 ${t.eyebrow} ${t.muted}`}>{w}</div>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {cells.map((d, i) => {
+                  if (!d) return <div key={i} />;
+                  const evs = eventsByDate.get(d) ?? [];
+                  const past = d < today, isToday = d === today, isSel = d === selected;
+                  const win = windowOpen(d); const other = otherRoundDates.has(d);
+                  return (
+                    <button key={d} onClick={() => pickDate(d)} disabled={past || d > SEASON_END}
+                      title={evs.map(m => `${m.home_club} ${m.played ? `${m.home_goals}:${m.away_goals}` : "–"} ${m.away_club} · ${compLabel(m)}`).join("\n") || undefined}
+                      className={`relative min-h-[58px] sm:min-h-[66px] p-1 flex flex-col items-center justify-start transition-all ${isM ? "" : "rounded-xl"} ${past ? "opacity-45" : t.hover} disabled:cursor-not-allowed`}
+                      style={{
+                        background: isSel ? `${accent}30` : win ? `${t.good}0d` : "transparent",
+                        boxShadow: isSel ? `0 0 0 2px ${accent}, 0 0 18px ${accent}55` : isToday ? `0 0 0 1.5px ${accent}` : undefined,
+                        border: `1px solid ${isSel ? "transparent" : theme === "aurora" ? "rgba(244,114,182,0.18)" : "rgba(148,163,184,0.12)"}`,
+                      }}>
+                      <span className={`text-[11px] font-black leading-none ${isToday ? "" : ""}`} style={{ color: isToday || isSel ? accent : undefined }}>{Number(d.slice(8))}</span>
+                      <div className="flex flex-col items-center gap-0.5 mt-1 w-full">
+                        {evs.slice(0, 2).map((m, k) => {
+                          const kd = kindOf(m); const r = resOf(m);
+                          return (
+                            <span key={k} className={`w-full flex items-center justify-center gap-0.5 text-[8px] font-black leading-none py-0.5 px-0.5 ${isM ? "" : "rounded-md"}`}
+                              style={{ background: `${r ? resColor(r) : kindColor(kd)}22`, color: r ? resColor(r) : kindColor(kd) }}>
+                              <img src={getClubLogo(m.home_club === userClub ? m.away_club : m.home_club)} alt="" className="w-3 h-3 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
+                              {r ? `${m.home_goals}:${m.away_goals}` : kindIcon(kd)}
+                            </span>
+                          );
+                        })}
+                        {evs.length === 0 && other && <span className="w-1.5 h-1.5 rounded-full mt-0.5" style={{ background: "#94a3b8" }} />}
+                      </div>
+                      {isToday && <span className="absolute -top-1 -right-1 text-[7px] font-black px-1 rounded-full" style={{ background: accent, color: isM ? "#000" : "#fff" }}>▶</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* легенда */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 text-[10px]">
+                {([["league", c.lgLeague], ["cup", c.lgCup], ["euro", c.lgEuro], ["super", c.lgSuper]] as [Kind, string][]).map(([k, label]) => (
+                  <span key={k} className="flex items-center gap-1.5" style={{ color: kindColor(k) }}><span>{kindIcon(k)}</span><span className={t.muted}>{label}</span></span>
+                ))}
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3" style={{ background: `${t.good}33`, border: `1px solid ${t.good}66` }} /><span className={t.muted}>{c.lgWindow}</span></span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3" style={{ boxShadow: `0 0 0 1.5px ${accent}` }} /><span className={t.muted}>{c.lgToday}</span></span>
+              </div>
+            </div>
+
+            {/* Правая панель */}
+            <div className="flex flex-col gap-4 min-w-0">
+              {/* Быстрые переходы */}
+              <div className={`p-4 ${t.card}`}>
+                <div className={`text-[10px] font-black mb-2 ${t.eyebrow} ${t.muted}`}>{isA && "✦ "}{c.simulate.replace(" ✦", "")}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {jumps.map(j => (
+                    <button key={j.key} onClick={() => pickDate(j.date)}
+                      className={`px-3 py-2 text-[11px] font-black ${isM ? "" : isA ? "rounded-full" : "rounded-lg"} ${selected === j.date ? t.btn : t.btnGhost}`}>{j.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Выбранный день + превью */}
+              <div className={`p-4 flex-1 ${t.card}`}>
+                <div className={`text-[10px] font-black mb-2 ${t.eyebrow} ${t.muted}`}>{c.selectedDay}</div>
+                {!selected ? (
+                  <div className={`text-sm py-6 text-center ${t.muted}`}>{c.pickDate}</div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={`text-lg font-black ${isA ? "italic" : ""}`} style={{ color: accent }}>{formatGameDate(selected, seasonNum, locale)}</div>
+                      <span className="text-[10px] font-black px-2 py-1" style={{ background: `${windowOpen(selected) ? t.good : "#94a3b8"}22`, color: windowOpen(selected) ? t.good : "#94a3b8" }}>
+                        {windowOpen(selected) ? c.windowOpen : c.windowClosed}
+                      </span>
+                    </div>
+
+                    {selectedEvents.length > 0 ? (
+                      <div className="mt-3 space-y-1.5">
+                        {selectedEvents.map((m, i) => {
+                          const kd = kindOf(m); const r = resOf(m); const home = m.home_club === userClub; const opp = home ? m.away_club : m.home_club;
+                          return (
+                            <div key={i} className={`flex items-center gap-2.5 p-2 ${t.cardAlt}`} style={{ borderLeft: `3px solid ${r ? resColor(r) : kindColor(kd)}` }}>
+                              <img src={getClubLogo(opp)} alt="" className="w-7 h-7 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[12px] font-black truncate">{opp}</div>
+                                <div className={`text-[10px] truncate ${t.muted}`}><span style={{ color: kindColor(kd) }}>{kindIcon(kd)}</span> {compLabel(m)}{m.round_name ? ` · ${m.round_name}` : ""} · {home ? c.home : c.away}</div>
+                              </div>
+                              {r ? <span className="text-sm font-black" style={{ color: resColor(r) }}>{m.home_goals}:{m.away_goals}</span> : <span className={`text-[10px] ${t.muted}`}>{c.vs}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : <div className={`text-xs mt-3 ${t.muted}`}>{c.nothingThatDay}</div>}
+
+                    <div className={`mt-4 pt-3 border-t ${t.divider}`}>
+                      <div className={`text-[10px] font-black mb-1.5 ${t.eyebrow} ${t.muted}`}>{c.willPlay}</div>
+                      {selected < today ? (
+                        <div className="text-xs" style={{ color: t.warn }}>{c.alreadyPast}</div>
+                      ) : preview && (preview.mine.length + preview.leagueRounds + preview.others > 0) ? (
+                        <ul className="text-[12px] space-y-1 font-bold">
+                          {preview.mine.length > 0 && <li>• {c.yourMatches(preview.mine.length)}</li>}
+                          {preview.leagueRounds > 0 && <li>• {c.leagueRounds(preview.leagueRounds)}</li>}
+                          {preview.others > 0 && <li className={t.muted}>• {c.otherRounds(preview.others)}</li>}
+                        </ul>
+                      ) : <div className={`text-xs ${t.muted}`}>{c.nothingToPlay}</div>}
+                    </div>
+                  </>
+                )}
+                <button onClick={simulateToDate} disabled={!selected || selected < today}
+                  className={`mt-4 w-full py-3.5 text-sm font-black flex items-center justify-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed transition-transform enabled:hover:scale-[1.01] ${t.btn}`}
+                  style={selected && selected >= today ? { boxShadow: `0 10px 28px ${accent}55` } : undefined}>
+                  <Play size={15} />{selected ? `${c.simulate.replace(" ✦", "")} — ${formatGameDate(selected, seasonNum, locale)}` : c.simulate}
+                </button>
+              </div>
             </div>
           </div>
         )}

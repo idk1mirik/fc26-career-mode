@@ -95,3 +95,9 @@ export function getLeagueMatchdayDate(matchday: number): string {
   d.setDate(d.getDate() + (matchday - 1) * 7);
   return d.toISOString().split("T")[0];
 }
+
+/** Сколько туров в лиге из n клубов (двухкруговой турнир; при нечётном n добавляется «пустышка»). */
+export function totalLeagueMatchdays(clubCount: number): number {
+  const n = Math.max(2, Math.floor(clubCount));
+  return (n % 2 === 0 ? n - 1 : n) * 2;
+}

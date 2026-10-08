@@ -11,6 +11,34 @@ const POSITION_GROUPS: Record<string, string> = {
   CF: "ST", ST: "ST", LF: "ST", RF: "ST", SS: "ST",
 };
 
+// ── Нормализация позиций ───────────────────────────────────────────────────
+// Слоты схем и позиции игроков записаны по-разному: "CB1"/"CB2", "CDM1",
+// "ST2", "LCM"/"RCM", "SS1", "LWB"... Раньше такие слоты либо не
+// распознавались совсем (SS1 → «неизвестная позиция» → штраф до −30% даже
+// нападающему), либо считались «другой позицией той же группы» (CB на слоте
+// LCB терял 3%). Приводим слот и позицию к одной канонической роли.
+const ROLE_ALIAS: Record<string, string> = {
+  LCB: "CB", RCB: "CB",
+  LCM: "CM", RCM: "CM",
+  LDM: "CDM", RDM: "CDM",
+  LWB: "LB", RWB: "RB",     // латераль и фулбек — одна роль для штрафа
+  CF: "ST", LF: "ST", RF: "ST", LS: "ST", RS: "ST",
+  SS: "ST",                 // второй нападающий: нападающий на нём не теряет ничего
+};
+export function canonicalPos(pos: string | null | undefined): string {
+  if (!pos) return "";
+  const base = String(pos).trim().toUpperCase().replace(/[0-9]+$/, "");   // CB1 → CB, ST2 → ST
+  return ROLE_ALIAS[base] ?? base;
+}
+
+/** Своя ли это позиция для игрока: основная, её синоним или одна из альтернативных. */
+export function isNaturalPosition(player: { position?: string; alternatePositions?: string[] }, actualPos: string): boolean {
+  const target = canonicalPos(actualPos);
+  if (!target) return true;                                  // позиция неизвестна — не штрафуем
+  if (canonicalPos(player.position) === target) return true;
+  return (player.alternatePositions ?? []).some(a => canonicalPos(a) === target);
+}
+
 // Дистанция между группами позиций (0 = своя, выше = дальше)
 const GROUP_DISTANCE: Record<string, Record<string, number>> = {
   GK: { GK: 0, CB: 9, FB: 9, DM: 9, CM: 9, AM: 9, WM: 9, W: 9, ST: 9 },
@@ -30,12 +58,13 @@ const GROUP_DISTANCE: Record<string, Record<string, number>> = {
  * Возвращает множитель 0..1 (1 = нет штрафа).
  */
 export function getPositionPenalty(mainPos: string, altPositions: string[], actualPos: string): number {
-  // Своя основная позиция ИЛИ любая из собственных альтернативных — без штрафа
-  if (mainPos === actualPos) return 1.0;
-  if (altPositions?.includes(actualPos)) return 1.0;
+  // Своя основная позиция (в т.ч. синоним: CB на LCB, ST на CF/SS1, LB на LWB)
+  // ИЛИ любая из собственных альтернативных — без штрафа
+  if (isNaturalPosition({ position: mainPos, alternatePositions: altPositions }, actualPos)) return 1.0;
 
-  const mainGroup = POSITION_GROUPS[mainPos] ?? "CM";
-  const actualGroup = POSITION_GROUPS[actualPos] ?? "CM";
+  const main = canonicalPos(mainPos), actual = canonicalPos(actualPos);
+  const mainGroup = POSITION_GROUPS[main] ?? POSITION_GROUPS[mainPos] ?? "CM";
+  const actualGroup = POSITION_GROUPS[actual] ?? POSITION_GROUPS[actualPos] ?? "CM";
   const dist = GROUP_DISTANCE[mainGroup]?.[actualGroup] ?? 5;
 
   // GK на не-GK или наоборот — катастрофа
@@ -69,9 +98,13 @@ export function getFootPenalty(preferredFoot: number, actualPos: string): number
  * Полный пересчёт рейтинга игрока для конкретной позиции
  */
 export function getAdjustedOverall(player: any, actualPos: string): number {
+  const base = player.overall ?? 75;
+  // На своей позиции (основной или альтернативной) рейтинг не меняется ВООБЩЕ.
+  // Раньше штраф за «не ту ногу» считался и здесь: левша-правый вингер (RW) или
+  // правша-левый вингер (LW) — обычное дело, но терял 5% на родной позиции.
+  if (isNaturalPosition(player, actualPos)) return base;
   const posMult  = getPositionPenalty(player.position, player.alternatePositions ?? [], actualPos);
   const footMult = getFootPenalty(player.preferredFoot ?? 0, actualPos);
-  const base = player.overall ?? 75;
   return Math.round(base * posMult * footMult);
 }
 
@@ -79,6 +112,7 @@ export function getAdjustedOverall(player: any, actualPos: string): number {
  * Пересчёт детальных статов под позицию (для отображения в составе)
  */
 export function getAdjustedStats(player: any, actualPos: string) {
+  if (isNaturalPosition(player, actualPos)) return player;
   const posMult = getPositionPenalty(player.position, player.alternatePositions ?? [], actualPos);
   if (posMult >= 0.95) return player; // нет существенных изменений
 

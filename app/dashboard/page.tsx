@@ -25,13 +25,14 @@ import { getDash } from "@/lib/i18nDash";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
 import { ClubHero } from "@/components/dashboard/ClubHero";
 import { SafeBoundary } from "@/components/SafeBoundary";
+import { PENDING_DRAWS_KEY } from "@/components/CalendarModal";
 import { SeasonStrip } from "@/components/dashboard/SeasonStrip";
 import { MatchHero } from "@/components/dashboard/MatchHero";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { icons } from "@/lib/themeFlavor";
 import { Stars, SectionTitle } from "@/components/ThemeBits";
 import { DrawModal } from "@/components/DrawModal";
-import { runTimeline, advanceBackgroundCups, type DrawInfo, type SimContext } from "@/lib/simClient";
+import { runTimeline, pickNextAction, stepLeague, stepCup, type DrawInfo, type SimContext } from "@/lib/simClient";
 import { seasonLabel, formatGameDate } from "@/lib/seasonLabel";
 import React from "react";
 
@@ -246,7 +247,12 @@ export default function DashboardPage() {
   const [simulating, setSimulating] = useState(false);
   const [lastResults, setLastResults] = useState<any[]>([]);  const [showResults, setShowResults] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  // seasonFinished = ЛИГА сыграна (ответ сервера finished / статус сезона). Сам сезон
+  // завершён только когда доиграны и кубки клуба (см. showFinish ниже): у лиг на 18
+  // клубов лига кончается раньше финала ЛЧ, и раньше экран «сезон завершён» вылезал
+  // при несыгранных кубковых матчах.
   const [seasonFinished, setSeasonFinished] = useState(false);
+  const [calendarLoaded, setCalendarLoaded] = useState(false);
   const [seasonTrophies, setSeasonTrophies] = useState<any[]>([]);
   const [allCompetitionResults, setAllCompetitionResults] = useState<any[]>([]);
   const [reportFix, setReportFix] = useState<any>(null);
@@ -303,6 +309,18 @@ export default function DashboardPage() {
   }, []);
 
   const pushDraw = useCallback((d: DrawInfo) => setDrawQueue(q => [...q, d]), []);
+
+  // Жеребьёвки, составленные во время промотки из календаря (страница после неё
+  // перезагружается, поэтому календарь кладёт их в sessionStorage).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(PENDING_DRAWS_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(PENDING_DRAWS_KEY);
+      const list = JSON.parse(raw) as DrawInfo[];
+      if (Array.isArray(list) && list.length) setDrawQueue(q => [...q, ...list]);
+    } catch { /* повреждённые данные — просто игнорируем */ }
+  }, []);
 
   const availableLineupPlayers = useMemo(() =>
     Object.values(lineup || {}).filter((p: any) => p && !unavailableNames.has(p.id ?? p.name)),
@@ -385,6 +403,7 @@ export default function DashboardPage() {
     if (res.ok) {
       const data = await res.json();
       setCalendar(data.matches ?? []);
+      setCalendarLoaded(true);
     }
     const statusRes = await fetch(`/api/player-status?seasonId=${sid}&clubId=${encodeURIComponent(clubId)}`);
     if (statusRes.ok) {
@@ -402,17 +421,44 @@ export default function DashboardPage() {
   const nextMatch = useMemo(() => {
     return calendar.find(m => !m.played) ?? null;
   }, [calendar]);
+  // Остались ли у клуба несыгранные кубковые матчи (в любом режиме их надо доиграть)
+  const userCupsPending = useMemo(() => calendar.some(m => !m.played && m.source === "cup"), [calendar]);
+  const showFinish = seasonFinished && calendarLoaded && !userCupsPending;
+  // Что играем следующим: общая логика с тестами (lib/simClient.ts)
+  const nextAction = useMemo(() => pickNextAction(calendar, matchday, seasonFinished), [calendar, matchday, seasonFinished]);
+
+  // Стартовые жеребьёвки сезона: первый раунд кубка страны и соперники клуба в
+  // лига-фазе еврокубков — показываем один раз за сезон, пока ничего не сыграно.
+  useEffect(() => {
+    if (!seasonId || !userClub || competitions.length === 0 || matchday !== 1) return;
+    const key = `fc26-initial-draws-${seasonId}`;
+    try { if (localStorage.getItem(key)) return; } catch { return; }
+    if (Object.values(fixturesByComp).some(list => (list ?? []).some((f: any) => f.played))) return;
+    const draws: DrawInfo[] = [];
+    for (const comp of competitions) {
+      const fx = (fixturesByComp[comp.id] ?? []).filter((f: any) => !f.is_bye);
+      if (!fx.length) continue;
+      const euroPhase = comp.type === "continental" && (comp.league_phase_rounds ?? 0) > 0;
+      if (euroPhase) {
+        const mine = fx.filter((f: any) => f.round <= (comp.league_phase_rounds ?? 8) && (f.home_club === userClub || f.away_club === userClub));
+        if (mine.length) draws.push({ competitionId: comp.id, competitionName: comp.name, stage: "League Phase", pairs: mine.map((f: any) => ({ home: f.home_club, away: f.away_club })), byes: [] });
+      } else if (comp.type === "domestic_cup") {
+        const first = fx.filter((f: any) => f.round === Math.min(...fx.map((x: any) => x.round)));
+        const byes = (fixturesByComp[comp.id] ?? []).filter((f: any) => f.is_bye && f.round === first[0]?.round).map((f: any) => f.home_club);
+        if (first.length) draws.push({ competitionId: comp.id, competitionName: comp.name, stage: first[0].round_name ?? "Round 1", pairs: first.map((f: any) => ({ home: f.home_club, away: f.away_club })), byes });
+      }
+    }
+    try { localStorage.setItem(key, "1"); } catch { /* квота — не страшно */ }
+    if (draws.length) setDrawQueue(q => [...q, ...draws]);
+  }, [seasonId, userClub, competitions, fixturesByComp, matchday]);
 
   // Как только очередь доходит до кубкового матча (см. cupReady ниже, та же
   // логика по дате) — подгружаем ВЕСЬ раунд этого турнира целиком, не
   // только матч пользователя.
   useEffect(() => {
-    if (!nextMatch || nextMatch.source !== "cup" || !nextMatch.competition_id) return;
-    const careerDate = getLeagueMatchdayDate(matchday);
-    const due = !nextMatch.match_date || nextMatch.match_date <= careerDate;
-    if (!due) return;
-    loadUpcomingCupRound(nextMatch.competition_id, nextMatch.competition_name);
-  }, [nextMatch, matchday, loadUpcomingCupRound]);
+    if (nextAction.kind !== "cup") return;
+    loadUpcomingCupRound(nextAction.match.competition_id, nextAction.match.competition_name);
+  }, [nextAction, loadUpcomingCupRound]);
 
   const simCtx = (): SimContext => ({
     seasonId: seasonId!, userClubId: userClub, tactic, customTactic,
@@ -425,12 +471,9 @@ export default function DashboardPage() {
     setSimulatingCup(true);
     setApiError(null);
     try {
-      const res = await fetch("/api/cup/advance", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionId: nextMatch.competition_id, userClubId: userClub, userTactic: tactic, userLineup: Object.values(lineup || {}).filter(Boolean) }),
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const r = await stepCup(simCtx(), nextMatch, seasonFinished, getLeagueMatchdayDate(matchday));
+      if (r.ok) {
+        const data = r.data;
         // Ответ /api/cup/advance уже содержит результаты ВСЕГО раунда (не
         // только матча пользователя) — используем их напрямую.
         setJustPlayedCupRound({
@@ -441,17 +484,13 @@ export default function DashboardPage() {
         setShowResults(true);
         setUpcomingCupRound(null);
         setPanelCompId(nextMatch.competition_id);
-        if (data.draw) pushDraw(data.draw);
-        // Остальные турниры с той же датой (где клуб пользователя не играет) —
-        // доигрываются сами, иначе они бы так и висели неигранными.
-        const more = await advanceBackgroundCups(simCtx(), nextMatch.match_date ?? getLeagueMatchdayDate(matchday));
-        more.forEach(pushDraw);
+        // Жеребьёвки: этого турнира + всех фоновых, что доигрались вместе с ним
+        r.draws.forEach(pushDraw);
         await loadCalendar(seasonId!, userClub);
         await loadCompetitions(seasonId!);
       } else {
-        const data = await res.json().catch(() => ({}));
-        setApiError(`${nextMatch.competition_name}: ${data.error ?? `HTTP ${res.status}`}`);
-        console.error("Cup advance failed:", res.status, data);
+        setApiError(`${nextMatch.competition_name}: ${r.data?.error ?? "Cup advance failed"}`);
+        console.error("Cup advance failed:", r.data);
       }
     } catch (e: any) {
       setApiError(`${nextMatch.competition_name}: ${e?.message ?? "network error"}`);
@@ -468,27 +507,21 @@ export default function DashboardPage() {
     setShowResults(false);
     setApiError(null);
     try {
-      const res = await fetch("/api/season/advance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId, userClubId: userClub, userTactic: tactic, userCustomTactic: tactic === "Custom" ? customTactic : undefined, userLineup: Object.values(lineup || {}).filter(Boolean) }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const r = await stepLeague({ ...simCtx(), customTactic });
+      const data = r.data;
+      if (r.ok) {
         setLastResults(data.results || []);
         setLastPlayedWasCup(false);
         setMatchday(data.nextMatchday);
         setShowResults(true);
         setPanelCompId(null);
-        // Кубки, где клуб пользователя сейчас не играет, идут сами по датам
-        const bg = await advanceBackgroundCups(simCtx(), data.finished ? "9999-12-31" : getLeagueMatchdayDate(data.nextMatchday), { ignoreDate: !!data.finished });
-        bg.forEach(pushDraw);
+        r.draws.forEach(pushDraw);
+        if (data.finished) setSeasonFinished(true);
         await loadData(seasonId);
         await loadCalendar(seasonId, userClub);
         await loadCompetitions(seasonId);
-        if (data.finished) setSeasonFinished(true);
       } else {
-        setApiError(data.error || "Could not simulate matchday.");
+        setApiError(data?.error || "Could not simulate matchday.");
       }
     } catch (e) { console.error(e); setApiError("Network error — try again."); }
     setSimulating(false);
@@ -543,7 +576,7 @@ export default function DashboardPage() {
           else if (e.competitionId) setPanelCompId(e.competitionId);
           await Promise.all([loadData(seasonId), loadCompetitions(seasonId)]);
         },
-      });
+      }, seasonFinished);
       if (result.leagueFinished) setSeasonFinished(true);
       await loadData(seasonId);
       await loadCompetitions(seasonId);
@@ -624,7 +657,7 @@ export default function DashboardPage() {
 
   if (!hydrated || !selectedClub) return null;
 
-  if (seasonFinished) {
+  if (showFinish) {
     const sortedStandings = [...standings].sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
 
     // ── Итоги сезона для клуба пользователя ──
@@ -875,8 +908,7 @@ export default function DashboardPage() {
                 Кубок ПОЛНОСТЬЮ заменяет лигу на этой неделе — они никогда не показываются одновременно. */}
             {(() => {
               const careerDate = getLeagueMatchdayDate(matchday);
-              const cupReady = seasonId && nextMatch && nextMatch.source === "cup" &&
-                (!nextMatch.match_date || nextMatch.match_date <= careerDate);
+              const cupReady = !!seasonId && nextAction.kind === "cup";
 
               if (cupReady) {
                 return (
@@ -886,7 +918,15 @@ export default function DashboardPage() {
                       competition={nextMatch.competition_name} competitionType={(nextMatch.competition_type as any) ?? "domestic_cup"} round={nextMatch.round_name}
                       dateLabel={formatGameDate(nextMatch.match_date ?? careerDate, seasonNum, locale as "en" | "ru")}
                       playLabel={copy.dashPlayMatch} playingLabel={copy.dashSimulating} playing={simulatingCup}
-                      playDisabled={simulatingCup || !lineupValid} onPlay={advanceCupRound} />
+                      playDisabled={simulatingCup || !lineupValid} onPlay={advanceCupRound}
+                      seasonBtn={{
+                        label: simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season"),
+                        disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim,
+                        onClick: simulateWholeSeason,
+                        title: !readyForSeasonSim
+                          ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
+                          : (locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours"),
+                      }} />
                     {!lineupValid && (
                       <div className="mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
                         ⚠️ {locale === "ru"

@@ -52,6 +52,8 @@ const POS_PRIORITY: Record<string, string[]> = {
   CAM:  ["CAM","CM","CF"],
   LW:   ["LW","LF","CF","ST"], RW: ["RW","RF","CF","ST"],
   ST:   ["ST","CF","LW","RW"], ST1: ["ST","CF"], ST2: ["ST","CF","LW","RW"],
+  SS1:  ["CF","ST","CAM"], SS2: ["CF","ST","CAM","LW","RW"],
+  LDM:  ["CDM","CM"], RDM: ["CDM","CM"],
 };
 
 const THEME_UI = {

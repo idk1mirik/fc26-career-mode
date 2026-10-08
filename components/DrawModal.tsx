@@ -17,7 +17,7 @@ const STYLES = {
 
 const STAGE_RU: Record<string, string> = {
   "Playoff Round": "Стыковые матчи", "Round of 16": "1/8 финала", "Quarter-final": "1/4 финала", "Semi-final": "1/2 финала", "Final": "Финал",
-  "Round of 32": "1/16 финала", "Round of 64": "1/32 финала",
+  "Round of 32": "1/16 финала", "Round of 64": "1/32 финала", "League Phase": "Лига-фаза: твои соперники", "Round 1": "1-й раунд", "First Round": "1-й раунд",
 };
 
 export function DrawModal({

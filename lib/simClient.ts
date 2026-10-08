@@ -11,7 +11,8 @@
 //    никогда не двигались.
 // Теперь всё идёт одной шкалой дат: берём ближайшее событие — тур лиги ИЛИ
 // раунд любого кубка — и играем его, пока оно не позже целевой даты.
-import { getLeagueMatchdayDate } from "@/lib/seasonCalendar";
+import { getLeagueMatchdayDate, totalLeagueMatchdays } from "@/lib/seasonCalendar";
+export { totalLeagueMatchdays };
 
 export interface DueCup { competitionId: string; matchDate: string | null; userInvolved: boolean }
 
@@ -72,19 +73,28 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 /**
  * "Фоновые" кубки — те, где у клуба пользователя нет несыгранного матча в
  * текущем раунде. Их раунды играются сами, по датам, не позже dateLimit.
+ * ВАЖНО: фон никогда не «перепрыгивает» собственный кубковый матч
+ * пользователя — потолок даты = min(dateLimit, ближайший матч пользователя).
+ * Иначе (например, когда лига уже закончилась) еврокубок мог бы доиграться до
+ * финала раньше, чем пользователь сыграл свой полуфинал.
  * Возвращает собранные жеребьёвки.
  */
 export async function advanceBackgroundCups(
   ctx: SimContext, dateLimit: string, opts: { includeUser?: boolean; ignoreDate?: boolean } = {},
 ): Promise<DrawInfo[]> {
   const draws: DrawInfo[] = [];
-  let safety = opts.ignoreDate ? 40 : 12;
+  let safety = opts.ignoreDate ? 80 : 12;
   while (safety-- > 0) {
     const due = await fetchDue(ctx.seasonId, ctx.userClubId);
+    let limit = opts.ignoreDate ? "9999-12-31" : dateLimit;
+    if (!opts.includeUser) {
+      const userNext = due.filter(d => d.userInvolved).map(d => d.matchDate ?? "0000-00-00").sort()[0];
+      if (userNext && userNext < limit) limit = userNext;
+    }
     let advancedAny = false;
     for (const d of due) {
       if (!opts.includeUser && d.userInvolved) continue;
-      if (!opts.ignoreDate && d.matchDate && d.matchDate > dateLimit) continue;
+      if (d.matchDate && d.matchDate > limit) continue;
       const { ok, data } = await advanceCupOnce(d.competitionId, ctx);
       if (ok) { advancedAny = true; if (data?.draw) draws.push(data.draw); }
     }
@@ -100,10 +110,11 @@ export async function advanceBackgroundCups(
  */
 export async function runTimeline(
   ctx: SimContext, startMatchday: number, target: string | "end", hooks: TimelineHooks = {},
+  startLeagueFinished = false,
 ): Promise<{ leaguePlayed: number; cupRoundsPlayed: number; leagueFinished: boolean; matchday: number; stopped: boolean; draws: DrawInfo[] }> {
   let md = startMatchday;
   let leaguePlayed = 0, cupRoundsPlayed = 0;
-  let leagueFinished = false;
+  let leagueFinished = startLeagueFinished;
   let stopped = false;
   const draws: DrawInfo[] = [];
   const CAP = 500;
@@ -169,7 +180,9 @@ export async function runTimeline(
   // завершён" не даёт доиграть кубки руками: доигрываем всё, что осталось.
   if (leagueFinished && !stopped) {
     const rest = await advanceBackgroundCups(ctx, "9999-12-31", { includeUser: true, ignoreDate: true });
-    draws.push(...rest);
+    // Жеребьёвки этой «досыпки» (финал ЛЧ после конца лиги и т.п.) раньше попадали
+    // только в итоговый массив и НЕ доходили до onDraw — окно жеребьёвки их не показывало.
+    for (const d of rest) { draws.push(d); hooks.onDraw?.(d); }
   }
 
   return { leaguePlayed, cupRoundsPlayed, leagueFinished, matchday: md, stopped, draws };
@@ -182,4 +195,60 @@ export async function getNextEventDate(seasonId: string, userClubId: string, mat
   const leagueDate = leagueFinished ? null : getLeagueMatchdayDate(matchday);
   const candidates = [leagueDate, cupDates[0]].filter((x): x is string => !!x).sort();
   return candidates[0] ?? getLeagueMatchdayDate(matchday);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Пошаговый режим (кнопки «Симулировать» / «Играть кубок»). Логика вынесена из
+// дашборда, чтобы её можно было проверять тестами так же, как автопромотку.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type NextAction =
+  | { kind: "cup"; match: any }
+  | { kind: "league" }
+  | { kind: "none" };
+
+/**
+ * Что пользователь играет следующим: ближайший по календарю несыгранный матч
+ * клуба. Кубок идёт первым, если его дата не позже даты ближайшего тура лиги —
+ * либо если лига уже закончилась (тогда кубки доигрываются без привязки к
+ * датам тура, которого больше нет).
+ */
+export function pickNextAction(calendar: any[], matchday: number, leagueDone: boolean): NextAction {
+  // leagueDone приходит ИЗВНЕ (ответ сервера finished / статус сезона): номер тура
+  // после последнего матча лиги не растёт (nextMatchday остаётся равным последнему),
+  // поэтому по одному matchday закончившуюся лигу не распознать.
+  const unplayed = calendar.filter(m => !m.played);
+  const next = unplayed[0] ?? null;
+  const careerDate = getLeagueMatchdayDate(matchday);
+  if (next && next.source === "cup" && next.competition_id && (leagueDone || !next.match_date || next.match_date <= careerDate)) {
+    return { kind: "cup", match: next };
+  }
+  return leagueDone ? { kind: "none" } : { kind: "league" };
+}
+
+/** Шаг лиги: сыграть тур + фоновые кубки до даты следующего тура. */
+export async function stepLeague(ctx: SimContext & { customTactic?: any }): Promise<{ ok: boolean; data: any; draws: DrawInfo[] }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/season/advance", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        seasonId: ctx.seasonId, userClubId: ctx.userClubId, userTactic: ctx.tactic,
+        userCustomTactic: ctx.tactic === "Custom" ? ctx.customTactic : undefined, userLineup: ctx.lineup.filter(Boolean),
+      }),
+    });
+  } catch (e: any) { return { ok: false, data: { error: e?.message ?? "network error" }, draws: [] }; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, data, draws: [] };
+  const draws = await advanceBackgroundCups(ctx, data.finished ? "9999-12-31" : getLeagueMatchdayDate(data.nextMatchday), { ignoreDate: !!data.finished });
+  return { ok: true, data, draws };
+}
+
+/** Шаг кубка: сыграть раунд турнира пользователя + фоновые кубки до этой даты (или до конца, если лига закончилась). */
+export async function stepCup(ctx: SimContext, match: { competition_id: string; match_date?: string | null }, leagueDone: boolean, careerDate: string): Promise<{ ok: boolean; data: any; draws: DrawInfo[] }> {
+  const { ok, data } = await advanceCupOnce(match.competition_id, ctx);
+  if (!ok) return { ok, data, draws: [] };
+  const draws: DrawInfo[] = data?.draw ? [data.draw] : [];
+  const more = await advanceBackgroundCups(ctx, match.match_date ?? careerDate, { ignoreDate: leagueDone });
+  return { ok: true, data, draws: [...draws, ...more] };
 }
