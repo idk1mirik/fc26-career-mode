@@ -34,6 +34,7 @@ export interface FxCopy {
   carEyebrow: string; carTitle: string; carSave: string; carExport: string; carImport: string; carNone: string; carLoad: string;
   carActive: string; carSaved: string; carMD: string; carNoActive: string; carSavedMsg: string; carMissing: string;
   carImported: (n: number) => string; carBad: string; carDelete: (name: string) => string;
+  carRepair: string; carRepairHint: string; carRepairConfirm: string; carRepairDone: (n: number) => string; carRepairNone: string;
   // жеребьёвка
   drawEyebrow: string; drawDirect: string; drawNext: (n: number) => string; drawGotIt: string; vs: string;
   // поиск
@@ -73,6 +74,9 @@ const EN: FxCopy = {
   carLoad: "Load", carActive: "active", carSaved: "Saved", carMD: "MD", carNoActive: "No active career", carSavedMsg: "Career saved to slot",
   carMissing: "This career no longer exists in the database", carImported: n => `Slots imported: ${n}`, carBad: "Could not read the file",
   carDelete: name => `Delete slot "${name}"? The career itself stays in the database.`,
+  carRepair: "Restore expired players", carRepairHint: "If many players left as free agents after a season change, this returns them (under 35) to their clubs.",
+  carRepairConfirm: "Return free agents under 35 to the clubs they played for last season?",
+  carRepairDone: n => `Restored players: ${n}`, carRepairNone: "Nobody to restore",
   drawEyebrow: "Draw", drawDirect: "Direct qualifiers", drawNext: n => `Next (${n} more)`, drawGotIt: "Got it", vs: "vs",
   srchPlaceholder: "Search players and clubs…", srchMin: "Type at least 2 characters", srchNone: "No results", srchClubs: "Clubs", srchPlayers: "Players",
   undoSelling: (n, s) => `Selling ${n} in ${s}s`, undoBtn: "Undo",
@@ -106,6 +110,9 @@ const RU: FxCopy = {
   carLoad: "Загрузить", carActive: "открыта", carSaved: "Сохранено", carMD: "тур", carNoActive: "Нет активной карьеры", carSavedMsg: "Карьера сохранена в слот",
   carMissing: "Эта карьера больше не существует в базе", carImported: n => `Импортировано слотов: ${n}`, carBad: "Не удалось прочитать файл",
   carDelete: name => `Удалить слот «${name}»? Сама карьера в базе останется.`,
+  carRepair: "Вернуть ушедших игроков", carRepairHint: "Если после смены сезона много игроков стали свободными агентами — вернёт тех, кому нет 35, в их клубы.",
+  carRepairConfirm: "Вернуть свободных агентов младше 35 лет в клубы, где они играли в прошлом сезоне?",
+  carRepairDone: n => `Возвращено игроков: ${n}`, carRepairNone: "Возвращать некого",
   drawEyebrow: "Жеребьёвка", drawDirect: "Проходят напрямую", drawNext: n => `Дальше (ещё ${n})`, drawGotIt: "Понятно", vs: "vs",
   srchPlaceholder: "Поиск игроков и клубов…", srchMin: "Введи хотя бы 2 символа", srchNone: "Ничего не найдено", srchClubs: "Клубы", srchPlayers: "Игроки",
   undoSelling: (n, s) => `Продажа ${n} через ${s} с`, undoBtn: "Отменить",
@@ -131,6 +138,7 @@ const AURORA_EN: Partials = {
   cmpEyebrow: "A closer look", cmpTitle: "Side by Side", cmpFind: "Find a player…", cmpPick: "Choose two players to compare ✦",
   carEyebrow: "Story shelf", carTitle: "My Stories", carSave: "Save this story", carNone: "The shelf is empty — save your current story ✦", carLoad: "Open", carActive: "reading now", carMD: "page",
   carSavedMsg: "Story saved to the shelf ✦", carDelete: name => `Remove "${name}" from the shelf? The story itself stays safe.`,
+  carRepair: "Bring them home ✦", carRepairDone: n => `${n} players came home ✦`, carRepairNone: "Everyone is already where they belong ✦",
   drawEyebrow: "The Draw", drawDirect: "Skipping ahead", drawGotIt: "Lovely ✦",
   srchPlaceholder: "Search for players and teams…",
   undoSelling: (n, s) => `Saying goodbye to ${n} in ${s}s`, undoBtn: "Wait, stay!",
@@ -152,6 +160,7 @@ const AURORA_RU: Partials = {
   cmpEyebrow: "Взгляд поближе", cmpTitle: "Бок о бок", cmpPick: "Выбери двух игроков для сравнения ✦",
   carEyebrow: "Книжная полка", carTitle: "Мои истории", carSave: "Сохранить историю", carNone: "Полка пока пуста — сохрани текущую историю ✦", carLoad: "Открыть", carActive: "читаю сейчас", carMD: "стр.",
   carSavedMsg: "История сохранена на полке ✦", carDelete: name => `Убрать «${name}» с полки? Сама история останется в целости.`,
+  carRepair: "Вернуть домой ✦", carRepairDone: n => `Вернулись домой: ${n} ✦`, carRepairNone: "Все уже на своих местах ✦",
   drawEyebrow: "Жеребьёвка", drawDirect: "Шагают дальше без игры", drawGotIt: "Чудесно ✦",
   srchPlaceholder: "Искать игроков и команды…",
   undoSelling: (n, s) => `Прощаемся с ${n} через ${s} с`, undoBtn: "Постой, останься!",
@@ -180,6 +189,7 @@ const MAL_EN: Partials = {
   carLoad: "LOAD", carActive: "ACTIVE", carSaved: "SAVED", carMD: "MD", carNoActive: ">_ NO ACTIVE CAREER", carSavedMsg: ">_ CAREER STORED",
   carMissing: ">_ ERROR: CAREER NOT FOUND IN DATABASE", carImported: n => `>_ IMPORTED: ${n}`, carBad: ">_ ERROR: UNREADABLE FILE",
   carDelete: name => `Delete slot "${name}"? The career remains in the database.`,
+  carRepair: "RESTORE ROSTER", carRepairDone: n => `>_ RESTORED: ${n}`, carRepairNone: ">_ NOTHING TO RESTORE",
   drawEyebrow: ">_ THE DRAW", drawDirect: "DIRECT ADVANCE", drawNext: n => `NEXT (${n})`, drawGotIt: "ACKNOWLEDGED",
   srchPlaceholder: ">_ search players, clubs…", srchMin: ">_ 2+ characters required", srchNone: ">_ NO MATCHES", srchClubs: "CLUBS", srchPlayers: "PLAYERS",
   undoSelling: (n, s) => `LIQUIDATING ${n.toUpperCase()} IN ${s}s`, undoBtn: "ABORT",
@@ -207,6 +217,7 @@ const MAL_RU: Partials = {
   carLoad: "ЗАГРУЗИТЬ", carActive: "АКТИВНА", carSaved: "СОХРАНЕНО", carMD: "ТУР", carNoActive: ">_ НЕТ АКТИВНОЙ КАРЬЕРЫ", carSavedMsg: ">_ КАРЬЕРА СОХРАНЕНА",
   carMissing: ">_ ОШИБКА: КАРЬЕРА НЕ НАЙДЕНА В БАЗЕ", carImported: n => `>_ ИМПОРТИРОВАНО: ${n}`, carBad: ">_ ОШИБКА: ФАЙЛ НЕ ЧИТАЕТСЯ",
   carDelete: name => `Удалить слот «${name}»? Карьера в базе останется.`,
+  carRepair: "ВЕРНУТЬ СОСТАВ", carRepairDone: n => `>_ ВОССТАНОВЛЕНО: ${n}`, carRepairNone: ">_ ВОССТАНАВЛИВАТЬ НЕКОГО",
   drawEyebrow: ">_ ЖЕРЕБЬЁВКА", drawDirect: "ПРОХОД БЕЗ ИГРЫ", drawNext: n => `ДАЛЕЕ (${n})`, drawGotIt: "ПРИНЯТО",
   srchPlaceholder: ">_ поиск игроков и клубов…", srchMin: ">_ НУЖНО 2+ СИМВОЛА", srchNone: ">_ СОВПАДЕНИЙ НЕТ", srchClubs: "КЛУБЫ", srchPlayers: "ИГРОКИ",
   undoSelling: (n, s) => `ЛИКВИДАЦИЯ ${n.toUpperCase()} ЧЕРЕЗ ${s} С`, undoBtn: "ОТМЕНА",

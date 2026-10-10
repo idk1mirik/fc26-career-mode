@@ -9,7 +9,7 @@
 import { payWeeklyWages, rolloverContracts } from "@/lib/contracts";
 
 export async function POST(req: Request) {
-  const { mode, seasonId, careerId, clubIds, newSeasonId } = await req.json();
+  const { mode, seasonId, careerId, clubIds, newSeasonId, userClubId } = await req.json();
 
   if (mode === "wages") {
     if (!seasonId || !clubIds?.length) {
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     if (!careerId || !seasonId || !newSeasonId) {
       return Response.json({ error: "careerId, seasonId (old) and newSeasonId are required" }, { status: 400 });
     }
-    const result = await rolloverContracts(careerId, seasonId, newSeasonId);
+    const result = await rolloverContracts(careerId, seasonId, newSeasonId, { userClubId });
     return Response.json({ ok: true, ...result });
   }
 

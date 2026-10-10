@@ -11,6 +11,7 @@ export interface CalCopy {
   lgLeague: string; lgCup: string; lgEuro: string; lgSuper: string; lgWindow: string; lgToday: string;
   win: string; draw: string; loss: string; vs: string; home: string; away: string;
   done: (n: number) => string; drawsNote: string; season: string; progress: string; weekdays: string[];
+  locked: string; goLineup: string; goTactic: string;
 }
 
 const EN: CalCopy = {
@@ -24,6 +25,7 @@ const EN: CalCopy = {
   win: "W", draw: "D", loss: "L", vs: "vs", home: "home", away: "away",
   done: n => `${n} event${n === 1 ? "" : "s"} played. Refreshing…`, drawsNote: "Draws are waiting for you on the dashboard", season: "Season", progress: "Season progress",
   weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  locked: "Confirm your lineup and tactic before playing", goLineup: "Lineup", goTactic: "Tactic",
 };
 const RU: CalCopy = {
   title: "Календарь сезона", subtitle: "Выбери любую дату — все матчи (лига и кубки) до неё включительно будут сыграны, и симуляция остановится",
@@ -36,6 +38,7 @@ const RU: CalCopy = {
   win: "В", draw: "Н", loss: "П", vs: "—", home: "дома", away: "в гостях",
   done: n => `Сыграно событий: ${n}. Обновляю…`, drawsNote: "Жеребьёвки ждут тебя на дашборде", season: "Сезон", progress: "Прогресс сезона",
   weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+  locked: "Сначала подтверди состав и тактику", goLineup: "Состав", goTactic: "Тактика",
 };
 const AUR_EN: Partial<CalCopy> = {
   title: "✦ Season Calendar", subtitle: "Pick any day — we'll play everything up to it (league and cups) and gently stop ✦",
@@ -44,6 +47,7 @@ const AUR_EN: Partial<CalCopy> = {
   simulate: "Turn the pages to this day ✦", playing: "Turning page", qNext: "Next match", qWeek: "A week on", qMonth: "A month on", qWindow: "Doors open/close", qEnd: "Final page",
   windowOpen: "Doors are open ✦", windowClosed: "Doors are closed", lgToday: "Next page",
   done: n => `${n} page${n === 1 ? "" : "s"} turned. Refreshing ✦`, drawsNote: "Draws are waiting on the dashboard ✦",
+  locked: "Confirm your dream team and plan before turning pages ✦", goLineup: "Team", goTactic: "Plan",
 };
 const AUR_RU: Partial<CalCopy> = {
   title: "✦ Календарь сезона", subtitle: "Выбери любой день — мы сыграем всё до него (лигу и кубки) и мягко остановимся ✦",
@@ -52,6 +56,7 @@ const AUR_RU: Partial<CalCopy> = {
   simulate: "Перелистнуть до этого дня ✦", playing: "Листаем страницу", qNext: "Ближайший матч", qWeek: "Через неделю", qMonth: "Через месяц", qWindow: "Двери откроются/закроются", qEnd: "Последняя страница",
   windowOpen: "Двери трансферов открыты ✦", windowClosed: "Двери трансферов закрыты", lgToday: "Следующая страница",
   done: n => `Страниц перевёрнуто: ${n}. Обновляю ✦`, drawsNote: "Жеребьёвки ждут на дашборде ✦",
+  locked: "Сначала подтверди команду и план ✦", goLineup: "Команда", goTactic: "План",
 };
 const MAL_EN: Partial<CalCopy> = {
   title: ">_ SEASON CALENDAR", subtitle: ">_ SELECT A DATE — ALL MATCHES (LEAGUE AND CUPS) UP TO IT WILL BE EXECUTED, THEN THE SIM HALTS",
@@ -60,6 +65,7 @@ const MAL_EN: Partial<CalCopy> = {
   qNext: "NEXT FIXTURE", qWeek: "+7 DAYS", qMonth: "+30 DAYS", qWindow: "MARKET TOGGLE", qEnd: "SEASON END",
   windowOpen: "MARKET OPEN", windowClosed: "MARKET SEALED", lgLeague: "LEAGUE", lgCup: "CUP", lgEuro: "EUROPE", lgSuper: "SUPER CUP", lgWindow: "MARKET WINDOW", lgToday: "QUEUED",
   done: n => `>_ ${n} EVENT${n === 1 ? "" : "S"} EXECUTED. REFRESHING…`, drawsNote: ">_ DRAWS PENDING ON DASHBOARD", season: "SEASON", progress: "SEASON PROGRESS",
+  locked: ">_ CONFIRM LINEUP AND DOCTRINE BEFORE EXECUTION", goLineup: "ROSTER", goTactic: "DOCTRINE",
 };
 const MAL_RU: Partial<CalCopy> = {
   title: ">_ КАЛЕНДАРЬ СЕЗОНА", subtitle: ">_ ВЫБЕРИТЕ ДАТУ — ВСЕ МАТЧИ (ЛИГА И КУБКИ) ДО НЕЁ БУДУТ ОТЫГРАНЫ, ЗАТЕМ СИМУЛЯЦИЯ ОСТАНОВИТСЯ",
@@ -68,6 +74,7 @@ const MAL_RU: Partial<CalCopy> = {
   qNext: "БЛИЖАЙШИЙ МАТЧ", qWeek: "+7 ДНЕЙ", qMonth: "+30 ДНЕЙ", qWindow: "СМЕНА РЫНКА", qEnd: "КОНЕЦ СЕЗОНА",
   windowOpen: "РЫНОК ОТКРЫТ", windowClosed: "РЫНОК ЗАПЕЧАТАН", lgLeague: "ЛИГА", lgCup: "КУБОК", lgEuro: "ЕВРОПА", lgSuper: "СУПЕРКУБОК", lgWindow: "ОКНО РЫНКА", lgToday: "В ОЧЕРЕДИ",
   done: n => `>_ ВЫПОЛНЕНО СОБЫТИЙ: ${n}. ОБНОВЛЕНИЕ…`, drawsNote: ">_ ЖЕРЕБЬЁВКИ ЖДУТ НА ДАШБОРДЕ", season: "СЕЗОН", progress: "ПРОГРЕСС СЕЗОНА",
+  locked: ">_ СНАЧАЛА ПОДТВЕРДИТЕ СОСТАВ И ДОКТРИНУ", goLineup: "РОСТЕР", goTactic: "ДОКТРИНА",
 };
 const TABLE: Record<Locale, Record<ThemeKey, CalCopy>> = {
   en: { classic: EN, aurora: { ...EN, ...AUR_EN }, maleficent: { ...EN, ...MAL_EN } },

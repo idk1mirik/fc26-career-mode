@@ -25,6 +25,8 @@ import { getDash } from "@/lib/i18nDash";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
 import { ClubHero } from "@/components/dashboard/ClubHero";
 import { SafeBoundary } from "@/components/SafeBoundary";
+import { ReadinessBanner } from "@/components/dashboard/ReadinessBanner";
+import { getMatchReadiness } from "@/lib/matchReadiness";
 import { PENDING_DRAWS_KEY } from "@/components/CalendarModal";
 import { SeasonStrip } from "@/components/dashboard/SeasonStrip";
 import { MatchHero } from "@/components/dashboard/MatchHero";
@@ -348,7 +350,8 @@ export default function DashboardPage() {
   const glowColor   = clubColor || leagueTheme?.rawColor || "#ffffff";
   const lineupConfirmed = useCareerStore(s => s.lineupConfirmed);
   const tacticConfirmed = useCareerStore(s => s.tacticConfirmed);
-  const readyForSeasonSim = lineupConfirmed && tacticConfirmed;
+  // Запуск ЛЮБОГО матча (тур, кубок, «Весь сезон») — только при подтверждённых составе и тактике
+  const readyForSeasonSim = getMatchReadiness({ lineupValid, lineupConfirmed, tacticConfirmed }).ok;
   const userClub    = selectedClub?.name || "";
 
   useEffect(() => {
@@ -467,7 +470,7 @@ export default function DashboardPage() {
 
   // Симуляция кубкового раунда
   const advanceCupRound = async () => {
-    if (!nextMatch?.competition_id || simulatingCup || !lineupValid) return;
+    if (!nextMatch?.competition_id || simulatingCup || !readyForSeasonSim) return;
     setSimulatingCup(true);
     setApiError(null);
     try {
@@ -482,6 +485,9 @@ export default function DashboardPage() {
         });
         setLastPlayedWasCup(true);
         setShowResults(true);
+        // Как на SofaScore: сразу после матча открываем его окно (состав на поле, события, статистика)
+        const mine = (data.results ?? []).find((x: any) => x.home_club === userClub || x.away_club === userClub);
+        if (mine) setReportFix(mine);
         setUpcomingCupRound(null);
         setPanelCompId(nextMatch.competition_id);
         // Жеребьёвки: этого турнира + всех фоновых, что доигрались вместе с ним
@@ -502,7 +508,7 @@ export default function DashboardPage() {
 
   // Симуляция тура
   const advanceMatchday = async () => {
-    if (!seasonId || simulating) return;
+    if (!seasonId || simulating || !readyForSeasonSim) return;
     setSimulating(true);
     setShowResults(false);
     setApiError(null);
@@ -514,6 +520,8 @@ export default function DashboardPage() {
         setLastPlayedWasCup(false);
         setMatchday(data.nextMatchday);
         setShowResults(true);
+        const mine = (data.results ?? []).find((x: any) => x.home_club === userClub || x.away_club === userClub);
+        if (mine) setReportFix(mine);
         setPanelCompId(null);
         r.draws.forEach(pushDraw);
         if (data.finished) setSeasonFinished(true);
@@ -547,7 +555,7 @@ export default function DashboardPage() {
   // видно прогресс. После КАЖДОГО события таблица обновляется "вживую", а
   // правая панель переключается на играемый турнир.
   const simulateWholeSeason = async () => {
-    if (!seasonId || simulating || simulatingSeason) return;
+    if (!seasonId || simulating || simulatingSeason || !readyForSeasonSim) return;
     setSimulatingSeason(true);
     setApiError(null);
     setLiveMode(true);
@@ -913,12 +921,13 @@ export default function DashboardPage() {
               if (cupReady) {
                 return (
                   <div className="space-y-4">
+                    <ReadinessBanner theme={theme} locale={locale as "en" | "ru"} lineupValid={lineupValid} lineupConfirmed={lineupConfirmed} tacticConfirmed={tacticConfirmed} />
                     <MatchHero theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor} userClub={userClub}
                       home={nextMatch.home_club} away={nextMatch.away_club}
                       competition={nextMatch.competition_name} competitionType={(nextMatch.competition_type as any) ?? "domestic_cup"} round={nextMatch.round_name}
                       dateLabel={formatGameDate(nextMatch.match_date ?? careerDate, seasonNum, locale as "en" | "ru")}
                       playLabel={copy.dashPlayMatch} playingLabel={copy.dashSimulating} playing={simulatingCup}
-                      playDisabled={simulatingCup || !lineupValid} onPlay={advanceCupRound}
+                      playDisabled={simulatingCup || !readyForSeasonSim} onPlay={advanceCupRound}
                       seasonBtn={{
                         label: simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season"),
                         disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim,
@@ -951,6 +960,7 @@ export default function DashboardPage() {
 
               return (
                 <div className="space-y-4">
+                  <ReadinessBanner theme={theme} locale={locale as "en" | "ru"} lineupValid={lineupValid} lineupConfirmed={lineupConfirmed} tacticConfirmed={tacticConfirmed} />
                   {(() => {
                     const myMatch = currentFixtures.find(f => f.home_club === userClub || f.away_club === userClub);
                     const date = getLeagueMatchdayDate(matchday);
@@ -962,7 +972,7 @@ export default function DashboardPage() {
                         ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
                         : (locale === "ru" ? "ИИ доигрывает все оставшиеся матчи сезона, включая твои" : "AI plays every remaining match this season, including yours"),
                     };
-                    const playDisabled = simulating || simulatingSeason || currentFixtures.every(f => f.played) || !lineupValid;
+                    const playDisabled = simulating || simulatingSeason || currentFixtures.every(f => f.played) || !readyForSeasonSim;
                     const help = (
                       <HelpHint id="dash-simulate" theme={theme as any}
                         title={locale === "ru" ? "Симуляция" : "Simulation"}
@@ -990,17 +1000,6 @@ export default function DashboardPage() {
                     );
                   })()}
                   <div className={`p-5 ${ui.card} animate-fade-in-up`}>
-                  {!readyForSeasonSim && !simulatingSeason && !seasonFinished && (
-                    <div className="mb-3 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 flex-wrap"
-                      style={{ background: "rgba(234,179,8,0.1)", color: "#eab308", border: "1px solid rgba(234,179,8,0.3)" }}>
-                      ⚠️ {locale === "ru"
-                        ? "Автопрокрутка всего сезона недоступна, пока не подтверждены:"
-                        : "Whole-season autoplay is locked until you confirm:"}
-                      {!lineupConfirmed && <Link href="/squad" className="underline">{locale === "ru" ? "состав" : "lineup"}</Link>}
-                      {!lineupConfirmed && !tacticConfirmed && <span>·</span>}
-                      {!tacticConfirmed && <Link href="/tactics" className="underline">{locale === "ru" ? "тактику" : "tactic"}</Link>}
-                    </div>
-                  )}
                   {simulatingSeason && (
                     <div className="mb-3 p-4 rounded-2xl animate-fade-in-up" style={{ background: `${glowColor}12`, border: `1px solid ${glowColor}30` }}>
                       <div className="flex items-center justify-between gap-3 mb-2.5">

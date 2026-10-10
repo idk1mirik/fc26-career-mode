@@ -9,7 +9,7 @@
 import { supabase } from "@/lib/supabase";
 import { loadAllPlayers, applyCareerState, invalidateOverridesCache } from "@/lib/players";
 import { applyClubEarning, chargeClub } from "@/lib/finance";
-import { calculateWageDemand, getCareerId, FREE_AGENT_CLUB } from "@/lib/contracts";
+import { calculateWageDemand, getCareerId, FREE_AGENT_CLUB, initialContractYears } from "@/lib/contracts";
 import { checkTransferWindow } from "@/lib/transferWindow";
 
 const POS_MIN: Record<string, number> = { GK: 2, CB: 4, LB: 2, RB: 2, CDM: 2, CM: 3, CAM: 1, LM: 1, RM: 1, LW: 2, RW: 2, ST: 3 };
@@ -132,7 +132,7 @@ export async function runAiTransfers(seasonId: string, userClubId?: string): Pro
       await supabase.from("contracts").insert({
         season_id: seasonId, career_id: oldContract?.career_id ?? careerId,
         club_id: buyer, player_id: pick.id, player_name: pick.name,
-        wage_weekly: wage, years_left: clamp(Math.round(4 - (pick.age - 24) / 4), 1, 5),
+        wage_weekly: wage, years_left: initialContractYears(pick.age, pick.overall),
         squad_role: pick.overall >= avg + 3 ? "important" : "rotation",
         release_clause: null, signing_bonus: 0, happiness: 70, wants_renewal: false, transfer_listed: false,
       });

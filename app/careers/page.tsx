@@ -21,6 +21,7 @@ export default function CareersPage() {
   const currentSeasonId = useCareerStore(s => s.seasonId);
   const [slots, setSlots] = useState<CareerSlot[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { useCareerStore.persist.rehydrate(); useThemeStore.persist.rehydrate(); setHydrated(true); }, []);
@@ -84,6 +85,27 @@ export default function CareersPage() {
           <button onClick={() => fileRef.current?.click()} className={`px-4 py-2.5 text-xs font-black uppercase tracking-wide ${t.btnGhost}`}>{ic.import} {fx.carImport}</button>
           <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => doImport(e.target.files?.[0])} />
         </div>
+        {/* Восстановление игроков, ушедших свободными агентами из-за годовых контрактов */}
+        {currentSeasonId && (
+          <div className={`mb-6 p-4 flex items-center gap-3 flex-wrap ${t.card} ${t.shadow}`}>
+            <div className="min-w-0 flex-1 basis-60">
+              <div className="text-sm font-black">{fx.carRepair}</div>
+              <div className={`text-[11px] mt-0.5 ${t.muted}`}>{fx.carRepairHint}</div>
+            </div>
+            <button disabled={repairing} onClick={async () => {
+              if (!window.confirm(fx.carRepairConfirm)) return;
+              setRepairing(true);
+              try {
+                const r = await fetch("/api/season/repair-contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId: currentSeasonId }) });
+                const d = await r.json();
+                flash(r.ok ? (d.restored > 0 ? fx.carRepairDone(d.restored) : fx.carRepairNone) : (d.error ?? fx.carBad));
+              } catch { flash(fx.carBad); }
+              setRepairing(false);
+            }} className={`px-4 py-2.5 text-xs font-black uppercase tracking-wide disabled:opacity-50 ${t.btnGhost}`}>
+              {repairing ? "…" : fx.carRepair}
+            </button>
+          </div>
+        )}
         {msg && <div className={`mb-4 px-4 py-2.5 text-sm font-bold ${t.cardAlt}`} style={{ color: t.accent }}>{msg}</div>}
 
         {slots.length === 0 ? (

@@ -21,6 +21,8 @@ import { pageTheme } from "@/lib/pageTheme";
 import { getCal } from "@/lib/i18nCal";
 import { icons } from "@/lib/themeFlavor";
 import { getClubLogo } from "@/data/clublogos";
+import { getMatchReadiness } from "@/lib/matchReadiness";
+import Link from "next/link";
 
 export const PENDING_DRAWS_KEY = "fc26-pending-draws";
 
@@ -55,6 +57,10 @@ export default function CalendarModal({ theme, locale, glowColor, onClose }: {
   const customTactic = useCareerStore(s => s.customTactic);
   const lineup = useCareerStore(s => s.lineup);
   const setMatchday = useCareerStore(s => s.setMatchday);
+  const lineupConfirmed = useCareerStore(s => s.lineupConfirmed);
+  const tacticConfirmed = useCareerStore(s => s.tacticConfirmed);
+  // Матчи не стартуют, пока состав и тактика не подтверждены (в календаре — тоже)
+  const readiness = getMatchReadiness({ lineupValid: Object.values(lineup || {}).filter(Boolean).length > 0, lineupConfirmed, tacticConfirmed });
   const userClub = selectedClub?.name || "";
   const leagueClubCount = selectedLeague?.clubs?.length ?? 20;
   const totalMd = totalLeagueMatchdays(leagueClubCount);
@@ -121,7 +127,7 @@ export default function CalendarModal({ theme, locale, glowColor, onClose }: {
   const stopRef = useRef(false);
 
   const simulateToDate = async () => {
-    if (!selected || selected < today || !seasonId || !userClub || simulating) return;
+    if (!selected || selected < today || !seasonId || !userClub || simulating || !readiness.ok) return;
     setSimulating(true); setDoneMsg(null); pausedRef.current = false; stopRef.current = false; setPaused(false);
     let played = 0; const allDraws: DrawInfo[] = [];
     try {
@@ -173,7 +179,7 @@ export default function CalendarModal({ theme, locale, glowColor, onClose }: {
       else if (e.key === "ArrowLeft") { e.preventDefault(); pickDate(addDays(cur, -1)); }
       else if (e.key === "ArrowDown") { e.preventDefault(); pickDate(addDays(cur, 7)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); pickDate(addDays(cur, -7)); }
-      else if (e.key === "Enter" && selected) simulateToDate();
+      else if (e.key === "Enter" && selected && readiness.ok) simulateToDate();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -385,7 +391,16 @@ export default function CalendarModal({ theme, locale, glowColor, onClose }: {
                     </div>
                   </>
                 )}
-                <button onClick={simulateToDate} disabled={!selected || selected < today}
+                {!readiness.ok && (
+                  <div className={`mt-4 p-3 text-xs font-bold flex items-center gap-2 flex-wrap ${isM ? "" : "rounded-xl"}`} style={{ background: `${t.warn}14`, border: `1px solid ${t.warn}55`, color: t.warn }}>
+                    <span>{isM ? "[!]" : "🔒"} {c.locked}</span>
+                    <span className="flex gap-1.5 ml-auto">
+                      {readiness.lineupMissing && <Link href="/squad" onClick={onClose} className={`px-2.5 py-1.5 text-[10px] font-black ${t.btn}`}>{c.goLineup} →</Link>}
+                      {readiness.tacticMissing && <Link href="/tactics" onClick={onClose} className={`px-2.5 py-1.5 text-[10px] font-black ${t.btn}`}>{c.goTactic} →</Link>}
+                    </span>
+                  </div>
+                )}
+                <button onClick={simulateToDate} disabled={!selected || selected < today || !readiness.ok}
                   className={`mt-4 w-full py-3.5 text-sm font-black flex items-center justify-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed transition-transform enabled:hover:scale-[1.01] ${t.btn}`}
                   style={selected && selected >= today ? { boxShadow: `0 10px 28px ${accent}55` } : undefined}>
                   <Play size={15} />{selected ? `${c.simulate.replace(" ✦", "")} — ${formatGameDate(selected, seasonNum, locale)}` : c.simulate}

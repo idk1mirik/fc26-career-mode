@@ -1,3 +1,4 @@
+import { buildTeamStats, type TeamStats } from "./teamStats";
 // lib/playerRatings.ts — SofaScore-style рейтинги игроков после матча (1.0 — 10.0)
 
 export interface PlayerMatchStats {
@@ -81,7 +82,7 @@ export function generateMatchRatings(
   homeGoals: number, awayGoals: number,
   events: any[],
   homeBench: any[] = [], awayBench: any[] = []
-): { home: PlayerRating[]; away: PlayerRating[] } {
+): { home: PlayerRating[]; away: PlayerRating[]; teamStats: TeamStats } {
   const buildStats = (players: any[], side: "home" | "away", goalDiff: number, bench: any[]): PlayerRating[] => {
     const keyOf = (p: any) => p.id ?? p.name;
     const eventKey = (e: any, field: "player" | "player2") =>
@@ -153,10 +154,11 @@ export function generateMatchRatings(
     });
   };
 
-  return {
-    home: buildStats(homeStarters, "home", homeGoals - awayGoals, homeBench),
-    away: buildStats(awayStarters, "away", awayGoals - homeGoals, awayBench),
-  };
+  const home = buildStats(homeStarters, "home", homeGoals - awayGoals, homeBench);
+  const away = buildStats(awayStarters, "away", awayGoals - homeGoals, awayBench);
+  // Командная статистика для окна матча (владение, удары, xG…) — хранится рядом с рейтингами
+  const teamStats = buildTeamStats(homeStarters, awayStarters, homeGoals, awayGoals, { home, away });
+  return { home, away, teamStats };
 }
 
 export function getRatingColor(rating: number): string {

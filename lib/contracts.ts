@@ -70,6 +70,29 @@ export const MAX_NEGOTIATION_ROUNDS = 3;
 export const NEGOTIATION_COOLDOWN_MATCHDAYS = 4;
 export function rand2(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
+/**
+ * Срок контракта при старте карьеры / трансфере ИИ.
+ * Контракт на 1 год — ТОЛЬКО у возрастных (35+). Раньше годовые контракты получали
+ * четверть игроков в расцвете и половина 30–32-летних: через сезон они разом
+ * становились свободными агентами, и клубы (в том числе Реал) теряли пол-состава.
+ */
+export const MIN_AGE_FOR_ONE_YEAR_DEAL = 35;
+export function initialContractYears(age: number, overall = 70): number {
+  if (age >= MIN_AGE_FOR_ONE_YEAR_DEAL) return 1;
+  if (age >= 33) return 2;
+  if (age >= 30) return rand2(2, 3);
+  if (age <= 21) return rand2(3, 5);
+  return overall >= 82 ? rand2(3, 5) : rand2(2, 4);
+}
+
+/** Шанс, что ИИ-клуб продлит истекающий контракт (а не отпустит игрока свободным агентом). */
+export function aiRenewalChance(ageNextSeason: number, overall: number): number {
+  if (ageNextSeason >= 38) return 0;                       // заканчивает карьеру
+  if (ageNextSeason >= MIN_AGE_FOR_ONE_YEAR_DEAL) return 0.4;
+  if (overall >= 78) return 1;                             // ключевых игроков клубы не теряют
+  return ageNextSeason >= 33 ? 0.85 : 0.95;
+}
+
 export function calculateWageDemand(
   player: { overall: number; age: number; avgRatingLastSeason?: number },
   club: { reputationDiscount?: number },
@@ -295,11 +318,19 @@ export async function payWeeklyWages(seasonId: string, clubIds: string[]) {
 }
 
 export async function rolloverContracts(
-  careerId: string, oldSeasonId: string, newSeasonId: string
+  careerId: string, oldSeasonId: string, newSeasonId: string, opts: { userClubId?: string } = {}
 ): Promise<{ expired: Contract[]; carried: number; freedAgents: number; loanReturns: { playerId: string; playerName: string; toClub: string; fromClub: string }[] }> {
   const { data: contracts } = await supabase.from("contracts")
     .select("*").eq("career_id", careerId).eq("season_id", oldSeasonId);
   if (!contracts?.length) return { expired: [], carried: 0, freedAgents: 0, loanReturns: [] };
+
+  // Возраст игроков нужен ИИ-клубам для решения «продлить или отпустить»
+  const ageById = new Map<string, number>();
+  try {
+    const { loadAllPlayers, applyCareerState } = await import("./players");
+    for (const p of await applyCareerState(await loadAllPlayers(), oldSeasonId)) ageById.set(p.id, p.age);
+  } catch (e) { console.error("rolloverContracts: не удалось загрузить возраст игроков", e); }
+  const userClub = (opts.userClubId ?? "").toLowerCase();
 
   const expired: Contract[] = [];
   const loanReturns: { playerId: string; playerName: string; toClub: string; fromClub: string }[] = [];
@@ -307,7 +338,20 @@ export async function rolloverContracts(
   const overrideWrites: any[] = [];
 
   for (const c of contracts as Contract[]) {
-    const newYears = c.years_left - 1;
+    let newYears = c.years_left - 1;
+
+    // Аренда заканчивается всегда — игрок возвращается к своему клубу (а не становится
+    // свободным агентом, как было, когда годовая аренда «истекала» как обычный контракт).
+    if (c.is_loan && c.loan_parent_club && newYears <= 0) newYears = Math.max(2, newYears);
+
+    // ИИ-клубы продлевают большинство истекающих контрактов — иначе составы пустели бы.
+    // Клуб пользователя этого не получает: продлевать игроков должен сам пользователь.
+    if (newYears <= 0 && c.club_id !== FREE_AGENT_CLUB && c.club_id?.toLowerCase() !== userClub) {
+      const age = (ageById.get(c.player_id) ?? 27) + 1;
+      const ovr = (c as any).overall ?? (c.squad_role === "star" ? 84 : c.squad_role === "important" ? 78 : 70);
+      if (Math.random() < aiRenewalChance(age, ovr)) newYears = initialContractYears(age, ovr);
+    }
+
     if (newYears <= 0) {
       expired.push({ ...c, years_left: 0 });
       toInsert.push({
@@ -367,7 +411,7 @@ export async function createContractsForClub(
     season_id: seasonId, career_id: careerId, club_id: clubId,
     player_id: p.id ?? p.name, player_name: p.name,
     wage_weekly: p.wage > 0 ? p.wage : Math.max(500, Math.round((p.overall * p.overall * 0.3) / 500) * 500),
-    years_left: p.age >= 33 ? 1 : p.age >= 30 ? rand2(1, 2) : p.age <= 21 ? rand2(2, 4) : rand2(1, 4),
+    years_left: initialContractYears(p.age ?? 27, p.overall ?? 70),
     squad_role: p.overall >= 82 ? "star" : p.overall >= 76 ? "important" : p.age <= 20 ? "prospect" : "rotation",
     release_clause: null, signing_bonus: 0, happiness: 70,
     wants_renewal: false, transfer_listed: false,

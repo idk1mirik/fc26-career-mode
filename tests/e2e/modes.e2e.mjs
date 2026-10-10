@@ -118,6 +118,13 @@ async function assertComplete(c, draws, errors, label) {
     assert.ok(table.length >= 8, `${label}: ${comp.name}: пустая таблица лига-фазы (${table.length})`);
     assert.ok(table.every(r => r.played >= 6), `${label}: ${comp.name}: в таблице лига-фазы не все сыграли свои матчи`);
   }
+  // окно матча «как SofaScore»: у сыгранных матчей сохранена командная статистика и оценки игроков
+  const withStats = (db.get("fixtures") ?? []).filter(f => f.ratings?.teamStats);
+  assert.ok(withStats.length >= (db.get("fixtures") ?? []).length * 0.95, `${label}: teamStats сохранён только у ${withStats.length} матчей лиги`);
+  const sample = withStats[0].ratings;
+  assert.equal(sample.teamStats.home.possession + sample.teamStats.away.possession, 100, `${label}: владение не даёт 100%`);
+  assert.ok(sample.home.length >= 11 && sample.away.length >= 11, `${label}: нет оценок игроков`);
+  assert.ok(cupFx.filter(f => f.played && !f.is_bye && f.ratings?.teamStats).length > 0, `${label}: у кубковых матчей нет teamStats`);
   const cal = await getCalendar(c);
   assert.equal(cal.filter(m => !m.played).length, 0, `${label}: в календаре клуба остались несыгранные матчи`);
   assert.equal((await fetchDue(c.seasonId, c.clubId)).length, 0, `${label}: остались due-турниры`);

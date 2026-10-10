@@ -132,7 +132,7 @@ export async function POST(req: Request) {
   // явно (с уменьшенным years_left). У кого контракт кончился — не переносится,
   // такие игроки станут доступны как свободные агенты на трансферном рынке.
   try {
-    const rollover = await rolloverContracts(careerId, oldSeasonId, newSeason.id);
+    const rollover = await rolloverContracts(careerId, oldSeasonId, newSeason.id, { userClubId: oldSeason.club_id });
 
     // Уведомления только по клубу пользователя — у ИИ-клубов тоже истекают
     // контракты и возвращаются займы каждый сезон, но это не должно
