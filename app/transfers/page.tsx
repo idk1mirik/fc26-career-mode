@@ -4,6 +4,7 @@ import { ThemedSelect } from "@/components/ThemedSelect";
 import { pageTheme } from "@/lib/pageTheme";
 import { getFx } from "@/lib/i18nFx";
 import { PageBanner } from "@/components/PageKit";
+import { OffersPanel, useOffers } from "@/components/transfers/OffersPanel";
 import { icons } from "@/lib/themeFlavor";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/app/store/careerStore";
@@ -200,7 +201,7 @@ export default function TransfersPage() {
   // Сентябрь-декабрь (8-11) → следующее окно зимнее; февраль-июль (1-6) → следующее летнее
   const nextOpen = currentMonth >= 8 ? copy.transfersNextOpenWinter : copy.transfersNextOpenPreseason;
 
-  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents" | "favorites" | "buybacks">("market");
+  const [tab, setTab] = useState<"market" | "squad" | "listings" | "agents" | "favorites" | "buybacks" | "offers">("market");
   const [buybacks, setBuybacks] = useState<any[]>([]);
   const [myContracts, setMyContracts] = useState<any[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
@@ -400,6 +401,9 @@ export default function TransfersPage() {
     id: l.player_id, name: l.player_name,
   });
 
+  // Предложения клубов за моих игроков (счётчик на вкладке + сама вкладка)
+  const { data: offersData, loading: offersLoading, reload: reloadOffers } = useOffers(seasonId, userClub, tab === "offers" ? 1 : 0);
+
   const showToast = (text: string, kind: "ok" | "err") => {
     setToast({ text, kind });
     setTimeout(() => setToast(null), 3500);
@@ -597,6 +601,7 @@ export default function TransfersPage() {
                 { icon: ic.news, label: ru ? "Окно" : "Window", value: isOpen ? (ru ? "Открыто" : "Open") : (ru ? "Закрыто" : "Closed"), color: isOpen ? pt.good : pt.warn },
                 { icon: ic.rating, label: ru ? "Избранное" : "Favorites", value: favoritePlayerIds.length },
                 { icon: ic.trophy, label: ru ? "Выкупы" : "Buybacks", value: buybacks.length },
+                { icon: ic.rumor, label: ru ? "Предложения" : "Offers", value: offersData?.offers.length ?? 0, color: (offersData?.offers.length ?? 0) > 0 ? pt.warn : undefined },
               ]} />
           );
         })()}
@@ -607,6 +612,11 @@ export default function TransfersPage() {
             className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === "favorites" ? ui.tabActive : ui.tabIdle}`}>
             ★ {locale === "ru" ? "Избранное" : "Favorites"} ({favoritePlayerIds.length})
           </button>
+          <button onClick={() => setTab("offers")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === "offers" ? ui.tabActive : ui.tabIdle}`}>
+            📨 {locale === "ru" ? "Предложения" : "Offers"}
+            {(offersData?.offers.length ?? 0) > 0 && <span className="ml-1 min-w-[18px] px-1.5 py-0.5 text-[10px] rounded-full bg-red-500 text-white leading-none text-center">{offersData!.offers.length}</span>}
+          </button>
           {buybacks.length > 0 && (
             <button onClick={() => setTab("buybacks")}
               className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === "buybacks" ? ui.tabActive : ui.tabIdle}`}>
@@ -615,7 +625,13 @@ export default function TransfersPage() {
           )}
         </div>
 
-        {tab === "buybacks" ? (
+        {tab === "offers" ? (
+          seasonId ? (
+            <OffersPanel seasonId={seasonId} clubId={userClub} theme={theme} locale={locale as "en" | "ru"} data={offersData} loading={offersLoading} reload={reloadOffers}
+              playersById={playersById}
+              onTransferDone={(msg, kind) => { showToast(msg, kind); if (kind === "ok") loadAll(); }} />
+          ) : null
+        ) : tab === "buybacks" ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {buybacks.map((c: any) => (
               <TransferPlayerCard key={c.player_id}

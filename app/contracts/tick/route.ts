@@ -7,6 +7,7 @@
 // (app/api/season/new/route.ts). Этот роут нужен, если понадобится вручную
 // дёрнуть тик (тест/отладка/ремонт).
 import { payWeeklyWages, rolloverContracts } from "@/lib/contracts";
+import { loadAgeMap } from "@/lib/contracts-server";
 
 export async function POST(req: Request) {
   const { mode, seasonId, careerId, clubIds, newSeasonId, userClubId } = await req.json();
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     if (!careerId || !seasonId || !newSeasonId) {
       return Response.json({ error: "careerId, seasonId (old) and newSeasonId are required" }, { status: 400 });
     }
-    const result = await rolloverContracts(careerId, seasonId, newSeasonId, { userClubId });
+    const result = await rolloverContracts(careerId, seasonId, newSeasonId, { userClubId, ageById: await loadAgeMap(seasonId) });
     return Response.json({ ok: true, ...result });
   }
 

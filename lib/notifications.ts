@@ -21,7 +21,9 @@ export type NotificationType =
   | "contract_negotiation_ready"
   | "league_promoted"
   | "league_relegated"
-  | "cup_draw";
+  | "cup_draw"
+  | "transfer_offer"
+  | "transfer_offer_result";
 
 export interface PushNotificationParams {
   seasonId: string;

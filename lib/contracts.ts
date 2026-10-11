@@ -318,18 +318,16 @@ export async function payWeeklyWages(seasonId: string, clubIds: string[]) {
 }
 
 export async function rolloverContracts(
-  careerId: string, oldSeasonId: string, newSeasonId: string, opts: { userClubId?: string } = {}
+  careerId: string, oldSeasonId: string, newSeasonId: string, opts: { userClubId?: string; ageById?: Map<string, number> } = {}
 ): Promise<{ expired: Contract[]; carried: number; freedAgents: number; loanReturns: { playerId: string; playerName: string; toClub: string; fromClub: string }[] }> {
   const { data: contracts } = await supabase.from("contracts")
     .select("*").eq("career_id", careerId).eq("season_id", oldSeasonId);
   if (!contracts?.length) return { expired: [], carried: 0, freedAgents: 0, loanReturns: [] };
 
-  // Возраст игроков нужен ИИ-клубам для решения «продлить или отпустить»
-  const ageById = new Map<string, number>();
-  try {
-    const { loadAllPlayers, applyCareerState } = await import("./players");
-    for (const p of await applyCareerState(await loadAllPlayers(), oldSeasonId)) ageById.set(p.id, p.age);
-  } catch (e) { console.error("rolloverContracts: не удалось загрузить возраст игроков", e); }
+  // Возраст игроков нужен ИИ-клубам для решения «продлить или отпустить». Его передаёт
+  // вызывающий серверный код (lib/contracts-server.ts → loadAgeMap): сам этот файл попадает
+  // в браузерный бандл, и тянуть сюда lib/players.ts (там fs) нельзя — сборка на Vercel падала.
+  const ageById = opts.ageById ?? new Map<string, number>();
   const userClub = (opts.userClubId ?? "").toLowerCase();
 
   const expired: Contract[] = [];

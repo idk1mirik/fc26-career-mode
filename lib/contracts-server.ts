@@ -113,3 +113,11 @@ export async function releasePlayer(seasonId: string, clubId: string, playerId: 
 
   return true;
 }
+
+/** Возраст всех игроков в сезоне (с учётом старения по ходу карьеры) — для решений ИИ при продлении контрактов. */
+export async function loadAgeMap(seasonId: string): Promise<Map<string, number>> {
+  const { loadAllPlayers, applyCareerState } = await import("./players");
+  const map = new Map<string, number>();
+  for (const p of await applyCareerState(await loadAllPlayers(), seasonId)) map.set(p.id, p.age);
+  return map;
+}

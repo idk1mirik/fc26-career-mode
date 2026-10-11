@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { pageTheme } from "@/lib/pageTheme";
 import { getFx } from "@/lib/i18nFx";
+import { getTr } from "@/lib/i18nTransfers";
+import Link from "next/link";
 import { icons } from "@/lib/themeFlavor";
 import { SectionTitle } from "@/components/ThemeBits";
 import { getClubLogo } from "@/data/clublogos";
@@ -14,6 +16,7 @@ export function NewsWidget({ seasonId, clubId, theme, locale, refreshKey = 0 }: 
 }) {
   const t = pageTheme(theme);
   const fx = getFx(locale, theme);
+  const tr = getTr(locale, theme);
   const ic = icons(theme);
   const isM = theme === "maleficent";
   const [data, setData] = useState<{ transfers: any[]; rumors: any[] } | null>(null);
@@ -39,16 +42,24 @@ export function NewsWidget({ seasonId, clubId, theme, locale, refreshKey = 0 }: 
 
       {data.rumors.length > 0 && (
         <div className="mb-4">
-          <div className={`text-[10px] mb-2 ${t.eyebrow} ${t.muted}`}>{ic.rumor} {fx.newsRumours}</div>
+          <div className={`text-[10px] mb-2 flex items-center justify-between ${t.eyebrow} ${t.muted}`}>
+            <span>{ic.rumor} {fx.newsRumours}</span>
+            <Link href="/transfers" className="underline opacity-70 hover:opacity-100 normal-case tracking-normal">{tr.tab} →</Link>
+          </div>
           <div className="space-y-2">
             {data.rumors.map((r: any) => (
               <div key={r.playerId} className={`flex items-center gap-2.5 p-2.5 ${t.cardAlt}`}>
                 <img src={getClubLogo(r.club ?? "")} alt="" className="w-7 h-7 object-contain shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
                 <div className="min-w-0 flex-1 text-[12px] leading-snug">
                   <b className="break-words">{r.club}</b>{" "}
-                  <span className={t.muted}>{fx.interested}</span>{" "}
+                  <span className={t.muted}>{r.level === "hot" ? tr.lvHot : r.level === "strong" ? tr.lvStrong : r.level === "watching" ? tr.lvWatching : fx.interested}</span>{" "}
                   <b className="break-words" style={{ color: t.accent }}>{r.playerName}</b>
-                  <span className={`block text-[10px] ${t.muted}`}>OVR {r.overall} · {fmt(r.value)}</span>
+                  <span className={`block text-[10px] ${t.muted}`}>OVR {r.overall} · {fmt(r.value)}{r.league ? ` · ${r.league}` : ""}</span>
+                  {Array.isArray(r.reasons) && r.reasons.length > 0 && (
+                    <span className={`block text-[10px] ${t.muted}`}>
+                      {r.reasons.slice(0, 2).map((k: string) => ({ upgrade: tr.rUpgrade, form: tr.rForm, young: tr.rYoung, listed: tr.rListed, expiring: tr.rExpiring, unsettled: tr.rUnsettled } as Record<string, string>)[k]).filter(Boolean).join(" · ")}
+                    </span>
+                  )}
                 </div>
                 <span className="shrink-0 text-xs tracking-tight" style={isM ? { color: t.accent } : undefined}>{heat(r.heat)}</span>
               </div>

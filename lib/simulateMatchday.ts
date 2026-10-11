@@ -11,7 +11,7 @@ import { awardLeaguePositionPrizes } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 import { payWeeklyWages } from "@/lib/contracts";
 import { notifyReadyNegotiations } from "@/lib/contracts-server";
-import { resolveListingOffers } from "@/lib/transferOffers";
+import { runInterestTick } from "@/lib/transferInterestServer";
 import { runAiTransfers } from "@/lib/aiTransfers";
 
 function getStartingXI(players: any[]): any[] {
@@ -259,7 +259,9 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   // Каждый прошедший тур — новая попытка ИИ-клубов сделать предложение по
   // открытым лотам на рынке (см. lib/transferOffers.ts). Best-effort: сбой
   // здесь не должен ломать симуляцию тура.
-  try { await resolveListingOffers(seasonId); } catch (e) { console.error("resolveListingOffers failed", e); }
+  // Интерес клубов к моим игрокам → слухи и предложения (сначала мне, потом решает игрок).
+  // Раньше выставленный лот продавался автоматически и только внутри лиги игрока.
+  if (userClubId) { try { await runInterestTick(seasonId, userClubId, matchday); } catch (e) { console.error("runInterestTick failed", e); } }
   // ИИ-клубы тоже торгуют между собой и подписывают свободных агентов
   try { await runAiTransfers(seasonId, userClubId); } catch (e) { console.error("runAiTransfers failed", e); }
   try { await notifyReadyNegotiations(seasonId, matchday); } catch (e) { console.error("notifyReadyNegotiations failed", e); }
