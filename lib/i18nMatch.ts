@@ -10,6 +10,11 @@ export interface MatchCopy {
   goal: string; assist: string; ownGoal: string; subIn: string; subOut: string; injury: string; yellowCard: string; redCard: string;
   rating: string; minutes: string; col: { g: string; a: string; kp: string; tkl: string; sav: string; min: string };
   close: string; shootout: string; derivedNote: string;
+  pTitle: string; secTop: string; secAttack: string; secPassing: string; secDefending: string; secDuels: string; secGoalkeeper: string; secDiscipline: string;
+  sMinutes: string; sGoals: string; sAssists: string; sShots: string; sShotsOn: string; sXg: string; sXa: string; sKeyPasses: string; sDribbles: string;
+  sAccPasses: string; sTouches: string; sLost: string; sTackles: string; sInterceptions: string; sClearances: string; sBlocked: string; sDuels: string; sAerial: string;
+  sSaves: string; sConceded: string; sPunches: string; sClaims: string; sFouls: string; sFouled: string; sYellow: string; sRed: string;
+  pEvents: string; pNoDetails: string; pSubOn: (min: number) => string; pSubOff: (min: number) => string; pStarter: string; pBench: string;
 }
 
 const EN: MatchCopy = {
@@ -21,6 +26,11 @@ const EN: MatchCopy = {
   goal: "Goal", assist: "Assist", ownGoal: "Own goal", subIn: "In", subOut: "Out", injury: "Injury", yellowCard: "Yellow card", redCard: "Red card",
   rating: "Rating", minutes: "Min", col: { g: "G", a: "A", kp: "KP", tkl: "TKL", sav: "SAV", min: "MIN" },
   close: "Close", shootout: "Penalty shootout", derivedNote: "Based on events and player stats",
+  pTitle: "Player statistics", secTop: "Summary", secAttack: "Attack", secPassing: "Passing", secDefending: "Defending", secDuels: "Duels", secGoalkeeper: "Goalkeeping", secDiscipline: "Discipline",
+  sMinutes: "Minutes played", sGoals: "Goals", sAssists: "Assists", sShots: "Total shots", sShotsOn: "Shots on target", sXg: "Expected goals (xG)", sXa: "Expected assists (xA)", sKeyPasses: "Key passes", sDribbles: "Successful dribbles",
+  sAccPasses: "Accurate passes", sTouches: "Touches", sLost: "Possession lost", sTackles: "Tackles", sInterceptions: "Interceptions", sClearances: "Clearances", sBlocked: "Blocked shots", sDuels: "Duels won", sAerial: "Aerial duels won",
+  sSaves: "Saves", sConceded: "Goals conceded", sPunches: "Punches", sClaims: "High claims", sFouls: "Fouls committed", sFouled: "Was fouled", sYellow: "Yellow card", sRed: "Red card",
+  pEvents: "Match events", pNoDetails: "Detailed statistics are not available for this match", pSubOn: m => `Came on in the ${m}'`, pSubOff: m => `Subbed off in the ${m}'`, pStarter: "Starter", pBench: "Substitute",
 };
 const RU: MatchCopy = {
   details: "События", lineups: "Составы", stats: "Статистика", players: "Оценки игроков",
@@ -31,11 +41,16 @@ const RU: MatchCopy = {
   goal: "Гол", assist: "Передача", ownGoal: "Автогол", subIn: "Вышел", subOut: "Ушёл", injury: "Травма", yellowCard: "Жёлтая карточка", redCard: "Красная карточка",
   rating: "Оценка", minutes: "Мин", col: { g: "Г", a: "П", kp: "КП", tkl: "ОТБ", sav: "СЕЙ", min: "МИН" },
   close: "Закрыть", shootout: "Серия пенальти", derivedNote: "По событиям и статистике игроков",
+  pTitle: "Статистика игрока", secTop: "Сводка", secAttack: "Атака", secPassing: "Передачи", secDefending: "Защита", secDuels: "Единоборства", secGoalkeeper: "Игра вратаря", secDiscipline: "Дисциплина",
+  sMinutes: "Минут на поле", sGoals: "Голы", sAssists: "Передачи", sShots: "Удары", sShotsOn: "Удары в створ", sXg: "Ожидаемые голы (xG)", sXa: "Ожидаемые передачи (xA)", sKeyPasses: "Ключевые передачи", sDribbles: "Успешные дриблинги",
+  sAccPasses: "Точные передачи", sTouches: "Касания", sLost: "Потери мяча", sTackles: "Отборы", sInterceptions: "Перехваты", sClearances: "Выносы", sBlocked: "Заблокированные удары", sDuels: "Выигранные единоборства", sAerial: "Выигранные верховые",
+  sSaves: "Сейвы", sConceded: "Пропущенные голы", sPunches: "Отбитые кулаками", sClaims: "Выходы на перехват", sFouls: "Фолы", sFouled: "Фолов в его сторону", sYellow: "Жёлтая карточка", sRed: "Красная карточка",
+  pEvents: "События матча", pNoDetails: "Подробной статистики по этому матчу нет", pSubOn: m => `Вышел на замену на ${m}-й минуте`, pSubOff: m => `Заменён на ${m}-й минуте`, pStarter: "Основной состав", pBench: "Запасной",
 };
-const AUR_EN: Partial<MatchCopy> = { details: "✦ Story", lineups: "✦ Dream teams", stats: "✦ Numbers", players: "✦ Stars", ft: "The end", ht: "Interval", potm: "Star of the match", substitutes: "Fresh faces", noEvents: "A quiet match ✦", matchStats: "The match in numbers", shootout: "Penalty tale" };
-const AUR_RU: Partial<MatchCopy> = { details: "✦ История", lineups: "✦ Команды мечты", stats: "✦ Цифры", players: "✦ Звёзды", ft: "Конец", ht: "Перерыв", potm: "Звезда матча", substitutes: "Свежие лица", noEvents: "Тихий матч ✦", matchStats: "Матч в цифрах", shootout: "Пенальти-сказка" };
-const MAL_EN: Partial<MatchCopy> = { details: ">_ LOG", lineups: ">_ ROSTERS", stats: ">_ DATA", players: ">_ RATINGS", ft: "FULL TIME", ht: "HALF TIME", et: "EXTRA TIME", potm: "MVP", substitutes: "RESERVES", noEvents: ">_ NO EVENTS", noLineup: ">_ NO ROSTER DATA", noStats: ">_ NO DATA", matchStats: ">_ MATCH DATA", close: "CLOSE", shootout: "PENALTY SHOOTOUT" };
-const MAL_RU: Partial<MatchCopy> = { details: ">_ ЖУРНАЛ", lineups: ">_ РОСТЕРЫ", stats: ">_ ДАННЫЕ", players: ">_ ОЦЕНКИ", ft: "КОНЕЦ МАТЧА", ht: "ПЕРЕРЫВ", et: "ДОП. ВРЕМЯ", potm: "MVP", substitutes: "РЕЗЕРВ", noEvents: ">_ СОБЫТИЙ НЕТ", noLineup: ">_ НЕТ ДАННЫХ О СОСТАВЕ", noStats: ">_ НЕТ ДАННЫХ", matchStats: ">_ ДАННЫЕ МАТЧА", close: "ЗАКРЫТЬ", shootout: "СЕРИЯ ПЕНАЛЬТИ" };
+const AUR_EN: Partial<MatchCopy> = { pTitle: "✦ Player in detail", secAttack: "✦ Attack", details: "✦ Story", lineups: "✦ Dream teams", stats: "✦ Numbers", players: "✦ Stars", ft: "The end", ht: "Interval", potm: "Star of the match", substitutes: "Fresh faces", noEvents: "A quiet match ✦", matchStats: "The match in numbers", shootout: "Penalty tale" };
+const AUR_RU: Partial<MatchCopy> = { pTitle: "✦ Игрок подробно", secAttack: "✦ Атака", details: "✦ История", lineups: "✦ Команды мечты", stats: "✦ Цифры", players: "✦ Звёзды", ft: "Конец", ht: "Перерыв", potm: "Звезда матча", substitutes: "Свежие лица", noEvents: "Тихий матч ✦", matchStats: "Матч в цифрах", shootout: "Пенальти-сказка" };
+const MAL_EN: Partial<MatchCopy> = { pTitle: ">_ ASSET DATA", secTop: ">_ SUMMARY", secAttack: ">_ OFFENSE", secPassing: ">_ DISTRIBUTION", secDefending: ">_ DEFENSE", secDuels: ">_ DUELS", secGoalkeeper: ">_ GOALKEEPING", secDiscipline: ">_ DISCIPLINE", pEvents: ">_ EVENT LOG", details: ">_ LOG", lineups: ">_ ROSTERS", stats: ">_ DATA", players: ">_ RATINGS", ft: "FULL TIME", ht: "HALF TIME", et: "EXTRA TIME", potm: "MVP", substitutes: "RESERVES", noEvents: ">_ NO EVENTS", noLineup: ">_ NO ROSTER DATA", noStats: ">_ NO DATA", matchStats: ">_ MATCH DATA", close: "CLOSE", shootout: "PENALTY SHOOTOUT" };
+const MAL_RU: Partial<MatchCopy> = { pTitle: ">_ ДАННЫЕ ИГРОКА", secTop: ">_ СВОДКА", secAttack: ">_ АТАКА", secPassing: ">_ ПЕРЕДАЧИ", secDefending: ">_ ЗАЩИТА", secDuels: ">_ ЕДИНОБОРСТВА", secGoalkeeper: ">_ ВРАТАРЬ", secDiscipline: ">_ ДИСЦИПЛИНА", pEvents: ">_ ЖУРНАЛ СОБЫТИЙ", details: ">_ ЖУРНАЛ", lineups: ">_ РОСТЕРЫ", stats: ">_ ДАННЫЕ", players: ">_ ОЦЕНКИ", ft: "КОНЕЦ МАТЧА", ht: "ПЕРЕРЫВ", et: "ДОП. ВРЕМЯ", potm: "MVP", substitutes: "РЕЗЕРВ", noEvents: ">_ СОБЫТИЙ НЕТ", noLineup: ">_ НЕТ ДАННЫХ О СОСТАВЕ", noStats: ">_ НЕТ ДАННЫХ", matchStats: ">_ ДАННЫЕ МАТЧА", close: "ЗАКРЫТЬ", shootout: "СЕРИЯ ПЕНАЛЬТИ" };
 const TABLE: Record<Locale, Record<ThemeKey, MatchCopy>> = {
   en: { classic: EN, aurora: { ...EN, ...AUR_EN }, maleficent: { ...EN, ...MAL_EN } },
   ru: { classic: RU, aurora: { ...RU, ...AUR_RU }, maleficent: { ...RU, ...MAL_RU } },

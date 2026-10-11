@@ -121,6 +121,13 @@ async function assertComplete(c, draws, errors, label) {
   // окно матча «как SofaScore»: у сыгранных матчей сохранена командная статистика и оценки игроков
   const withStats = (db.get("fixtures") ?? []).filter(f => f.ratings?.teamStats);
   assert.ok(withStats.length >= (db.get("fixtures") ?? []).length * 0.95, `${label}: teamStats сохранён только у ${withStats.length} матчей лиги`);
+  // подробная статистика игроков в БД сходится с командной (окно игрока «как SofaScore»)
+  for (const f of withStats.slice(0, 40)) {
+    const sum = (list, k) => list.reduce((a, p) => a + (p.stats?.[k] ?? 0), 0);
+    assert.equal(sum(f.ratings.home, "shots"), f.ratings.teamStats.home.shots, `${label}: удары игроков не сходятся с командными`);
+    assert.equal(sum(f.ratings.away, "passes"), f.ratings.teamStats.away.passes, `${label}: передачи игроков не сходятся с командными`);
+    assert.ok(f.ratings.home.every(p => typeof p.stats.touches === "number"), `${label}: у игрока нет подробной статистики`);
+  }
   const sample = withStats[0].ratings;
   assert.equal(sample.teamStats.home.possession + sample.teamStats.away.possession, 100, `${label}: владение не даёт 100%`);
   assert.ok(sample.home.length >= 11 && sample.away.length >= 11, `${label}: нет оценок игроков`);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ratingColor, layoutLineup, playerBadges, scorersOf, buildTimeline, derivedStats, playerOfTheMatch, teamAvgRating } from "@/lib/matchView";
+import { playerStatSections, ratingColor, layoutLineup, playerBadges, scorersOf, buildTimeline, derivedStats, playerOfTheMatch, teamAvgRating } from "@/lib/matchView";
 import { buildTeamStats } from "@/lib/teamStats";
 
 const P = (name, position, rating = 7, overall = 80, extra = {}) => ({ name, playerId: name, position, rating, overall, ...extra });
@@ -79,4 +79,23 @@ test("игрок матча и средняя оценка", () => {
   assert.equal(best.player.name, "c"); assert.equal(best.side, "away");
   assert.ok(Math.abs(teamAvgRating(home) - 7.25) < 1e-9);
   assert.equal(playerOfTheMatch([], []), null);
+});
+
+test("окно игрока: блоки статистики по позиции и по наличию данных", () => {
+  const full = { goals: 1, assists: 0, keyPasses: 2, saves: 0, tackles: 3, interceptions: 1, mistakes: 0, minutesPlayed: 90, shots: 4, shotsOnTarget: 2, xg: 0.8, xa: 0.2,
+    passes: 40, accuratePasses: 34, touches: 60, possessionLost: 6, dribblesAttempted: 5, dribblesWon: 3, duelsTotal: 12, duelsWon: 7, aerialTotal: 4, aerialWon: 2,
+    clearances: 1, blockedShots: 0, foulsCommitted: 2, wasFouled: 1 };
+  const out = playerStatSections(full, "ST", { yellow: true, red: false });
+  assert.deepEqual(out.map(x => x.key), ["attack", "passing", "defending", "duels", "discipline"]);
+  const pass = out.find(x => x.key === "passing").rows[0];
+  assert.deepEqual([pass.key, pass.kind, pass.value, pass.total], ["accuratePasses", "ratio", 34, 40]);
+  assert.ok(out.find(x => x.key === "discipline").rows.some(r => r.key === "yellow"));
+
+  const gk = playerStatSections({ ...full, saves: 4, goalsConceded: 1, punches: 1, highClaims: 2 }, "GK");
+  assert.ok(gk.some(x => x.key === "goalkeeper") && !gk.some(x => x.key === "attack") && !gk.some(x => x.key === "duels"));
+
+  // старый матч: только базовые показатели — окно короче, без выдуманных нулей
+  const old = playerStatSections({ goals: 0, assists: 0, keyPasses: 1, saves: 0, tackles: 2, interceptions: 1, mistakes: 0, minutesPlayed: 90 }, "CM");
+  assert.deepEqual(old.map(x => x.key), ["attack", "defending"]);
+  assert.equal(playerStatSections(null, "CM").length, 0);
 });

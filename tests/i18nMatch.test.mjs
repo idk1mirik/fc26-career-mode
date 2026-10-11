@@ -7,6 +7,7 @@ test("окно матча: полный набор текстов в каждо�
     const c = getMatchCopy(l, t);
     assert.deepEqual(Object.keys(c).sort(), base);
     assert.deepEqual(Object.keys(c.col).sort(), ["a", "g", "kp", "min", "sav", "tkl"]);
-    for (const k of base) assert.ok(typeof c[k] === "object" || (typeof c[k] === "string" && c[k].length > 0), `${l}/${t}/${k}`);
+    for (const k of base) assert.ok(typeof c[k] === "function" || typeof c[k] === "object" || (typeof c[k] === "string" && c[k].length > 0), `${l}/${t}/${k}`);
+    assert.ok(c.pSubOn(63).includes("63") && c.pSubOff(80).includes("80"));
   }
 });

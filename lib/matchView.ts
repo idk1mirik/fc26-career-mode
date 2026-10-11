@@ -110,3 +110,33 @@ export function derivedStats(ratings: { home?: any[]; away?: any[] } | null | un
   });
   return { home: mk("home", ratings?.home, ratings?.away), away: mk("away", ratings?.away, ratings?.home) };
 }
+
+// ── Подробная статистика игрока (окно игрока, как на SofaScore) ──
+export type StatKind = "num" | "ratio" | "dec";
+export interface StatRow { key: string; kind: StatKind; value: number; total?: number }
+export interface StatSection { key: "attack" | "passing" | "defending" | "duels" | "goalkeeper" | "discipline"; rows: StatRow[] }
+
+/** Какие блоки статистики показывать игроку. Показываются только те показатели, что реально есть в данных
+ *  (у матчей до обновления их меньше — окно просто короче, без выдуманных нулей). */
+export function playerStatSections(stats: any, position?: string, badges?: { yellow: boolean; red: boolean }): StatSection[] {
+  if (!stats) return [];
+  const has = (k: string) => typeof stats[k] === "number";
+  const row = (key: string, kind: StatKind = "num", total?: string): StatRow | null =>
+    has(key) && (total === undefined || has(total)) ? { key, kind, value: stats[key], ...(total ? { total: stats[total] } : {}) } : null;
+  const pick = (...rows: (StatRow | null)[]) => rows.filter((r): r is StatRow => !!r);
+  const gk = position === "GK";
+  const out: StatSection[] = [];
+  if (!gk) out.push({ key: "attack", rows: pick(row("shots"), row("shotsOnTarget"), row("xg", "dec"), row("xa", "dec"), row("keyPasses"), row("dribblesWon", "ratio", "dribblesAttempted")) });
+  out.push({ key: "passing", rows: pick(row("accuratePasses", "ratio", "passes"), row("touches"), row("possessionLost")) });
+  if (!gk) {
+    out.push({ key: "defending", rows: pick(row("tackles"), row("interceptions"), row("clearances"), row("blockedShots")) });
+    out.push({ key: "duels", rows: pick(row("duelsWon", "ratio", "duelsTotal"), row("aerialWon", "ratio", "aerialTotal")) });
+  } else {
+    out.push({ key: "goalkeeper", rows: pick(row("saves"), row("goalsConceded"), row("punches"), row("highClaims")) });
+  }
+  const disc = pick(row("foulsCommitted"), row("wasFouled"));
+  if (badges?.yellow) disc.push({ key: "yellow", kind: "num", value: 1 });
+  if (badges?.red) disc.push({ key: "red", kind: "num", value: 1 });
+  out.push({ key: "discipline", rows: disc });
+  return out.filter(sec => sec.rows.length > 0);
+}

@@ -18,6 +18,7 @@ import { icons } from "@/lib/themeFlavor";
 import { Stars } from "@/components/ThemeBits";
 import { ratingColor, layoutLineup, playerBadges, scorersOf, buildTimeline, derivedStats, playerOfTheMatch, teamAvgRating, type Side } from "@/lib/matchView";
 import { formatGameDate } from "@/lib/seasonLabel";
+import { MatchPlayerModal } from "@/components/MatchPlayerModal";
 
 type Tab = "details" | "lineups" | "stats" | "players";
 
@@ -47,6 +48,7 @@ export function MatchReportModal({ fix, theme, onClose, locale = "en" }: { fix: 
   const hasLineup = homeList.length > 0 || awayList.length > 0;
   const [tab, setTab] = useState<Tab>("details");
   const [lineSide, setLineSide] = useState<Side>("home");
+  const [picked, setPicked] = useState<{ p: any; side: Side } | null>(null);   // игрок, чью подробную статистику смотрим
 
   const hadET = events.some(e => e.minute > 90);
   const timeline = useMemo(() => buildTimeline(events, hadET), [events, hadET]);
@@ -91,7 +93,7 @@ export function MatchReportModal({ fix, theme, onClose, locale = "en" }: { fix: 
         const p = s.player; if (!p) return null;
         const b = playerBadges(events, lineSide, p.name, p.playerId);
         return (
-          <div key={i} className="absolute flex flex-col items-center" style={{ left: `${s.x}%`, top: `${s.y}%`, transform: "translate(-50%,-50%)", width: 78 }}>
+          <div key={i} onClick={() => setPicked({ p, side: lineSide })} className="absolute flex flex-col items-center cursor-pointer transition-transform hover:scale-110 hover:z-10" style={{ left: `${s.x}%`, top: `${s.y}%`, transform: "translate(-50%,-50%)", width: 78 }}>
             <div className="relative">
               <Photo name={p.name} size={46} ring={sideColor(lineSide)} fallback={p.position ?? "?"} />
               <span className="absolute -bottom-1.5 -right-4"><RatingBadge value={p.rating} size="sm" /></span>
@@ -138,7 +140,7 @@ export function MatchReportModal({ fix, theme, onClose, locale = "en" }: { fix: 
   const PlayerRow = ({ p, side, showStats }: { p: any; side: Side; showStats?: boolean }) => {
     const b = playerBadges(events, side, p.name, p.playerId); const st = p.stats ?? {};
     return (
-      <div className={`flex items-center gap-2.5 py-2 px-2 ${t.hover}`}>
+      <div onClick={() => setPicked({ p, side })} className={`flex items-center gap-2.5 py-2 px-2 cursor-pointer ${t.hover}`}>
         <Photo name={p.name} size={34} ring={sideColor(side)} fallback={p.position ?? "?"} />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-bold truncate flex items-center gap-1.5">
@@ -211,7 +213,7 @@ export function MatchReportModal({ fix, theme, onClose, locale = "en" }: { fix: 
           {tab === "details" && (
             <div>
               {potm && (
-                <div className={`flex items-center gap-3 p-3 mb-5 ${t.cardAlt}`} style={{ boxShadow: `0 0 0 1px ${ratingColor(potm.player.rating)}55` }}>
+                <div onClick={() => setPicked({ p: potm.player, side: potm.side })} className={`flex items-center gap-3 p-3 mb-5 cursor-pointer transition-transform hover:scale-[1.01] ${t.cardAlt}`} style={{ boxShadow: `0 0 0 1px ${ratingColor(potm.player.rating)}55` }}>
                   <Photo name={potm.player.name} size={48} ring={ratingColor(potm.player.rating)} fallback={potm.player.position ?? "?"} />
                   <div className="min-w-0 flex-1">
                     <div className={`text-[9px] font-black ${t.eyebrow} ${t.muted}`}>{ic.awards} {m.potm}</div>
@@ -328,6 +330,7 @@ export function MatchReportModal({ fix, theme, onClose, locale = "en" }: { fix: 
           ))}
         </div>
       </div>
+      {picked && <MatchPlayerModal player={picked.p} side={picked.side} club={clubOf(picked.side)} events={events} theme={theme} locale={locale} onClose={() => setPicked(null)} />}
     </div>
   );
 

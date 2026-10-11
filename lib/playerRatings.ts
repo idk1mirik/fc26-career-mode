@@ -1,4 +1,5 @@
 import { buildTeamStats, type TeamStats } from "./teamStats";
+import { enrichPlayerStats, type ExtStats } from "./playerMatchStats";
 // lib/playerRatings.ts — SofaScore-style рейтинги игроков после матча (1.0 — 10.0)
 
 export interface PlayerMatchStats {
@@ -27,7 +28,7 @@ export interface PlayerRating {
   stats?: {
     goals: number; assists: number; keyPasses: number; saves: number;
     tackles: number; interceptions: number; mistakes: number; minutesPlayed: number;
-  };
+  } & Partial<ExtStats>;   // подробности (удары, передачи, дриблинг…) есть только у матчей после обновления
 }
 
 // Базовый рейтинг зависит от позиции (нейтральный, до учёта результата матча)
@@ -158,6 +159,9 @@ export function generateMatchRatings(
   const away = buildStats(awayStarters, "away", awayGoals - homeGoals, awayBench);
   // Командная статистика для окна матча (владение, удары, xG…) — хранится рядом с рейтингами
   const teamStats = buildTeamStats(homeStarters, awayStarters, homeGoals, awayGoals, { home, away });
+  // Подробные показатели игроков: раздаём командные цифры между игроками (суммы сходятся)
+  enrichPlayerStats(home, teamStats.home, teamStats.away.fouls, awayGoals);
+  enrichPlayerStats(away, teamStats.away, teamStats.home.fouls, homeGoals);
   return { home, away, teamStats };
 }
 
