@@ -22,6 +22,8 @@ export default function CareersPage() {
   const [slots, setSlots] = useState<CareerSlot[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
+  const [health, setHealth] = useState<any>(null);
+  const [checking, setChecking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { useCareerStore.persist.rehydrate(); useThemeStore.persist.rehydrate(); setHydrated(true); }, []);
@@ -106,6 +108,32 @@ export default function CareersPage() {
             </button>
           </div>
         )}
+        {/* Диагностика базы: какие таблицы/миграции на месте */}
+        <div className={`mb-6 p-4 ${t.card} ${t.shadow}`}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="min-w-0 flex-1 basis-60">
+              <div className="text-sm font-black">{locale === "ru" ? "Диагностика базы данных" : "Database check"}</div>
+              <div className={`text-[11px] mt-0.5 ${t.muted}`}>{locale === "ru" ? "Покажет, какие миграции Supabase ещё не применены." : "Shows which Supabase migrations are not applied yet."}</div>
+            </div>
+            <button disabled={checking} onClick={async () => {
+              setChecking(true);
+              try { const r = await fetch("/api/health"); setHealth(await r.json()); } catch { setHealth({ error: true }); }
+              setChecking(false);
+            }} className={`px-4 py-2.5 text-xs font-black uppercase tracking-wide disabled:opacity-50 ${t.btnGhost}`}>{checking ? "…" : (locale === "ru" ? "Проверить" : "Check")}</button>
+          </div>
+          {health && !health.error && (
+            <div className="mt-3 text-[12px] space-y-1">
+              <div className="font-black" style={{ color: health.ok ? t.good : t.warn }}>
+                {health.ok ? (locale === "ru" ? "Всё на месте" : "Everything is in place") : (locale === "ru" ? `Не хватает: ${health.problems.length}` : `Missing: ${health.problems.length}`)}
+              </div>
+              {health.missingMigrations?.length > 0 && (
+                <div style={{ color: t.warn }}>{locale === "ru" ? "Выполни в SQL-редакторе Supabase:" : "Run in the Supabase SQL editor:"} {health.missingMigrations.join(", ")}</div>
+              )}
+              {health.problems.map((p: any) => <div key={p.table} className={t.muted}>✕ {p.name} ({p.table}){p.migration ? ` → ${p.migration}` : ""}</div>)}
+            </div>
+          )}
+          {health?.error && <div className="mt-3 text-[12px]" style={{ color: t.bad }}>{locale === "ru" ? "Не удалось выполнить проверку" : "The check failed"}</div>}
+        </div>
         {msg && <div className={`mb-4 px-4 py-2.5 text-sm font-bold ${t.cardAlt}`} style={{ color: t.accent }}>{msg}</div>}
 
         {slots.length === 0 ? (

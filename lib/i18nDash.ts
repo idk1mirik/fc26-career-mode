@@ -9,6 +9,7 @@ export interface DashCopy {
   qaReady: string; qaSetup: string; qaWindowOpen: string; qaWindowClosed: string; qaExpiring: (n: number) => string; qaAllGood: string;
   zoneCL: string; zoneEL: string; zoneRel: string; zoneMid: string; ofLeague: (total: number) => string;
   fixturesTitle: string; sim: string; simSeason: string;
+  qaTired: (n: number) => string;
   readyTitle: string; readyNeedLineup: string; readyNeedTactic: string; readyGoLineup: string; readyGoTactic: string; readyLocked: string;
 }
 
@@ -20,6 +21,7 @@ const EN: DashCopy = {
   qaReady: "Ready", qaSetup: "Set up", qaWindowOpen: "Window open", qaWindowClosed: "Window closed", qaExpiring: n => `${n} contract${n === 1 ? "" : "s"} expiring`, qaAllGood: "All set",
   zoneCL: "Champions League zone", zoneEL: "Europa League zone", zoneRel: "Relegation zone", zoneMid: "Mid-table", ofLeague: t => `of ${t}`,
   fixturesTitle: "Fixtures", sim: "Simulate", simSeason: "Sim season",
+  qaTired: n => `${n} tired starter${n === 1 ? "" : "s"}`,
   readyTitle: "Matches are locked", readyNeedLineup: "Confirm your lineup", readyNeedTactic: "Confirm your tactic", readyGoLineup: "Open Squad", readyGoTactic: "Open Tactics",
   readyLocked: "Confirm your lineup and tactic first",
 };
@@ -32,6 +34,7 @@ const RU: DashCopy = {
   qaReady: "Готов", qaSetup: "Настроить", qaWindowOpen: "Окно открыто", qaWindowClosed: "Окно закрыто", qaExpiring: n => `Истекает контрактов: ${n}`, qaAllGood: "Всё в порядке",
   zoneCL: "Зона Лиги чемпионов", zoneEL: "Зона Лиги Европы", zoneRel: "Зона вылета", zoneMid: "Середина таблицы", ofLeague: t => `из ${t}`,
   fixturesTitle: "Матчи", sim: "Симулировать", simSeason: "Весь сезон",
+  qaTired: n => `Устали в старте: ${n}`,
   readyTitle: "Матчи заблокированы", readyNeedLineup: "Подтверди состав", readyNeedTactic: "Подтверди тактику", readyGoLineup: "Открыть состав", readyGoTactic: "Открыть тактику",
   readyLocked: "Сначала подтверди состав и тактику",
 };
@@ -44,6 +47,7 @@ const AUR_EN: Partial<DashCopy> = {
   qaReady: "Ready ✦", qaSetup: "Needs love", qaWindowOpen: "Doors are open ✦", qaWindowClosed: "Doors are closed", qaExpiring: n => `${n} promise${n === 1 ? "" : "s"} ending soon`, qaAllGood: "All is well ✦",
   zoneCL: "Champions' sky", zoneEL: "Europa meadow", zoneRel: "Stormy waters", zoneMid: "Quiet middle",
   fixturesTitle: "Today's pages", sim: "Play the page", simSeason: "Whole chapter",
+  qaTired: n => `${n} sleepy hero${n === 1 ? "" : "es"} ✦`,
   readyTitle: "The pages are sealed ✦", readyNeedLineup: "Confirm your dream team", readyNeedTactic: "Confirm your game plan", readyGoLineup: "Open the team", readyGoTactic: "Open the plan", readyLocked: "Confirm your dream team and plan first ✦",
 };
 const AUR_RU: Partial<DashCopy> = {
@@ -54,6 +58,7 @@ const AUR_RU: Partial<DashCopy> = {
   qaReady: "Готово ✦", qaSetup: "Нужна забота", qaWindowOpen: "Двери открыты ✦", qaWindowClosed: "Двери закрыты", qaExpiring: n => `Обещаний на исходе: ${n}`, qaAllGood: "Всё хорошо ✦",
   zoneCL: "Небо чемпионов", zoneEL: "Луг Лиги Европы", zoneRel: "Штормовые воды", zoneMid: "Тихая середина",
   fixturesTitle: "Страницы дня", sim: "Сыграть страницу", simSeason: "Вся глава",
+  qaTired: n => `Сонных героев: ${n} ✦`,
   readyTitle: "Страницы запечатаны ✦", readyNeedLineup: "Подтверди команду мечты", readyNeedTactic: "Подтверди план игры", readyGoLineup: "Открыть команду", readyGoTactic: "Открыть план", readyLocked: "Сначала подтверди команду и план ✦",
 };
 const MAL_EN: Partial<DashCopy> = {
@@ -64,6 +69,7 @@ const MAL_EN: Partial<DashCopy> = {
   qaReady: "ARMED", qaSetup: "UNCONFIGURED", qaWindowOpen: "MARKET OPEN", qaWindowClosed: "MARKET SEALED", qaExpiring: n => `${n} CONTRACT${n === 1 ? "" : "S"} EXPIRING`, qaAllGood: "ALL SYSTEMS NOMINAL",
   zoneCL: "CHAMPIONS ZONE", zoneEL: "EUROPA ZONE", zoneRel: "DANGER ZONE", zoneMid: "MID-TABLE",
   fixturesTitle: ">_ FIXTURES", sim: "EXECUTE", simSeason: "EXECUTE SEASON",
+  qaTired: n => `FATIGUED UNITS: ${n}`,
   readyTitle: ">_ EXECUTION LOCKED", readyNeedLineup: "LINEUP NOT CONFIRMED", readyNeedTactic: "DOCTRINE NOT CONFIRMED", readyGoLineup: "OPEN ROSTER", readyGoTactic: "OPEN DOCTRINE", readyLocked: ">_ CONFIRM LINEUP AND DOCTRINE FIRST",
 };
 const MAL_RU: Partial<DashCopy> = {
@@ -74,6 +80,7 @@ const MAL_RU: Partial<DashCopy> = {
   qaReady: "ГОТОВ", qaSetup: "НЕ НАСТРОЕН", qaWindowOpen: "РЫНОК ОТКРЫТ", qaWindowClosed: "РЫНОК ЗАПЕЧАТАН", qaExpiring: n => `КОНТРАКТОВ НА ИСХОДЕ: ${n}`, qaAllGood: "ВСЕ СИСТЕМЫ В НОРМЕ",
   zoneCL: "ЗОНА ЧЕМПИОНОВ", zoneEL: "ЗОНА ЛИГИ ЕВРОПЫ", zoneRel: "ЗОНА ВЫЛЕТА", zoneMid: "СЕРЕДИНА ТАБЛИЦЫ",
   fixturesTitle: ">_ МАТЧИ", sim: "ВЫПОЛНИТЬ", simSeason: "ВЕСЬ СЕЗОН",
+  qaTired: n => `УСТАЛЫХ ЕДИНИЦ: ${n}`,
   readyTitle: ">_ ЗАПУСК ЗАБЛОКИРОВАН", readyNeedLineup: "СОСТАВ НЕ ПОДТВЕРЖДЁН", readyNeedTactic: "ДОКТРИНА НЕ ПОДТВЕРЖДЕНА", readyGoLineup: "ОТКРЫТЬ РОСТЕР", readyGoTactic: "ОТКРЫТЬ ДОКТРИНУ", readyLocked: ">_ СНАЧАЛА ПОДТВЕРДИТЕ СОСТАВ И ДОКТРИНУ",
 };
 

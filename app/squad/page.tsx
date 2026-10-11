@@ -8,6 +8,7 @@ import { getLeagueTheme } from "@/constants/themes";
 import { useClubColor } from "@/app/hooks/useClubColor";
 import { normalizeName } from "@/lib/normalize";
 import DashboardLayout from "@/app/lib/DashboardLayout";
+import { fitnessLabel } from "@/lib/fitness";
 import { PageBanner } from "@/components/PageKit";
 import { pageTheme } from "@/lib/pageTheme";
 import { icons } from "@/lib/themeFlavor";
@@ -187,10 +188,12 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
 });
 
 // ─── PLAYER ROW ───────────────────────────────────────────────────────────────
-const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating, theme, captainId }: {
+const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, emptySlots, status, avgRating, theme, captainId, fit, locale }: {
   p: any; ui: typeof THEME_UI["classic"]; onOpen: (p: any) => void; isXI?: boolean; onAddToLineup?: (p: any) => void;
   emptySlots?: { slot: string; label: string }[];
   status?: { status: string; matches_out: number; yellow_cards: number } | null;
+  fit?: number;   // свежесть игрока 0–100 (нет данных — игрок ещё не уставал)
+  locale?: string;
   avgRating?: number | null;
   theme?: string; captainId?: string | null;
 }) {
@@ -225,6 +228,12 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
             {isUnavailable && (
               <span className="ml-2 text-[9px] font-black text-red-400 uppercase">
                 {status!.status === "injured" ? `OUT ${status!.matches_out}` : `BAN ${status!.matches_out}`}
+              </span>
+            )}
+            {fit !== undefined && fit < 85 && !isUnavailable && (
+              <span className="ml-2 text-[9px] font-black uppercase px-1 py-0.5 rounded" title={locale === "ru" ? "Свежесть: усталый игрок играет слабее и чаще травмируется" : "Freshness: a tired player performs worse and gets injured more often"}
+                style={{ background: `${fit >= 70 ? "#eab308" : fit >= 50 ? "#f97316" : "#ef4444"}22`, color: fit >= 70 ? "#eab308" : fit >= 50 ? "#f97316" : "#ef4444" }}>
+                {fitnessLabel(fit) === "ok" ? "FIT" : fitnessLabel(fit) === "tired" ? (locale === "ru" ? "УСТАЛ" : "TIRED") : (locale === "ru" ? "ИЗМОТАН" : "DRAINED")} {fit}
               </span>
             )}
           </div>
@@ -435,6 +444,7 @@ export default function SquadPage() {
 
   const [players, setPlayers]           = useState<any[]>([]);
   const [playerStatuses, setPlayerStatuses] = useState<any[]>([]);
+  const [fitnessMap, setFitnessMap] = useState<Record<string, number>>({});
   const [seasonStats, setSeasonStats] = useState<any[]>([]);
   const [hydrated, setHydrated]         = useState(false);
   const [modalPlayer, setModalPlayer]   = useState<any>(null);
@@ -508,6 +518,8 @@ export default function SquadPage() {
     if (seasonId) {
       fetch(`/api/player-status?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
         .then(r => r.ok ? r.json() : null).then(data => { if (data) setPlayerStatuses(data.statuses ?? []); }).catch(() => {});
+      fetch(`/api/fitness?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setFitnessMap(data.fitness ?? {}); }).catch(() => {});
 
       fetch(`/api/season-stats?seasonId=${seasonId}&clubId=${encodeURIComponent(selectedClub.name)}`)
         .then(r => r.ok ? r.json() : null).then(data => { if (data) setSeasonStats(data.stats ?? []); }).catch(() => {});
@@ -906,6 +918,7 @@ export default function SquadPage() {
                     <PlayerRow key={p.id ?? p.name} p={p} ui={ui}
                       onOpen={openModal} onAddToLineup={handleAddToLineup} emptySlots={emptySlots}
                       status={playerStatuses.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))}
+                      fit={fitnessMap[String(p.id ?? p.name)]} locale={locale}
                       avgRating={seasonStats.find(s => (s.player_id || s.player_name) === (p.id ?? p.name))?.avg_rating} theme={theme} captainId={captainId} />
                   ))}
               </div>

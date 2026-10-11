@@ -255,6 +255,7 @@ export default function DashboardPage() {
   // при несыгранных кубковых матчах.
   const [seasonFinished, setSeasonFinished] = useState(false);
   const [calendarLoaded, setCalendarLoaded] = useState(false);
+  const [fitnessMap, setFitnessMap] = useState<Record<string, number>>({});
   const [seasonTrophies, setSeasonTrophies] = useState<any[]>([]);
   const [allCompetitionResults, setAllCompetitionResults] = useState<any[]>([]);
   const [reportFix, setReportFix] = useState<any>(null);
@@ -429,6 +430,14 @@ export default function DashboardPage() {
   const showFinish = seasonFinished && calendarLoaded && !userCupsPending;
   // Что играем следующим: общая логика с тестами (lib/simClient.ts)
   const nextAction = useMemo(() => pickNextAction(calendar, matchday, seasonFinished), [calendar, matchday, seasonFinished]);
+
+  // Усталость стартового состава (для плитки «Состав» на дашборде)
+  useEffect(() => {
+    if (!seasonId || !userClub) return;
+    fetch(`/api/fitness?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
+      .then(r => r.ok ? r.json() : null).then(d => { if (d) setFitnessMap(d.fitness ?? {}); }).catch(() => {});
+  }, [seasonId, userClub, matchday]);
+
 
   // Стартовые жеребьёвки сезона: первый раунд кубка страны и соперники клуба в
   // лига-фазе еврокубков — показываем один раз за сезон, пока ничего не сыграно.
@@ -873,7 +882,8 @@ export default function DashboardPage() {
                 matchday={matchday} totalMatchdays={totalMd} form={recentForm} /></SafeBoundary>
               <SafeBoundary name="QuickActions"><QuickActions theme={theme} locale={locale as "en" | "ru"} lineupOk={lineupValid} lineupConfirmed={lineupConfirmed} tacticConfirmed={tacticConfirmed}
                 tacticName={tactic || "—"} windowOpen={isTransferWindowOpenForDate(getLeagueMatchdayDate(matchday))}
-                expiring={clubContracts.filter((c: any) => c.years_left <= 1).length} /></SafeBoundary>
+                expiring={clubContracts.filter((c: any) => c.years_left <= 1).length}
+                tired={Object.values(lineup || {}).filter((p: any) => p && (fitnessMap[String(p.id ?? p.name)] ?? 100) < 70).length} /></SafeBoundary>
               <SafeBoundary name="SeasonStrip"><SeasonStrip theme={theme} locale={locale as "en" | "ru"} calendar={calendar} userClub={userClub} onOpen={setReportFix} /></SafeBoundary>
             </>
           );

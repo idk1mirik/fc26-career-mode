@@ -6,13 +6,13 @@ import { getDash } from "@/lib/i18nDash";
 import { pageTheme } from "@/lib/pageTheme";
 import { Users, Target, ArrowLeftRight, Shield } from "lucide-react";
 
-export function QuickActions({ theme, locale, lineupOk, lineupConfirmed, tacticConfirmed, tacticName, windowOpen, expiring }: {
-  theme: string; locale: "en" | "ru"; lineupOk: boolean; lineupConfirmed: boolean; tacticConfirmed: boolean; tacticName: string; windowOpen: boolean; expiring: number;
+export function QuickActions({ theme, locale, lineupOk, lineupConfirmed, tacticConfirmed, tacticName, windowOpen, expiring, tired = 0 }: {
+  theme: string; locale: "en" | "ru"; lineupOk: boolean; lineupConfirmed: boolean; tacticConfirmed: boolean; tacticName: string; windowOpen: boolean; expiring: number; tired?: number;
 }) {
   const t = pageTheme(theme); const d = getDash(locale, theme);
   const isM = theme === "maleficent", isA = theme === "aurora";
   const tiles = [
-    { href: "/squad", icon: Users, label: d.qaLineup, ok: lineupOk && lineupConfirmed, status: lineupOk && lineupConfirmed ? d.qaReady : d.qaSetup },
+    { href: "/squad", icon: Users, label: d.qaLineup, ok: lineupOk && lineupConfirmed && tired === 0, status: !(lineupOk && lineupConfirmed) ? d.qaSetup : tired > 0 ? d.qaTired(tired) : d.qaReady, warn: tired > 0 },
     { href: "/tactics", icon: Target, label: d.qaTactic, ok: tacticConfirmed, status: tacticConfirmed ? tacticName : d.qaSetup },
     { href: "/transfers", icon: ArrowLeftRight, label: d.qaTransfers, ok: windowOpen, status: windowOpen ? d.qaWindowOpen : d.qaWindowClosed, neutral: !windowOpen },
     { href: "/squad", icon: Shield, label: d.qaSquad, ok: expiring === 0, status: expiring === 0 ? d.qaAllGood : d.qaExpiring(expiring), warn: expiring > 0 },

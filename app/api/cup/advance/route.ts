@@ -20,6 +20,8 @@ import { simulatePenaltyShootout, PenaltyShootoutResult } from "@/lib/penaltySho
 import { getKnockoutLegDate } from "@/lib/seasonCalendar";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
+import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessServer";
+import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { applyClubEarning } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 import { pushNotification } from "@/lib/notifications";
@@ -212,6 +214,12 @@ export async function POST(req: Request) {
     : null;
   const isDecisiveSingleMatch = !isNewFormatEuro || stageInfoForDecisiveness?.isFinal === true;
 
+  // Усталость клуба пользователя: кубковый матч в один тур с лигой — без восстановления между ними
+  const { data: seasonRow } = await supabase.from("seasons").select("matchday").eq("id", comp.season_id).maybeSingle();
+  const seasonMatchday: number = seasonRow?.matchday ?? 1;
+  const fitness = userClubId ? await loadFitness(comp.season_id, userClubId, seasonMatchday) : new Map<string, number>();
+  const fitnessRows: any[] = [];
+
   for (const fix of safeFixtures) {
     const homeUnavailable = unavailableByClub[fix.home_club] ?? new Set();
     const awayUnavailable = unavailableByClub[fix.away_club] ?? new Set();
@@ -235,8 +243,8 @@ export async function POST(req: Request) {
       const userCaptainId = userStanding?.captain_id ?? null;
 
       const result = userIsHome
-        ? simulateMatch(cleanUserLineup, oppXI, userTac, oppTac, userCaptainId, null)
-        : simulateMatch(oppXI, cleanUserLineup, oppTac, userTac, null, userCaptainId);
+        ? simulateMatch(applyFitness(cleanUserLineup, fitness), oppXI, userTac, oppTac, userCaptainId, null)
+        : simulateMatch(oppXI, applyFitness(cleanUserLineup, fitness), oppTac, userTac, null, userCaptainId);
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const hr = getRating(fix.home_club);
@@ -259,8 +267,13 @@ export async function POST(req: Request) {
     const homeBench = homeAvailable.filter((p: any) => !homeStartIds.has(keyOf(p)));
     const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(keyOf(p)));
 
-    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
+    const riskById = isUserMatch ? injuryRiskById([...homeStarters, ...awayStarters].map((p: any) => String(p.id ?? p.name)), fitness) : undefined;
+    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
+    if (isUserMatch && userClubId) {
+      const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;
+      fitnessRows.push(...fitnessRowsAfterMatch(comp.season_id, userClubId, seasonMatchday, mySide, playersByClub[userClubId] ?? [], fitness));
+    }
 
     // Победитель ЭТОГО матча. Для решающих матчей (см. isDecisiveSingleMatch
     // выше) ничья пробивается настоящей серией пенальти с реальными
@@ -297,7 +310,7 @@ export async function POST(req: Request) {
     accumulateSeasonStats(events, "away", fix.away_club, ratings.away, seasonStatsAccum);
   }
 
-  await Promise.all([Promise.all(fixtureWrites), persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum)]);
+  await Promise.all([Promise.all(fixtureWrites), persistStatusAndStats(comp.season_id, allClubs, statusUpdates, seasonStatsAccum), saveFitness(fitnessRows)]);
 
   // Тик-даун травм (глобально) и дисквалификаций именно этого турнира —
   // раньше кубковые туры вообще не декрементили matches_out, из-за чего

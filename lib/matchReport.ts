@@ -48,7 +48,9 @@ function pickWeightedScorer(players: any[]): any | undefined {
 export function generateMatchEvents(
   homeGoals: number, awayGoals: number,
   homeStarters: any[], awayStarters: any[],
-  homeBench: any[] = [], awayBench: any[] = []
+  homeBench: any[] = [], awayBench: any[] = [],
+  // Риск травмы по игроку (id → множитель): усталые чаще получают травмы. Без параметра — как раньше.
+  opts: { riskById?: Record<string, number> } = {},
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const usedMinutes = new Set<number>();
@@ -117,10 +119,17 @@ export function generateMatchEvents(
   // скамейка; если скамейки нет — команда доигрывает вдесятером. Игрок, которого
   // заменили из-за травмы, больше не может забить/получить карточку после этой
   // минуты — раньше мог, это и была основная жалоба. ──
-  if (Math.random() < 0.15) {
-    const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
+  const risk = (p: any) => opts.riskById?.[keyOf(p)] ?? 1;
+  const allStarters = [...homeStarters, ...awayStarters].filter(p => keyOf(p) !== (redPlayerKey ?? undefined));
+  const avgRisk = allStarters.length ? allStarters.reduce((a, p) => a + risk(p), 0) / allStarters.length : 1;
+  if (Math.random() < Math.min(0.45, 0.15 * avgRisk)) {
+    // команду выбираем пропорционально суммарному риску её стартеров, игрока — пропорционально его риску
+    const sumHome = homeStarters.reduce((a, p) => a + risk(p), 0), sumAway = awayStarters.reduce((a, p) => a + risk(p), 0);
+    const team: "home" | "away" = Math.random() * (sumHome + sumAway) < sumHome ? "home" : "away";
     const pool = (team === "home" ? homeStarters : awayStarters).filter(p => keyOf(p) !== (redPlayerKey ?? undefined));
-    const player = pick(pool);
+    const totalRisk = pool.reduce((a, p) => a + risk(p), 0);
+    let roll = Math.random() * totalRisk;
+    const player = pool.find(p => (roll -= risk(p)) <= 0) ?? pick(pool);
     if (player) {
       const minute = randomMinute(5, 85);
       events.push({ minute, type: "injury", team, player: player.name, playerId: player.id });

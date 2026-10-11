@@ -12,6 +12,8 @@ import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStat
 import { payWeeklyWages } from "@/lib/contracts";
 import { notifyReadyNegotiations } from "@/lib/contracts-server";
 import { runInterestTick } from "@/lib/transferInterestServer";
+import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessServer";
+import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { runAiTransfers } from "@/lib/aiTransfers";
 
 function getStartingXI(players: any[]): any[] {
@@ -120,6 +122,9 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     }
   }
 
+  // Усталость игроков клуба пользователя: влияет на силу в матче и на риск травм
+  const fitness = userClubId ? await loadFitness(seasonId, userClubId, matchday) : new Map<string, number>();
+
   const ratingCache: Record<string, number> = {};
   const getRating = (clubId: string) => {
     if (ratingCache[clubId] !== undefined) return ratingCache[clubId];
@@ -134,6 +139,7 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   const standingsDeltas: Record<string, { played: number; won: number; drawn: number; lost: number; gf: number; ga: number; points: number }> = {};
   const statusUpdates: Record<string, StatusUpdateAcc> = {};
   const seasonStatsAccum: Record<string, SeasonStatAcc> = {};
+  const fitnessRows: any[] = [];
 
   const getDelta = (clubId: string) => {
     if (!standingsDeltas[clubId]) standingsDeltas[clubId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
@@ -161,9 +167,10 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
       const cleanLineup = userLineup.filter((p: any) => !userUnavail.has(keyOf(p)));
       const userCaptainId = standingsRows.find((r: any) => r.club_id === userClubId)?.captain_id ?? null;
 
+      const tiredLineup = applyFitness(cleanLineup, fitness);       // усталые играют слабее
       const result = userIsHome
-        ? simulateMatch(cleanLineup, oppXI, userTac, oppTac, userCaptainId, null)
-        : simulateMatch(oppXI, cleanLineup, oppTac, userTac, null, userCaptainId);
+        ? simulateMatch(tiredLineup, oppXI, userTac, oppTac, userCaptainId, null)
+        : simulateMatch(oppXI, tiredLineup, oppTac, userTac, null, userCaptainId);
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const homeTactic = getClubTactic(fix.home_club);
@@ -184,8 +191,13 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     const homeBench = homeAvailable.filter((p: any) => !homeStartIds.has(p.id ?? p.name));
     const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
 
-    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench);
+    const riskById = isUserMatch ? injuryRiskById([...homeStarters, ...awayStarters].map((p: any) => String(p.id ?? p.name)), fitness) : undefined;
+    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
+    if (isUserMatch && userClubId) {
+      const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;
+      fitnessRows.push(...fitnessRowsAfterMatch(seasonId, userClubId, matchday, mySide, playersByClub[userClubId] ?? [], fitness));
+    }
 
     fixtureUpdates.push({
       id: fix.id, home_goals: homeGoals, away_goals: awayGoals,
@@ -211,6 +223,7 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   }
 
   const writes: any[] = [];
+  if (fitnessRows.length) writes.push(saveFitness(fitnessRows));
 
   for (const u of fixtureUpdates) {
     writes.push(supabase.from("fixtures").update({
