@@ -122,7 +122,11 @@ function pickBest(players: any[], positions: string[], used: Set<string>): any |
 }
 
 // ─── PITCH SLOT ───────────────────────────────────────────────────────────────
-const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot, theme, captainId }: {
+/** Цвет шкалы свежести: зелёный ≥85, жёлтый ≥70, оранжевый ≥50, красный ниже. */
+const fitColor = (f: number) => f >= 85 ? "#22c55e" : f >= 70 ? "#eab308" : f >= 50 ? "#f97316" : "#ef4444";
+
+const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlotClick, isCustom, customPos, onPickPosition, onDeleteCustomSlot, theme, captainId, fit }: {
+  fit?: number;
   slot: string; player: any | null; x: number; y: number; glowColor: string;
   onSlotClick: (slot: string, player: any | null) => void;
   isCustom?: boolean; customPos?: string;
@@ -173,6 +177,13 @@ const PitchSlot = memo(function PitchSlot({ slot, player, x, y, glowColor, onSlo
               </div>
               <div className="text-[14px] font-black drop-shadow flex items-center gap-0.5 justify-center" style={{ color: getRatingColor(ovr ?? 0, theme), textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                 {ovr}{isPenalized && <span style={{ fontSize: 9, color: "#ef4444" }}>↓</span>}
+              </div>
+              {/* Свежесть игрока: шкала и число прямо на поле */}
+              <div className="mx-auto mt-0.5 flex items-center gap-1" style={{ width: 66 }} title={`Fitness ${fit ?? 100}%`}>
+                <div className="h-1.5 flex-1 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.55)" }}>
+                  <div className="h-full rounded-full" style={{ width: `${fit ?? 100}%`, background: fitColor(fit ?? 100) }} />
+                </div>
+                <span className="text-[9px] font-black leading-none tabular-nums" style={{ color: fitColor(fit ?? 100), textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>{fit ?? 100}</span>
               </div>
             </>
           ) : (
@@ -239,6 +250,12 @@ const PlayerRow = memo(function PlayerRow({ p, ui, onOpen, isXI, onAddToLineup, 
           </div>
           <div className={`text-[10px] ${ui.muted}`}>
             {p.position}{p.alternatePositions?.length > 0 ? ` · ${p.alternatePositions.slice(0,2).join(" · ")}` : ""}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1" title={locale === "ru" ? `Свежесть ${fit ?? 100}%` : `Fitness ${fit ?? 100}%`}>
+            <div className="h-1 w-16 rounded-full overflow-hidden bg-white/10">
+              <div className="h-full rounded-full" style={{ width: `${fit ?? 100}%`, background: fitColor(fit ?? 100) }} />
+            </div>
+            <span className="text-[9px] font-black tabular-nums leading-none" style={{ color: fitColor(fit ?? 100) }}>{fit ?? 100}%</span>
           </div>
         </div>
         <FlagImage country={p.nationality || p.nation} size={14} />
@@ -698,6 +715,10 @@ export default function SquadPage() {
   const top = withOvr.reduce((m, p) => (p.overall > (m?.overall ?? 0) ? p : m), null as any);
   const totalValue = players.reduce((a, p) => a + (p.market_value ?? 0), 0);
   const expiringCount = clubContracts.filter((c: any) => c.years_left <= 1).length;
+  const xiPlayers = Object.values(lineup).filter(Boolean) as any[];
+  const xiFits = xiPlayers.map(p => fitnessMap[String(p.id ?? p.name)] ?? 100);
+  const xiFresh = xiFits.length ? Math.round(xiFits.reduce((a, b) => a + b, 0) / xiFits.length) : null;
+  const xiTired = xiFits.filter(f => f < 70).length;
   const fmtM = (n: number) => n >= 1_000_000 ? `€${(n / 1_000_000).toFixed(1)}M` : `€${Math.round(n / 1000)}K`;
 
   return (
@@ -712,6 +733,7 @@ export default function SquadPage() {
             { icon: ic.best, label: ru ? "Лучший игрок" : "Top player", value: top ? top.overall : "—", sub: top?.name, color: pt.gold },
             { icon: ic.awards, label: ru ? "Стоимость состава" : "Squad value", value: totalValue ? fmtM(totalValue) : "—", color: pt.good },
             { icon: ic.risk, label: ru ? "Контракты на исходе" : "Expiring", value: expiringCount, color: expiringCount ? pt.warn : undefined },
+            { icon: ic.played, label: ru ? "Свежесть основы" : "XI freshness", value: xiFresh == null ? "—" : `${xiFresh}%`, color: xiFresh == null ? undefined : fitColor(xiFresh), sub: xiTired ? (ru ? `Усталых в старте: ${xiTired}` : `Tired starters: ${xiTired}`) : undefined },
           ]} />
 
         {/* Истекающие контракты — раньше игроки просто пропадали в свободные
@@ -806,7 +828,7 @@ export default function SquadPage() {
 
               {isCustomFormation && (
                 <div className={`mb-3 p-3 rounded-xl text-xs ${ui.muted}`} style={{ background: theme === "aurora" ? "rgba(168,85,247,0.06)" : "rgba(255,255,255,0.03)" }}>
-                  Click empty pitch space to add a slot ({customSlots.length}/11). Click a slot's position label to change it.
+                  Click empty pitch space to add a slot ({customSlots.length}/11). Click a slot&apos;s position label to change it.
                   <div className="mt-2">
                     <button onClick={() => setCustomSlots([{slot:"GK",x:50,y:90}])}
                       className="px-2 py-1 rounded-lg text-[10px] font-black" style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}>
@@ -857,6 +879,7 @@ export default function SquadPage() {
                     onPickPosition={s => setEditingSlot(s)}
                     theme={theme}
                     captainId={captainId}
+                    fit={lineup[slot] ? fitnessMap[String(lineup[slot].id ?? lineup[slot].name)] : undefined}
                     onDeleteCustomSlot={s => {
                       setCustomSlots(prev => prev.filter(cs => cs.slot !== s));
                       setLineup(prev => { const n = {...prev}; delete n[s]; return n; });

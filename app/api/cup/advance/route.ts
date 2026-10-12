@@ -21,6 +21,7 @@ import { getKnockoutLegDate } from "@/lib/seasonCalendar";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessServer";
+import { sanitizeOverride } from "@/lib/simulateMatchday";
 import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { applyClubEarning } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
@@ -229,7 +230,10 @@ export async function POST(req: Request) {
     const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
     let homeGoals: number, awayGoals: number;
 
-    if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
+    const override = isUserMatch ? sanitizeOverride(body.userMatchOverride, fix.home_club, fix.away_club) : null;
+    if (override) {
+      homeGoals = override.homeGoals; awayGoals = override.awayGoals;      // матч по минутам
+    } else if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
       homeGoals = userHomeGoals; awayGoals = userAwayGoals;
     } else if (isUserMatch && userLineup?.length) {
       const userIsHome = fix.home_club === userClubId;
@@ -268,7 +272,7 @@ export async function POST(req: Request) {
     const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(keyOf(p)));
 
     const riskById = isUserMatch ? injuryRiskById([...homeStarters, ...awayStarters].map((p: any) => String(p.id ?? p.name)), fitness) : undefined;
-    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
+    const events = override ? override.events : generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
     if (isUserMatch && userClubId) {
       const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;

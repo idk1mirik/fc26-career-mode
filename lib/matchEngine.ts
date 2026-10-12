@@ -6,7 +6,7 @@ export interface MatchResult {
   awayGoals: number;
 }
 
-function poisson(lambda: number): number {
+export function poisson(lambda: number): number {
   const L = Math.exp(-lambda);
   let k = 0, p = 1;
   do { k++; p *= Math.random(); } while (p > L);
@@ -57,12 +57,12 @@ function teamStr(players: any[], captainId?: string | null) {
   };
 }
 
-// Симуляция с реальными игроками и тактикой
-export function simulateMatch(
+/** Ожидаемые голы обеих команд за ПОЛНЫЙ матч (по составам, тактикам и капитанам). Общая формула для обычной симуляции и матча по минутам. */
+export function matchXG(
   homePlayers: any[], awayPlayers: any[],
   homeTactic = "Balanced", awayTactic = "Balanced",
   homeCaptainId?: string | null, awayCaptainId?: string | null,
-): MatchResult {
+): { homeXG: number; awayXG: number } {
   const homeStr = teamStr(homePlayers, homeCaptainId);
   const awayStr = teamStr(awayPlayers, awayCaptainId);
   const homeMod = getTacticModifiers(homeTactic, awayTactic);
@@ -70,7 +70,16 @@ export function simulateMatch(
 
   const homeXG = calcXG(homeStr.attack + homeMod.homeAdvantage * 5, homeStr.midfield, awayStr.defense * homeMod.xGAllowed, awayStr.gk, homeMod.xGBonus);
   const awayXG = calcXG(awayStr.attack, awayStr.midfield, homeStr.defense * awayMod.xGAllowed, homeStr.gk, awayMod.xGBonus);
+  return { homeXG, awayXG };
+}
 
+// Симуляция с реальными игроками и тактикой
+export function simulateMatch(
+  homePlayers: any[], awayPlayers: any[],
+  homeTactic = "Balanced", awayTactic = "Balanced",
+  homeCaptainId?: string | null, awayCaptainId?: string | null,
+): MatchResult {
+  const { homeXG, awayXG } = matchXG(homePlayers, awayPlayers, homeTactic, awayTactic, homeCaptainId, awayCaptainId);
   return { homeGoals: poisson(homeXG), awayGoals: poisson(awayXG) };
 }
 

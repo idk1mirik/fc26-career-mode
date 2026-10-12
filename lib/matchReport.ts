@@ -50,13 +50,23 @@ export function generateMatchEvents(
   homeStarters: any[], awayStarters: any[],
   homeBench: any[] = [], awayBench: any[] = [],
   // Риск травмы по игроку (id → множитель): усталые чаще получают травмы. Без параметра — как раньше.
-  opts: { riskById?: Record<string, number> } = {},
+  opts: {
+    riskById?: Record<string, number>;
+    /** Окно минут (матч по таймам): события генерируются только внутри него, шансы масштабируются по длине окна. */
+    window?: { from: number; to: number };
+    /** Не создавать «обычные» тактические замены этой команды (в матче по минутам пользователь меняет игроков сам). */
+    noTacticalSubs?: { home?: boolean; away?: boolean };
+  } = {},
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const usedMinutes = new Set<number>();
   const keyOf = (p: any) => p.id ?? p.name;
 
+  const W = opts.window ?? { from: 1, to: 90 };
+  const lenFactor = (W.to - W.from + 1) / 90;
   const randomMinute = (min = 1, max = 90) => {
+    min = Math.max(min, W.from); max = Math.min(max, W.to);
+    if (min > max) { min = W.from; max = W.to; }
     let m;
     let attempts = 0;
     do { m = Math.floor(Math.random() * (max - min + 1)) + min; attempts++; }
@@ -102,7 +112,7 @@ export function generateMatchEvents(
   // ── 1. Красная карточка (8%) — решаем ПЕРВОЙ: сильнее всего меняет доступность,
   // и по правилам футбола замены на неё не положено. ──
   let redPlayerKey: string | null = null;
-  if (Math.random() < 0.08) {
+  if (Math.random() < 0.08 * lenFactor) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
     const pool = team === "home" ? homeStarters : awayStarters;
     const player = pick(pool);
@@ -122,7 +132,7 @@ export function generateMatchEvents(
   const risk = (p: any) => opts.riskById?.[keyOf(p)] ?? 1;
   const allStarters = [...homeStarters, ...awayStarters].filter(p => keyOf(p) !== (redPlayerKey ?? undefined));
   const avgRisk = allStarters.length ? allStarters.reduce((a, p) => a + risk(p), 0) / allStarters.length : 1;
-  if (Math.random() < Math.min(0.45, 0.15 * avgRisk)) {
+  if (Math.random() < Math.min(0.45, 0.15 * avgRisk) * lenFactor) {
     // команду выбираем пропорционально суммарному риску её стартеров, игрока — пропорционально его риску
     const sumHome = homeStarters.reduce((a, p) => a + risk(p), 0), sumAway = awayStarters.reduce((a, p) => a + risk(p), 0);
     const team: "home" | "away" = Math.random() * (sumHome + sumAway) < sumHome ? "home" : "away";
@@ -142,10 +152,11 @@ export function generateMatchEvents(
   }
 
   // ── 3. Обычные тактические замены (2-4) — только среди тех, кто ещё на поле ──
-  const subCount = Math.floor(Math.random() * 3) + 2;
+  const subCount = W.to < 55 ? 0 : Math.floor(Math.random() * 3) + 2;   // в первом тайме обычных замен нет
   for (let i = 0; i < subCount; i++) {
     const team: "home" | "away" = Math.random() > 0.5 ? "home" : "away";
-    const minute = Math.floor(Math.random() * 35) + 55; // 55-90, как раньше
+    if (opts.noTacticalSubs?.[team]) continue;
+    const minute = Math.max(W.from, Math.floor(Math.random() * 35) + 55); // 55-90, как раньше
     const candidatesOut = onPitchAt(team, minute).filter(p => p.position !== "GK");
     const out = pick(candidatesOut);
     if (!out) continue;
@@ -209,7 +220,7 @@ export function generateMatchEvents(
   }
 
   // ── 5. Жёлтые карточки — тоже только среди тех, кто на поле в эту минуту ──
-  const yellowCount = Math.floor(Math.random() * 4) + 1;
+  const yellowCount = Math.floor((Math.floor(Math.random() * 4) + 1) * lenFactor + Math.random());
   const cardWeight = (p: any) => {
     if (["CB", "LB", "RB", "LWB", "RWB", "CDM"].includes(p.position)) return 1.4;
     if (["CM", "CAM", "LM", "RM"].includes(p.position)) return 1.0;

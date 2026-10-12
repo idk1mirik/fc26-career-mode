@@ -25,7 +25,9 @@ import { getDash } from "@/lib/i18nDash";
 import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
 import { ClubHero } from "@/components/dashboard/ClubHero";
 import { SafeBoundary } from "@/components/SafeBoundary";
+import { LiveMatch, type LiveResult } from "@/components/LiveMatch";
 import { ReadinessBanner } from "@/components/dashboard/ReadinessBanner";
+import { SquadCondition, type ConditionPlayer } from "@/components/dashboard/SquadCondition";
 import { getMatchReadiness } from "@/lib/matchReadiness";
 import { PENDING_DRAWS_KEY } from "@/components/CalendarModal";
 import { SeasonStrip } from "@/components/dashboard/SeasonStrip";
@@ -255,7 +257,9 @@ export default function DashboardPage() {
   // при несыгранных кубковых матчах.
   const [seasonFinished, setSeasonFinished] = useState(false);
   const [calendarLoaded, setCalendarLoaded] = useState(false);
+  const [liveOpen, setLiveOpen] = useState<{ kind: "league" | "cup"; competitionId?: string } | null>(null);
   const [fitnessMap, setFitnessMap] = useState<Record<string, number>>({});
+  const [conditionPlayers, setConditionPlayers] = useState<ConditionPlayer[]>([]);
   const [seasonTrophies, setSeasonTrophies] = useState<any[]>([]);
   const [allCompetitionResults, setAllCompetitionResults] = useState<any[]>([]);
   const [reportFix, setReportFix] = useState<any>(null);
@@ -435,7 +439,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!seasonId || !userClub) return;
     fetch(`/api/fitness?seasonId=${seasonId}&clubId=${encodeURIComponent(userClub)}`)
-      .then(r => r.ok ? r.json() : null).then(d => { if (d) setFitnessMap(d.fitness ?? {}); }).catch(() => {});
+      .then(r => r.ok ? r.json() : null).then(d => { if (d) { setFitnessMap(d.fitness ?? {}); setConditionPlayers(d.players ?? []); } }).catch(() => {});
   }, [seasonId, userClub, matchday]);
 
 
@@ -478,12 +482,13 @@ export default function DashboardPage() {
   });
 
   // Симуляция кубкового раунда
-  const advanceCupRound = async () => {
+  const advanceCupRound = async (live?: LiveResult) => {
+    const liveRes = live && (live as any).override ? live : undefined;   // (из кнопки приходит событие клика — игнорируем)
     if (!nextMatch?.competition_id || simulatingCup || !readyForSeasonSim) return;
     setSimulatingCup(true);
     setApiError(null);
     try {
-      const r = await stepCup(simCtx(), nextMatch, seasonFinished, getLeagueMatchdayDate(matchday));
+      const r = await stepCup(liveRes ? { ...simCtx(), lineup: liveRes.lineup } : simCtx(), nextMatch, seasonFinished, getLeagueMatchdayDate(matchday), liveRes?.override);
       if (r.ok) {
         const data = r.data;
         // Ответ /api/cup/advance уже содержит результаты ВСЕГО раунда (не
@@ -516,13 +521,14 @@ export default function DashboardPage() {
 
 
   // Симуляция тура
-  const advanceMatchday = async () => {
+  const advanceMatchday = async (live?: LiveResult) => {
+    const liveRes = live && (live as any).override ? live : undefined;
     if (!seasonId || simulating || !readyForSeasonSim) return;
     setSimulating(true);
     setShowResults(false);
     setApiError(null);
     try {
-      const r = await stepLeague({ ...simCtx(), customTactic });
+      const r = await stepLeague({ ...simCtx(), ...(liveRes ? { lineup: liveRes.lineup } : {}), customTactic, userMatchOverride: liveRes?.override });
       const data = r.data;
       if (r.ok) {
         setLastResults(data.results || []);
@@ -563,6 +569,11 @@ export default function DashboardPage() {
   // не одним запросом — так не упираемся в таймаут serverless-функции и
   // видно прогресс. После КАЖДОГО события таблица обновляется "вживую", а
   // правая панель переключается на играемый турнир.
+  const finishLive = async (res: LiveResult) => {
+    const open = liveOpen; setLiveOpen(null);
+    if (open?.kind === "cup") await advanceCupRound(res); else await advanceMatchday(res);
+  };
+
   const simulateWholeSeason = async () => {
     if (!seasonId || simulating || simulatingSeason || !readyForSeasonSim) return;
     setSimulatingSeason(true);
@@ -884,6 +895,8 @@ export default function DashboardPage() {
                 tacticName={tactic || "—"} windowOpen={isTransferWindowOpenForDate(getLeagueMatchdayDate(matchday))}
                 expiring={clubContracts.filter((c: any) => c.years_left <= 1).length}
                 tired={Object.values(lineup || {}).filter((p: any) => p && (fitnessMap[String(p.id ?? p.name)] ?? 100) < 70).length} /></SafeBoundary>
+              <SafeBoundary name="SquadCondition"><SquadCondition theme={theme} locale={locale as "en" | "ru"} club={userClub} players={conditionPlayers}
+                startingIds={new Set(Object.values(lineup || {}).filter(Boolean).map((p: any) => String(p.id ?? p.name)))} /></SafeBoundary>
               <SafeBoundary name="SeasonStrip"><SeasonStrip theme={theme} locale={locale as "en" | "ru"} calendar={calendar} userClub={userClub} onOpen={setReportFix} /></SafeBoundary>
             </>
           );
@@ -937,7 +950,8 @@ export default function DashboardPage() {
                       competition={nextMatch.competition_name} competitionType={(nextMatch.competition_type as any) ?? "domestic_cup"} round={nextMatch.round_name}
                       dateLabel={formatGameDate(nextMatch.match_date ?? careerDate, seasonNum, locale as "en" | "ru")}
                       playLabel={copy.dashPlayMatch} playingLabel={copy.dashSimulating} playing={simulatingCup}
-                      playDisabled={simulatingCup || !readyForSeasonSim} onPlay={advanceCupRound}
+                      playDisabled={simulatingCup || !readyForSeasonSim} onPlay={() => advanceCupRound()}
+                      liveBtn={{ label: locale === "ru" ? "Играть вживую" : "Play live", disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim, onClick: () => setLiveOpen({ kind: "cup", competitionId: nextMatch.competition_id }) }}
                       seasonBtn={{
                         label: simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season"),
                         disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim,
@@ -997,12 +1011,13 @@ export default function DashboardPage() {
                         round={`${locale === "ru" ? "Тур" : "Matchday"} ${matchday}`}
                         dateLabel={formatGameDate(date, seasonNum, locale as "en" | "ru")}
                         playLabel={copy.dashSimulate} playingLabel={copy.dashSimulating} playing={simulating}
-                        playDisabled={playDisabled} onPlay={advanceMatchday} seasonBtn={seasonBtn} help={help} />
+                        playDisabled={playDisabled} onPlay={() => advanceMatchday()} seasonBtn={seasonBtn} help={help}
+                        liveBtn={{ label: locale === "ru" ? "Играть вживую" : "Play live", disabled: playDisabled, onClick: () => setLiveOpen({ kind: "league" }) }} />
                     ) : (
                       <div className={`p-6 ${ui.card} flex items-center justify-between gap-4 flex-wrap`}>
                         <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>
                         <div className="flex items-center gap-2">
-                          <button onClick={advanceMatchday} disabled={playDisabled} className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 ${ui.btnPrimary}`}>
+                          <button onClick={() => advanceMatchday()} disabled={playDisabled} className={`px-6 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-40 ${ui.btnPrimary}`}>
                             <Zap size={16} />{simulating ? copy.dashSimulating : copy.dashSimulate}
                           </button>
                         </div>
@@ -1211,6 +1226,11 @@ export default function DashboardPage() {
 
       {reportFix && (
         <MatchReportModal fix={reportFix} ui={ui} theme={theme} copy={copy} locale={locale} onClose={() => setReportFix(null)} />
+      )}
+      {liveOpen && seasonId && (
+        <LiveMatch seasonId={seasonId} userClub={userClub} kind={liveOpen.kind} competitionId={liveOpen.competitionId}
+          lineup={Object.values(lineup || {}).filter(Boolean)} tactic={tactic || "Balanced"} theme={theme} locale={locale as "en" | "ru"} glowColor={glowColor}
+          onClose={() => setLiveOpen(null)} onComplete={finishLive} />
       )}
       {drawQueue.length > 0 && (
         <DrawModal draw={drawQueue[0]} theme={theme as any} locale={locale as "en" | "ru"} userClub={userClub}

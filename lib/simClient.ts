@@ -52,13 +52,13 @@ export async function fetchDue(seasonId: string, userClubId: string): Promise<Du
   } catch { return []; }
 }
 
-export async function advanceCupOnce(competitionId: string, ctx: SimContext): Promise<{ ok: boolean; data: any }> {
+export async function advanceCupOnce(competitionId: string, ctx: SimContext, userMatchOverride?: any): Promise<{ ok: boolean; data: any }> {
   try {
     const res = await fetch("/api/cup/advance", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         competitionId, userClubId: ctx.userClubId, userTactic: ctx.tactic,
-        userLineup: ctx.lineup.filter(Boolean),
+        userLineup: ctx.lineup.filter(Boolean), userMatchOverride,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -227,14 +227,14 @@ export function pickNextAction(calendar: any[], matchday: number, leagueDone: bo
 }
 
 /** Шаг лиги: сыграть тур + фоновые кубки до даты следующего тура. */
-export async function stepLeague(ctx: SimContext & { customTactic?: any }): Promise<{ ok: boolean; data: any; draws: DrawInfo[] }> {
+export async function stepLeague(ctx: SimContext & { customTactic?: any; userMatchOverride?: any }): Promise<{ ok: boolean; data: any; draws: DrawInfo[] }> {
   let res: Response;
   try {
     res = await fetch("/api/season/advance", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         seasonId: ctx.seasonId, userClubId: ctx.userClubId, userTactic: ctx.tactic,
-        userCustomTactic: ctx.tactic === "Custom" ? ctx.customTactic : undefined, userLineup: ctx.lineup.filter(Boolean),
+        userCustomTactic: ctx.tactic === "Custom" ? ctx.customTactic : undefined, userLineup: ctx.lineup.filter(Boolean), userMatchOverride: ctx.userMatchOverride,
       }),
     });
   } catch (e: any) { return { ok: false, data: { error: e?.message ?? "network error" }, draws: [] }; }
@@ -245,8 +245,8 @@ export async function stepLeague(ctx: SimContext & { customTactic?: any }): Prom
 }
 
 /** Шаг кубка: сыграть раунд турнира пользователя + фоновые кубки до этой даты (или до конца, если лига закончилась). */
-export async function stepCup(ctx: SimContext, match: { competition_id: string; match_date?: string | null }, leagueDone: boolean, careerDate: string): Promise<{ ok: boolean; data: any; draws: DrawInfo[] }> {
-  const { ok, data } = await advanceCupOnce(match.competition_id, ctx);
+export async function stepCup(ctx: SimContext, match: { competition_id: string; match_date?: string | null }, leagueDone: boolean, careerDate: string, userMatchOverride?: any): Promise<{ ok: boolean; data: any; draws: DrawInfo[] }> {
+  const { ok, data } = await advanceCupOnce(match.competition_id, ctx, userMatchOverride);
   if (!ok) return { ok, data, draws: [] };
   const draws: DrawInfo[] = data?.draw ? [data.draw] : [];
   const more = await advanceBackgroundCups(ctx, match.match_date ?? careerDate, { ignoreDate: leagueDone });

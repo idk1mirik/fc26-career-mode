@@ -15,6 +15,8 @@ export interface MatchHeroProps {
   round?: string; dateLabel?: string;
   playLabel: string; playingLabel: string; playing: boolean; playDisabled: boolean; onPlay: () => void;
   seasonBtn?: { label: string; disabled: boolean; onClick: () => void; title?: string };
+  /** «Играть вживую» — матч по минутам с перерывом, заменами и сменой тактики */
+  liveBtn?: { label: string; disabled: boolean; onClick: () => void };
   help?: ReactNode;
 }
 
@@ -75,6 +77,13 @@ export function MatchHero(p: MatchHeroProps) {
           style={{ boxShadow: p.playDisabled ? undefined : `0 10px 30px ${accent}55` }}>
           <Zap size={16} />{p.playing ? p.playingLabel : p.playLabel}
         </button>
+        {p.liveBtn && (
+          <button onClick={p.liveBtn.onClick} disabled={p.liveBtn.disabled}
+            className={`px-6 py-3.5 font-black text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-transform hover:scale-[1.03] border-2 ${isM ? "" : "rounded-xl"}`}
+            style={{ borderColor: accent, color: accent, background: `${accent}14`, boxShadow: p.liveBtn.disabled ? undefined : `0 6px 22px ${accent}33` }}>
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-soft-pulse" />{p.liveBtn.label}
+          </button>
+        )}
         {p.seasonBtn && (
           <button onClick={p.seasonBtn.onClick} disabled={p.seasonBtn.disabled} title={p.seasonBtn.title}
             className={`px-5 py-3.5 font-black text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed transition-transform hover:scale-[1.03] border ${isM ? "" : "rounded-xl"}`}

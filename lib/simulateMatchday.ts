@@ -22,7 +22,23 @@ function getStartingXI(players: any[]): any[] {
   return gk ? [gk, ...rest] : rest;
 }
 
+/** Готовый результат матча пользователя (матч по минутам): счёт и события всего матча. Если задан — симуляция этого матча пропускается. */
+export interface UserMatchOverride { home: string; away: string; homeGoals: number; awayGoals: number; events: any[] }
+
+/** Проверяет и чистит результат матча, пришедший с клиента. null — если не подходит к этому матчу. */
+export function sanitizeOverride(ov: any, home: string, away: string): UserMatchOverride | null {
+  if (!ov || ov.home !== home || ov.away !== away) return null;
+  const hg = Math.round(Number(ov.homeGoals)), ag = Math.round(Number(ov.awayGoals));
+  if (!Number.isFinite(hg) || !Number.isFinite(ag) || hg < 0 || ag < 0 || hg > 20 || ag > 20 || !Array.isArray(ov.events)) return null;
+  const TYPES = new Set(["goal", "yellow", "red", "substitution", "injury"]);
+  const events = ov.events.filter((e: any) => e && TYPES.has(e.type) && (e.team === "home" || e.team === "away") && Number.isFinite(e.minute) && e.minute >= 1 && e.minute <= 130).slice(0, 60);
+  // число голов в событиях должно совпадать со счётом, иначе в отчёте будут «лишние» или пропавшие голы
+  if (events.filter((e: any) => e.type === "goal" && e.team === "home").length !== hg || events.filter((e: any) => e.type === "goal" && e.team === "away").length !== ag) return null;
+  return { home, away, homeGoals: hg, awayGoals: ag, events };
+}
+
 export interface SimulateMatchdayOptions {
+  userMatchOverride?: UserMatchOverride;
   userClubId?: string;
   userHomeGoals?: number;
   userAwayGoals?: number;
@@ -38,6 +54,7 @@ export interface SimulateMatchdayResult {
 
 export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayOptions = {}): Promise<SimulateMatchdayResult> {
   const { userClubId, userHomeGoals, userAwayGoals, userTactic } = opts;
+  const rawOverride = opts.userMatchOverride;
   let userLineup = opts.userLineup;
 
   const { data: season, error: sErr } = await supabase.from("seasons").select("*").eq("id", seasonId).single();
@@ -155,7 +172,10 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
     let homeGoals: number, awayGoals: number;
 
-    if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
+    const override = isUserMatch ? sanitizeOverride(rawOverride, fix.home_club, fix.away_club) : null;
+    if (override) {
+      homeGoals = override.homeGoals; awayGoals = override.awayGoals;      // матч по минутам: результат уже посчитан по таймам
+    } else if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
       homeGoals = userHomeGoals; awayGoals = userAwayGoals;
     } else if (isUserMatch && userLineup?.length) {
       const userIsHome = fix.home_club === userClubId;
@@ -192,7 +212,7 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     const awayBench = awayAvailable.filter((p: any) => !awayStartIds.has(p.id ?? p.name));
 
     const riskById = isUserMatch ? injuryRiskById([...homeStarters, ...awayStarters].map((p: any) => String(p.id ?? p.name)), fitness) : undefined;
-    const events = generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
+    const events = override ? override.events : generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
     if (isUserMatch && userClubId) {
       const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;

@@ -20,7 +20,13 @@ test("усталость копится у основы, ротация возв
   for (let i = 0; i < 5; i++) { const r = await stepLeague(ctx(xi)); assert.ok(r.ok, JSON.stringify(r.data).slice(0, 160)); }
   const rows = db.get("player_fitness") ?? [];
   assert.ok(rows.length >= 9, `записей усталости: ${rows.length}`);
-  const fit = (await (await fetch(`/api/fitness?seasonId=${seasonId}&clubId=${USER}`)).json()).fitness;
+  const api = await (await fetch(`/api/fitness?seasonId=${seasonId}&clubId=${USER}`)).json();
+  const fit = api.fitness;
+  // подробный список «кто именно устал»: имена, позиции, шкала, по возрастанию свежести
+  assert.ok(api.players.length >= 3 && api.players.every(p => p.name && p.position && typeof p.fitness === "number"), "нет списка уставших игроков");
+  const fits = api.players.filter(p => !p.status).map(p => p.fitness);
+  assert.deepEqual(fits, [...fits].sort((a, b) => a - b), "список не отсортирован по усталости");
+  assert.ok(api.players.every(p => p.fitness < 90 || p.status));
   const starters = xi.map(p => fit[p.id]).filter(v => v !== undefined);
   assert.ok(starters.length >= 9 && starters.every(v => v <= 100));
   const avgTired = starters.reduce((a, b) => a + b, 0) / starters.length;
