@@ -16,7 +16,7 @@ import { pageTheme } from "@/lib/pageTheme";
 import { getMatchCopy } from "@/lib/i18nMatch";
 import { icons } from "@/lib/themeFlavor";
 import { Stars } from "@/components/ThemeBits";
-import { ratingColor, layoutLineup, playerBadges, scorersOf, buildTimeline, derivedStats, playerOfTheMatch, teamAvgRating, type Side } from "@/lib/matchView";
+import { ratingColor, layoutLineup, placeFromLayout, playerBadges, scorersOf, buildTimeline, derivedStats, playerOfTheMatch, teamAvgRating, type Side } from "@/lib/matchView";
 import { formatGameDate } from "@/lib/seasonLabel";
 import { MatchPlayerModal } from "@/components/MatchPlayerModal";
 
@@ -63,7 +63,9 @@ export function MatchReportModal({ fix, theme, onClose, locale = "en" }: { fix: 
   const lineList = lineSide === "home" ? homeList : awayList;
   const starters = lineList.filter(p => p.subbedIn !== true);
   const bench = lineList.filter(p => p.subbedIn === true);
-  const layout = useMemo(() => layoutLineup(starters), [starters]);
+  // Поле рисуем по СОХРАНЁННОЙ расстановке (стандартной или кастомной схемы пользователя);
+  // если её нет (старые матчи, соперник) — подбираем схему по позициям
+  const layout = useMemo(() => placeFromLayout(ratings.layout?.[lineSide], starters) ?? layoutLineup(starters), [starters, ratings.layout, lineSide]);
 
   // ── события: иконка и подпись ──
   const eventIcon = (e: any) => e.type === "goal" ? ic.scorer : e.type === "injury" ? "✚" : e.type === "substitution" ? "⇄" : null;

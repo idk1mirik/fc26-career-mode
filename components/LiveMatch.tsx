@@ -9,9 +9,9 @@ import { pageTheme } from "@/lib/pageTheme";
 import { getLive } from "@/lib/i18nLive";
 import { icons } from "@/lib/themeFlavor";
 import { TACTICS } from "@/lib/tactics";
-import { MAX_HALFTIME_SUBS } from "@/lib/liveMatch";
+import { MAX_TOTAL_SUBS, lineupAfterEvents, entryMinutes, inMatchDrain, subsUsed } from "@/lib/liveMatch";
 
-type Phase = "loading" | "h1" | "ht" | "loading2" | "h2" | "ft" | "error";
+type Phase = "loading" | "h1" | "ht" | "h2" | "ft" | "error";
 const MS_PER_MINUTE = [520, 170, 50];       // скорости 1× / 3× / 10×
 const fitColor = (f: number) => f >= 85 ? "#22c55e" : f >= 70 ? "#eab308" : f >= 50 ? "#f97316" : "#ef4444";
 
@@ -34,7 +34,10 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [a, setA] = useState<any>(null);          // ответ первого тайма
-  const [b, setB] = useState<any>(null);          // ответ второго тайма
+  const [evAll, setEvAll] = useState<any[]>([]);  // ВСЕ события матча (показанные и «будущие» — их пересчитывает пауза)
+  const [ms, setMs] = useState<any>(null);        // состояние матча на сервере (обновляется после каждого изменения)
+  const [curTactic, setCurTactic] = useState(tactic);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [minute, setMinute] = useState(0);
   const [speed, setSpeed] = useState(0);
@@ -50,7 +53,7 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
       const r = await fetch("/api/match/live/first-half", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seasonId, userClubId: userClub, kind, competitionId, lineup: lineup.filter(Boolean), tactic }) });
       const d = await r.json();
       if (!r.ok) { setErr(d.error ?? c.error); setPhase("error"); return; }
-      setA(d); setMinute(0); setPhase("h1");
+      setA(d); setEvAll(d.events1 ?? []); setMs(d.state); setCurTactic(tactic); setMinute(0); setPhase("h1");
     } catch { setErr(c.error); setPhase("error"); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonId, userClub, kind, competitionId]);
@@ -66,33 +69,50 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
   }, [phase, minute, speed, paused]);
   useEffect(() => { feedEnd.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [minute, phase]);
 
-  const events: any[] = useMemo(() => [...(a?.events1 ?? []), ...(phase === "h2" || phase === "ft" ? (b?.events2 ?? []) : [])], [a, b, phase]);
-  const shown = events.filter(e => e.minute <= minute || (phase === "ht" && e.minute <= 45) || phase === "ft");
+  const mine = a?.userSide as "home" | "away" | undefined;
+  const effMinute = phase === "ht" ? 45 : minute;                       // на какую минуту смотрим составы
+  const known = useMemo(() => evAll.filter(e => e.minute <= effMinute), [evAll, effMinute]);
+  const shown = phase === "ft" ? evAll : known;
   const score = useMemo(() => ({
     home: shown.filter(e => e.type === "goal" && e.team === "home").length, away: shown.filter(e => e.type === "goal" && e.team === "away").length,
   }), [shown]);
-  const mine = a?.userSide as "home" | "away" | undefined;
-
   const skip = () => { setPaused(false); setMinute(phase === "h1" ? 45 : 90); };
 
-  // ── перерыв: замены ──
-  const used = new Set(subs.flatMap(s => [s.outId, s.inId]));
+  // кто на поле и на скамейке в текущую минуту (с учётом красных, травм и замен по ходу матча)
+  const startXI: any[] = a?.startXI ?? a?.onPitch ?? [];
+  const benchAll: any[] = a?.benchAll ?? a?.bench ?? [];
+  const squadNow = useMemo(() => (a && mine) ? lineupAfterEvents(startXI, benchAll, known, mine) : { on: [] as any[], bench: [] as any[] }, [a, mine, known, startXI, benchAll]);
+  const entry = useMemo(() => mine ? entryMinutes(known, mine, startXI.map((p: any) => p.id)) : new Map<string, number>(), [known, mine, startXI]);
+  const fitNow = (p: any) => Math.max(0, Math.min(100, (p.fitness ?? 100) - inMatchDrain(Math.max(0, effMinute - (entry.get(p.id) ?? 0)))));
+  const used = new Set(subs.flatMap(x => [x.outId, x.inId]));        // игроки, уже занятые в запланированных заменах
+  const usedSubs = mine ? subsUsed(known, mine) : 0;
+  const subsLeft = MAX_TOTAL_SUBS - usedSubs - subs.length;
+  const showPanel = phase === "ht" || ((phase === "h1" || phase === "h2") && paused);
+  const planned = subs.length > 0 || tactic2 !== curTactic;
+
   const pickBench = (inId: string) => {
-    if (!selOut || subs.length >= MAX_HALFTIME_SUBS) return;
-    const out = a.onPitch.find((p: any) => p.id === selOut), inn = a.bench.find((p: any) => p.id === inId);
+    if (!selOut || subsLeft <= 0) return;
+    const out = squadNow.on.find((p: any) => p.id === selOut), inn = squadNow.bench.find((p: any) => p.id === inId);
     if (!out || !inn || (out.position === "GK") !== (inn.position === "GK")) return;
-    setSubs(s => [...s.filter(x => x.outId !== selOut && x.inId !== inId), { outId: selOut, inId }]); setSelOut(null);
+    setSubs(x => [...x.filter(y => y.outId !== selOut && y.inId !== inId), { outId: selOut, inId }]); setSelOut(null);
   };
-  const startSecond = async () => {
-    setPhase("loading2"); setErr(null);
+
+  /** Отправляет изменения на сервер: остаток тайма (на перерыве — весь второй тайм) считается заново. */
+  const applyChanges = async () => {
+    const atHalftime = phase === "ht";
+    if (!atHalftime && !planned) { setPaused(false); return; }
+    setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/match/live/finish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: a.state, tactic: tactic2, subs }) });
+      const r = await fetch("/api/match/live/change", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: ms, minute: effMinute, tactic: tactic2, subs }) });
       const d = await r.json();
-      if (!r.ok) { setErr(d.error ?? c.error); setPhase("ht"); return; }
-      setB(d); setMinute(45); setPhase("h2");
-    } catch { setErr(c.error); setPhase("ht"); }
+      if (!r.ok) { setErr(d.error === "No substitutions left" ? c.noSubsLeft : (d.error ?? c.error)); setBusy(false); return; }
+      setEvAll(d.events); setMs(d.state); setCurTactic(tactic2); setSubs([]); setSelOut(null);
+      if (atHalftime) { setMinute(45); setPhase("h2"); } else setPaused(false);
+    } catch { setErr(c.error); }
+    setBusy(false);
   };
-  const finish = () => b && a && onComplete({ override: { home: b.home, away: b.away, homeGoals: b.homeGoals, awayGoals: b.awayGoals, events: b.events }, lineup: a.lineupUsed });
+  const finalGoals = { home: evAll.filter(e => e.type === "goal" && e.team === "home").length, away: evAll.filter(e => e.type === "goal" && e.team === "away").length };
+  const finish = () => a && onComplete({ override: { home: a.home, away: a.away, homeGoals: finalGoals.home, awayGoals: finalGoals.away, events: evAll }, lineup: a.lineupUsed });
 
   // ── подписи ──
   const evView = (e: any) => {
@@ -103,8 +123,8 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
     if (e.type === "injury") return { icon: "✚", title: `${c.injury}: ${e.player}`, sub: team, color: "#ef4444" };
     return { icon: "⇄", title: `${c.subIn}: ${e.player2}`, sub: `${c.subOut}: ${e.player} · ${team}`, color: "#22c55e" };
   };
-  const resultText = score.home === score.away ? c.draw : c.winner(score.home > score.away ? a.home : a.away);
-  const clock = phase === "ht" ? c.halftime : phase === "ft" ? c.fulltime : phase === "loading" || phase === "loading2" ? "…" : c.minute(minute);
+  const resultText = !a ? "" : score.home === score.away ? c.draw : c.winner(score.home > score.away ? a.home : a.away);
+  const clock = phase === "ht" ? c.halftime : phase === "ft" ? c.fulltime : phase === "loading" ? "…" : c.minute(minute);
   const headerLabel = phase === "h1" ? c.half1 : phase === "h2" ? c.half2 : phase === "ht" ? c.halftime : "";
 
   return (
@@ -144,7 +164,7 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
         </div>
 
         <div className="overflow-y-auto flex-1 px-4 sm:px-6 pb-5">
-          {phase === "loading" || phase === "loading2" ? <div className={`py-16 text-center text-sm ${t.muted}`}>{c.preparing}</div> : null}
+          {phase === "loading" ? <div className={`py-16 text-center text-sm ${t.muted}`}>{c.preparing}</div> : null}
           {phase === "error" && (
             <div className="py-12 text-center">
               <div className="text-sm font-black mb-3" style={{ color: t.bad }}>{err ?? c.error}</div>
@@ -174,20 +194,20 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
             </div>
           )}
 
-          {/* Перерыв: тактика и замены */}
-          {phase === "ht" && a && (
+          {/* Панель изменений: перерыв ИЛИ пауза посреди матча */}
+          {showPanel && a && (
             <div className="mt-5 space-y-4">
               <div className={`p-4 ${t.card}`} style={{ borderLeft: `3px solid ${accent}` }}>
-                <div className="text-sm font-black" style={{ color: accent }}>{c.htTitle}</div>
-                <div className={`text-[11px] mt-1 ${t.muted}`}>{c.htHint}</div>
+                <div className="text-sm font-black" style={{ color: accent }}>{phase === "ht" ? c.htTitle : c.pauseTitle}{phase !== "ht" ? ` · ${c.minute(effMinute)}` : ""}</div>
+                <div className={`text-[11px] mt-1 ${t.muted}`}>{phase === "ht" ? c.htHint : c.pauseHint}</div>
                 {err && <div className="text-[11px] font-bold mt-2" style={{ color: t.bad }}>{err}</div>}
               </div>
 
               <div className={`p-4 ${t.card}`}>
-                <div className={`text-[10px] font-black mb-2 ${t.eyebrow} ${t.muted}`}>{c.tacticTitle} · {c.tacticNow}: {tactic}</div>
+                <div className={`text-[10px] font-black mb-2 ${t.eyebrow} ${t.muted}`}>{c.tacticTitle} · {c.tacticNow}: {curTactic}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.keys(TACTICS).filter(k => k !== "Custom").map(k => (
-                    <button key={k} onClick={() => setTactic2(k)} className={`px-3 py-2 text-[11px] font-black ${isM ? "" : isA ? "rounded-full" : "rounded-lg"} ${tactic2 === k ? t.btn : t.btnGhost}`}>{k}{k === tactic ? " ✓" : ""}</button>
+                    <button key={k} onClick={() => setTactic2(k)} className={`px-3 py-2 text-[11px] font-black ${isM ? "" : isA ? "rounded-full" : "rounded-lg"} ${tactic2 === k ? t.btn : t.btnGhost}`}>{k}{k === curTactic ? " ✓" : ""}</button>
                   ))}
                 </div>
               </div>
@@ -195,8 +215,8 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className={`${t.card} overflow-hidden`}>
                   <div className={`px-4 py-2.5 text-[10px] font-black border-b ${t.divider} ${t.eyebrow}`} style={{ color: accent }}>{c.onPitch} · {c.pickOut}</div>
-                  {a.onPitch.map((p: any) => {
-                    const sel = selOut === p.id; const out = subs.some(s => s.outId === p.id);
+                  {squadNow.on.map((p: any) => {
+                    const sel = selOut === p.id; const out = subs.some(x => x.outId === p.id); const f = fitNow(p);
                     return (
                       <button key={p.id} onClick={() => !out && setSelOut(sel ? null : p.id)} disabled={out}
                         className={`w-full flex items-center gap-2.5 px-3 py-2 text-left ${t.hover} ${out ? "opacity-40" : ""}`} style={sel ? { background: `${accent}22` } : undefined}>
@@ -204,8 +224,8 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-black truncate">{p.name}</div>
                           <div className="flex items-center gap-1.5"><span className={`text-[10px] ${t.muted}`}>{p.position} · {p.overall}</span>
-                            <div className={`h-1 w-14 ${t.bar} rounded-full overflow-hidden`}><div className="h-full" style={{ width: `${p.fitness}%`, background: fitColor(p.fitness) }} /></div>
-                            <span className="text-[9px] font-black tabular-nums" style={{ color: fitColor(p.fitness) }}>{p.fitness}%</span></div>
+                            <div className={`h-1 w-14 ${t.bar} rounded-full overflow-hidden`}><div className="h-full" style={{ width: `${f}%`, background: fitColor(f) }} /></div>
+                            <span className="text-[9px] font-black tabular-nums" style={{ color: fitColor(f) }}>{f}%</span></div>
                         </div>
                         {out && <span className="text-[9px] font-black text-red-400">{c.subOut}</span>}
                       </button>
@@ -214,18 +234,18 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
                 </div>
                 <div className={`${t.card} overflow-hidden`}>
                   <div className={`px-4 py-2.5 text-[10px] font-black border-b ${t.divider} ${t.eyebrow}`} style={{ color: accent }}>{c.bench} · {c.pickIn}</div>
-                  {a.bench.map((p: any) => {
-                    const gkMismatch = !!selOut && (a.onPitch.find((x: any) => x.id === selOut)?.position === "GK") !== (p.position === "GK");
+                  {squadNow.bench.map((p: any) => {
+                    const gkMismatch = !!selOut && (squadNow.on.find((x: any) => x.id === selOut)?.position === "GK") !== (p.position === "GK");
                     const inn = used.has(p.id);
                     return (
-                      <button key={p.id} onClick={() => pickBench(p.id)} disabled={!selOut || inn || gkMismatch || subs.length >= MAX_HALFTIME_SUBS}
+                      <button key={p.id} onClick={() => pickBench(p.id)} disabled={!selOut || inn || gkMismatch || subsLeft <= 0}
                         className={`w-full flex items-center gap-2.5 px-3 py-2 text-left ${t.hover} disabled:opacity-40`}>
                         <Face name={p.name} />
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-black truncate">{p.name}</div>
                           <div className="flex items-center gap-1.5"><span className={`text-[10px] ${t.muted}`}>{p.position} · {p.overall}</span>
-                            <div className={`h-1 w-14 ${t.bar} rounded-full overflow-hidden`}><div className="h-full" style={{ width: `${p.fitness}%`, background: fitColor(p.fitness) }} /></div>
-                            <span className="text-[9px] font-black tabular-nums" style={{ color: fitColor(p.fitness) }}>{p.fitness}%</span></div>
+                            <div className={`h-1 w-14 ${t.bar} rounded-full overflow-hidden`}><div className="h-full" style={{ width: `${p.fitness ?? 100}%`, background: fitColor(p.fitness ?? 100) }} /></div>
+                            <span className="text-[9px] font-black tabular-nums" style={{ color: fitColor(p.fitness ?? 100) }}>{p.fitness ?? 100}%</span></div>
                         </div>
                         {inn && <span className="text-[9px] font-black text-emerald-400">{c.subIn}</span>}
                       </button>
@@ -235,30 +255,32 @@ export function LiveMatch({ seasonId, userClub, kind, competitionId, lineup, tac
               </div>
 
               <div className={`p-4 ${t.card}`}>
-                <div className={`text-[10px] font-black mb-2 ${t.eyebrow} ${t.muted}`}>{c.subsTitle} · {c.subsMax(MAX_HALFTIME_SUBS)}</div>
+                <div className={`text-[10px] font-black mb-2 ${t.eyebrow} ${t.muted}`}>{c.subsTitle} · {subsLeft > 0 ? c.subsLeft(subsLeft) : c.noSubsLeft}</div>
                 {subs.length === 0 ? <div className={`text-xs ${t.muted}`}>{c.subsEmpty}</div> : (
                   <div className="space-y-1.5">
-                    {subs.map(s => {
-                      const o = a.onPitch.find((p: any) => p.id === s.outId), i = a.bench.find((p: any) => p.id === s.inId);
+                    {subs.map(x => {
+                      const o = squadNow.on.find((p: any) => p.id === x.outId), i = squadNow.bench.find((p: any) => p.id === x.inId);
                       return (
-                        <div key={s.outId} className={`flex items-center gap-2 p-2 ${t.cardAlt} ${isM ? "" : "rounded-lg"}`}>
+                        <div key={x.outId} className={`flex items-center gap-2 p-2 ${t.cardAlt} ${isM ? "" : "rounded-lg"}`}>
                           <span className="text-red-400 text-[11px] font-black">↓ {o?.name}</span><span className={t.muted}>→</span><span className="text-emerald-400 text-[11px] font-black">↑ {i?.name}</span>
-                          <button onClick={() => setSubs(x => x.filter(y => y.outId !== s.outId))} className={`ml-auto px-2 py-1 text-[10px] font-black ${t.btnGhost}`}>{c.remove}</button>
+                          <button onClick={() => setSubs(y => y.filter(z => z.outId !== x.outId))} className={`ml-auto px-2 py-1 text-[10px] font-black ${t.btnGhost}`}>{c.remove}</button>
                         </div>
                       );
                     })}
                   </div>
                 )}
-                {selOut && <div className="text-[10px] mt-2" style={{ color: accent }}>{c.subsHint} {a.onPitch.find((p: any) => p.id === selOut)?.position === "GK" ? c.gkRule : ""}</div>}
+                {selOut && <div className="text-[10px] mt-2" style={{ color: accent }}>{c.subsHint} {squadNow.on.find((p: any) => p.id === selOut)?.position === "GK" ? c.gkRule : ""}</div>}
               </div>
 
-              <button onClick={startSecond} className={`w-full py-3.5 text-sm font-black ${t.btn}`} style={{ boxShadow: `0 10px 28px ${accent}55` }}>{c.startSecond} →</button>
+              <button onClick={applyChanges} disabled={busy} className={`w-full py-3.5 text-sm font-black disabled:opacity-60 ${t.btn}`} style={{ boxShadow: `0 10px 28px ${accent}55` }}>
+                {busy ? c.applying : phase === "ht" ? `${c.startSecond} →` : planned ? `${c.applyResume} →` : `${c.resumeNoChange} →`}
+              </button>
             </div>
           )}
 
-          {phase === "ft" && a && b && (
+          {phase === "ft" && a && (
             <div className="mt-5 text-center space-y-3">
-              {b.oppTactic2 && b.oppTactic2 !== a.oppTactic && <div className={`text-[11px] ${t.muted}`}>{c.oppAdapted(b.oppTactic2)}</div>}
+              {ms?.oppTactic && ms.oppTactic !== a.oppTactic && <div className={`text-[11px] ${t.muted}`}>{c.oppAdapted(ms.oppTactic)}</div>}
               <div className="text-lg font-black" style={{ color: accent }}>{resultText}</div>
               <div className={`text-[11px] ${t.muted}`}>{c.ftHint}</div>
               <button onClick={finish} className={`px-8 py-3.5 text-sm font-black ${t.btn}`} style={{ boxShadow: `0 10px 28px ${accent}55` }}>{c.ftFinish} →</button>

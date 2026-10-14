@@ -5,8 +5,8 @@
 import { simulateMatchday } from "@/lib/simulateMatchday";
 
 export async function POST(req: Request) {
-  const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup, userMatchOverride } = await req.json();
-  const result = await simulateMatchday(seasonId, { userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup, userMatchOverride });
+  const { seasonId, userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup, userMatchOverride, userLayout } = await req.json();
+  const result = await simulateMatchday(seasonId, { userClubId, userHomeGoals, userAwayGoals, userTactic, userLineup, userMatchOverride, userLayout });
 
   if (result.error) return Response.json(result, { status: result.status ?? 500 });
   return Response.json(result);

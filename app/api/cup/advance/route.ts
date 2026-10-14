@@ -22,6 +22,7 @@ import { generateMatchEvents } from "@/lib/matchReport";
 import { generateMatchRatings } from "@/lib/playerRatings";
 import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessServer";
 import { sanitizeOverride } from "@/lib/simulateMatchday";
+import { sanitizeLayout } from "@/lib/lineupLayout";
 import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { applyClubEarning } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
@@ -278,6 +279,8 @@ export async function POST(req: Request) {
       const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;
       fitnessRows.push(...fitnessRowsAfterMatch(comp.season_id, userClubId, seasonMatchday, mySide, playersByClub[userClubId] ?? [], fitness));
     }
+    const userLayout = isUserMatch ? sanitizeLayout(body.userLayout) : null;
+    if (userLayout) (ratings as any).layout = { [fix.home_club === userClubId ? "home" : "away"]: userLayout };
 
     // Победитель ЭТОГО матча. Для решающих матчей (см. isDecisiveSingleMatch
     // выше) ничья пробивается настоящей серией пенальти с реальными

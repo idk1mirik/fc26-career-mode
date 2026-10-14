@@ -2,6 +2,7 @@
 // (рейтинги, раскладка состава по полю, лента событий, сводка по команде).
 import { FORMATIONS, classifyPosition, pickFormationName, sideOfPosition } from "./formations";
 import { getPositionPenalty, canonicalPos } from "./positionPenalty";
+import type { LineupLayout } from "./lineupLayout";
 
 export type Side = "home" | "away";
 
@@ -139,4 +140,20 @@ export function playerStatSections(stats: any, position?: string, badges?: { yel
   if (badges?.red) disc.push({ key: "red", kind: "num", value: 1 });
   out.push({ key: "discipline", rows: disc });
   return out.filter(sec => sec.rows.length > 0);
+}
+
+/**
+ * Размещение по СОХРАНЁННОЙ расстановке (ratings.layout): слоты и координаты — ровно как у пользователя на странице «Состав»,
+ * включая кастомные схемы. null — расстановки нет или она не сходится с составом (тогда отчёт подбирает схему по позициям).
+ */
+export function placeFromLayout<T extends { playerId?: string; name: string }>(layout: LineupLayout | null | undefined, starters: T[]): { formation: string; slots: PlacedPlayer<T>[] } | null {
+  if (!layout || !Array.isArray(layout.slots) || layout.slots.length < 8) return null;
+  const byId = new Map(starters.map(p => [String(p.playerId ?? p.name), p]));
+  const slots: PlacedPlayer<T>[] = [];
+  for (const s of layout.slots) {
+    const player = byId.get(String(s.playerId));
+    if (!player) return null;                       // в матче играли не те, кто в расстановке — доверять нельзя
+    slots.push({ slot: s.slot, x: s.x, y: s.y, player });
+  }
+  return { formation: layout.formation, slots };
 }

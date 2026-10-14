@@ -22,6 +22,8 @@ export interface SimContext {
   tactic: string;
   customTactic?: any;
   lineup: any[];
+  /** Расстановка по слотам (в т.ч. кастомная схема) — сохраняется в матче, чтобы отчёт рисовал поле как на странице «Состав» */
+  layout?: any;
 }
 
 export interface DrawInfo {
@@ -58,7 +60,7 @@ export async function advanceCupOnce(competitionId: string, ctx: SimContext, use
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         competitionId, userClubId: ctx.userClubId, userTactic: ctx.tactic,
-        userLineup: ctx.lineup.filter(Boolean), userMatchOverride,
+        userLineup: ctx.lineup.filter(Boolean), userMatchOverride, userLayout: ctx.layout,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -159,7 +161,7 @@ export async function runTimeline(
           body: JSON.stringify({
             seasonId: ctx.seasonId, userClubId: ctx.userClubId, userTactic: ctx.tactic,
             userCustomTactic: ctx.tactic === "Custom" ? ctx.customTactic : undefined,
-            userLineup: ctx.lineup.filter(Boolean),
+            userLineup: ctx.lineup.filter(Boolean), userLayout: ctx.layout,
           }),
         });
         const data = await res.json();
@@ -234,7 +236,7 @@ export async function stepLeague(ctx: SimContext & { customTactic?: any; userMat
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         seasonId: ctx.seasonId, userClubId: ctx.userClubId, userTactic: ctx.tactic,
-        userCustomTactic: ctx.tactic === "Custom" ? ctx.customTactic : undefined, userLineup: ctx.lineup.filter(Boolean), userMatchOverride: ctx.userMatchOverride,
+        userCustomTactic: ctx.tactic === "Custom" ? ctx.customTactic : undefined, userLineup: ctx.lineup.filter(Boolean), userMatchOverride: ctx.userMatchOverride, userLayout: ctx.layout,
       }),
     });
   } catch (e: any) { return { ok: false, data: { error: e?.message ?? "network error" }, draws: [] }; }

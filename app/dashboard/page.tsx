@@ -26,6 +26,8 @@ import { isTransferWindowOpenForDate } from "@/lib/transferWindow";
 import { ClubHero } from "@/components/dashboard/ClubHero";
 import { SafeBoundary } from "@/components/SafeBoundary";
 import { LiveMatch, type LiveResult } from "@/components/LiveMatch";
+import { buildLayout } from "@/lib/lineupLayout";
+import { FORMATIONS } from "@/lib/formations";
 import { ReadinessBanner } from "@/components/dashboard/ReadinessBanner";
 import { SquadCondition, type ConditionPlayer } from "@/components/dashboard/SquadCondition";
 import { getMatchReadiness } from "@/lib/matchReadiness";
@@ -479,6 +481,7 @@ export default function DashboardPage() {
   const simCtx = (): SimContext => ({
     seasonId: seasonId!, userClubId: userClub, tactic, customTactic,
     lineup: Object.values(lineup || {}).filter(Boolean),
+    layout: buildLayout(formation, lineup || {}, customFormationsStore, FORMATIONS),      // точная расстановка (в т.ч. кастомная схема)
   });
 
   // Симуляция кубкового раунда

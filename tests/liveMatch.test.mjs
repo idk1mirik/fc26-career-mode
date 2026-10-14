@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { simulateHalfGoals, lineupAfterEvents, validateSubs, applyHalftimeSubs, FIRST_HALF_SHARE } from "@/lib/liveMatch";
+import { simulateSegmentGoals, inMatchDrain, entryMinutes, subsUsed, simulateHalfGoals, lineupAfterEvents, validateSubs, applyHalftimeSubs, FIRST_HALF_SHARE } from "@/lib/liveMatch";
 import { simulateMatch } from "@/lib/matchEngine";
 import { generateMatchEvents } from "@/lib/matchReport";
 import { sanitizeOverride } from "@/lib/simulateMatchday";
@@ -97,4 +97,24 @@ test("результат матча по минутам с клиента про
   assert.equal(sanitizeOverride(null, "A", "B"), null);
   const junk = sanitizeOverride({ ...ok, events: [...ok.events, { type: "hack", team: "home", minute: 5 }, { type: "yellow", team: "nobody", minute: 5 }, { type: "yellow", team: "home", minute: 999 }] }, "A", "B");
   assert.equal(junk.events.length, 4);                                                           // мусорные события отброшены
+});
+
+test("отрезки матча в сумме дают тот же ожидаемый счёт, что и тайм; пустой отрезок — без голов", () => {
+  const H = mk("h", 80), A = mk("a", 76);
+  const half = avg(() => { const r = simulateHalfGoals(H, A, "Balanced", "Balanced", null, null, 1); return r.homeGoals + r.awayGoals; });
+  const parts = avg(() => { const a = simulateSegmentGoals(H, A, "Balanced", "Balanced", null, null, 1, 20); const b = simulateSegmentGoals(H, A, "Balanced", "Balanced", null, null, 21, 45); return a.homeGoals + a.awayGoals + b.homeGoals + b.awayGoals; });
+  assert.ok(Math.abs(half - parts) / half < 0.07, `${half.toFixed(3)} против ${parts.toFixed(3)}`);
+  const none = simulateSegmentGoals(H, A, "Balanced", "Balanced", null, null, 60, 59);
+  assert.deepEqual(none, { homeGoals: 0, awayGoals: 0 });
+  const second = avg(() => simulateSegmentGoals(H, A, "Balanced", "Balanced", null, null, 46, 90).homeGoals);
+  const last10 = avg(() => simulateSegmentGoals(H, A, "Balanced", "Balanced", null, null, 81, 90).homeGoals);
+  assert.ok(last10 < second * 0.3 && last10 > second * 0.12, `последние 10 минут: ${last10.toFixed(3)} из ${second.toFixed(3)}`);   // ≈ 10/45 тайма
+});
+
+test("свежесть в матче и учёт замен", () => {
+  assert.equal(inMatchDrain(0), 0); assert.equal(inMatchDrain(45), 10); assert.equal(inMatchDrain(90), 20);
+  const ev = [{ minute: 30, type: "substitution", team: "home", player: "a", playerId: "a", player2: "b", player2Id: "b" }, { minute: 60, type: "substitution", team: "away", player: "x", playerId: "x", player2: "y", player2Id: "y" }];
+  const em = entryMinutes(ev, "home", ["a", "c"]);
+  assert.equal(em.get("a"), 0); assert.equal(em.get("b"), 30); assert.equal(em.get("y"), undefined);
+  assert.equal(subsUsed(ev, "home"), 1); assert.equal(subsUsed(ev, "away"), 1);
 });

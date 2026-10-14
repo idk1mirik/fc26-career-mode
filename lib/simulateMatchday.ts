@@ -14,6 +14,7 @@ import { notifyReadyNegotiations } from "@/lib/contracts-server";
 import { runInterestTick } from "@/lib/transferInterestServer";
 import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessServer";
 import { applyFitness, injuryRiskById } from "@/lib/fitness";
+import { sanitizeLayout, type LineupLayout } from "@/lib/lineupLayout";
 import { runAiTransfers } from "@/lib/aiTransfers";
 
 function getStartingXI(players: any[]): any[] {
@@ -39,6 +40,8 @@ export function sanitizeOverride(ov: any, home: string, away: string): UserMatch
 
 export interface SimulateMatchdayOptions {
   userMatchOverride?: UserMatchOverride;
+  /** Расстановка пользователя по слотам (стандартная или кастомная схема) — для точного поля в отчёте */
+  userLayout?: LineupLayout;
   userClubId?: string;
   userHomeGoals?: number;
   userAwayGoals?: number;
@@ -55,6 +58,7 @@ export interface SimulateMatchdayResult {
 export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayOptions = {}): Promise<SimulateMatchdayResult> {
   const { userClubId, userHomeGoals, userAwayGoals, userTactic } = opts;
   const rawOverride = opts.userMatchOverride;
+  const userLayout = sanitizeLayout(opts.userLayout);
   let userLineup = opts.userLineup;
 
   const { data: season, error: sErr } = await supabase.from("seasons").select("*").eq("id", seasonId).single();
@@ -218,6 +222,7 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
       const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;
       fitnessRows.push(...fitnessRowsAfterMatch(seasonId, userClubId, matchday, mySide, playersByClub[userClubId] ?? [], fitness));
     }
+    if (isUserMatch && userLayout) (ratings as any).layout = { [fix.home_club === userClubId ? "home" : "away"]: userLayout };
 
     fixtureUpdates.push({
       id: fix.id, home_goals: homeGoals, away_goals: awayGoals,

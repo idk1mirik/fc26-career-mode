@@ -8,29 +8,61 @@ export const FIRST_HALF = { from: 1, to: 45 };
 export const SECOND_HALF = { from: 46, to: 90 };
 export const HALFTIME_SUB_MINUTE = 46;
 export const MAX_HALFTIME_SUBS = 5;
+/** Замен за весь матч (включая вынужденные из-за травмы). */
+export const MAX_TOTAL_SUBS = 5;
 /** Доля ожидаемых голов в первом тайме (во втором забивают чуть больше — усталость и риск). Сумма даёт тот же средний счёт, что и обычная симуляция. */
 export const FIRST_HALF_SHARE = 0.46;
 
 const keyOf = (p: any) => String(p?.id ?? p?.name);
 
 /**
- * Голы одного тайма. Во втором тайме учитывается счёт: проигрывающая команда идёт вперёд (+7% за гол разницы, до двух),
- * ведущая — закрывается (−4%).
+ * Голы отрезка матча [fromMinute..toMinute] (включительно). Интенсивность по минутам: в первом тайме FIRST_HALF_SHARE/45
+ * ожидаемых голов за минуту, во втором — (1−FIRST_HALF_SHARE)/45. Для отрезка во втором тайме учитывается счёт: проигрывающая
+ * команда идёт вперёд (+7% за гол разницы, до двух), ведущая — закрывается (−4%).
+ * Нужен для паузы во время матча: на любой минуте пересчитываем остаток с новой тактикой и заменами.
  */
+export function simulateSegmentGoals(
+  home: any[], away: any[], homeTactic: string, awayTactic: string, homeCaptain: string | null | undefined, awayCaptain: string | null | undefined,
+  fromMinute: number, toMinute: number, score: { home: number; away: number } = { home: 0, away: 0 },
+): { homeGoals: number; awayGoals: number } {
+  const { homeXG, awayXG } = matchXG(home, away, homeTactic, awayTactic, homeCaptain, awayCaptain);
+  const from = Math.max(1, fromMinute), to = Math.min(90, toMinute);
+  if (to < from) return { homeGoals: 0, awayGoals: 0 };
+  const m1 = Math.max(0, Math.min(to, 45) - from + 1);            // минут первого тайма в отрезке
+  const m2 = Math.max(0, to - Math.max(from, 46) + 1);            // минут второго тайма
+  const share1 = (FIRST_HALF_SHARE / 45) * m1, share2 = ((1 - FIRST_HALF_SHARE) / 45) * m2;
+  let h = homeXG * (share1 + share2), a = awayXG * (share1 + share2);
+  if (m2 > 0) {
+    const diff = Math.max(-2, Math.min(2, score.home - score.away));
+    const k = share2 / (share1 + share2);                         // доля отрезка, приходящаяся на второй тайм
+    if (diff > 0) { h *= 1 - 0.04 * diff * k; a *= 1 + 0.07 * diff * k; }
+    else if (diff < 0) { a *= 1 - 0.04 * -diff * k; h *= 1 + 0.07 * -diff * k; }
+  }
+  return { homeGoals: poisson(h), awayGoals: poisson(a) };
+}
+
+/** Голы одного тайма (частный случай отрезка). */
 export function simulateHalfGoals(
   home: any[], away: any[], homeTactic: string, awayTactic: string, homeCaptain: string | null | undefined, awayCaptain: string | null | undefined,
   half: 1 | 2, score: { home: number; away: number } = { home: 0, away: 0 },
 ): { homeGoals: number; awayGoals: number } {
-  const { homeXG, awayXG } = matchXG(home, away, homeTactic, awayTactic, homeCaptain, awayCaptain);
-  const share = half === 1 ? FIRST_HALF_SHARE : 1 - FIRST_HALF_SHARE;
-  let h = homeXG * share, a = awayXG * share;
-  if (half === 2) {
-    const diff = Math.max(-2, Math.min(2, score.home - score.away));
-    if (diff > 0) { h *= 1 - 0.04 * diff; a *= 1 + 0.07 * diff; }
-    else if (diff < 0) { a *= 1 - 0.04 * -diff; h *= 1 + 0.07 * -diff; }
-  }
-  return { homeGoals: poisson(h), awayGoals: poisson(a) };
+  return half === 1
+    ? simulateSegmentGoals(home, away, homeTactic, awayTactic, homeCaptain, awayCaptain, 1, 45, score)
+    : simulateSegmentGoals(home, away, homeTactic, awayTactic, homeCaptain, awayCaptain, 46, 90, score);
 }
+
+/** Сколько свежести теряет игрок за время на поле прямо в матче (10 за тайм). */
+export const inMatchDrain = (minutesOnPitch: number) => Math.round((10 * Math.max(0, minutesOnPitch)) / 45);
+
+/** С какой минуты игрок на поле: 0 — основа, иначе минута выхода на замену. */
+export function entryMinutes(events: MatchEvent[], side: Side, startIds: string[]): Map<string, number> {
+  const m = new Map<string, number>(startIds.map(id => [id, 0]));
+  for (const e of events) if (e.type === "substitution" && e.team === side) m.set(String(e.player2Id ?? e.player2), e.minute);
+  return m;
+}
+
+/** Сколько замен команда уже сделала (в том числе вынужденных из-за травмы). */
+export const subsUsed = (events: MatchEvent[], side: Side) => events.filter(e => e.type === "substitution" && e.team === side).length;
 
 export interface Squad { on: any[]; bench: any[] }
 

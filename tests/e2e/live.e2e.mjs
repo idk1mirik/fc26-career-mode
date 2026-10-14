@@ -5,6 +5,7 @@ import { bootRoutes } from "./harness.mjs";
 import { db, resetDb } from "../fakeSupabase.mjs";
 import { stepLeague, stepCup, pickNextAction } from "@/lib/simClient";
 import { getPlayersByClub } from "@/lib/players";
+import { lineupAfterEvents } from "@/lib/liveMatch";
 import leagues from "@/data/leagues.json";
 
 const LEAGUE = leagues.find(l => l.name === "Premier League"); const USER = "Everton";
@@ -71,6 +72,24 @@ test("матч лиги по минутам: перерыв, замена, за�
   assert.ok(!fOut || fOut.fitness >= Math.min(...full) - 1, "ушедший с перерыва устал сильнее играющих весь матч");
 });
 
+test("расстановка пользователя (кастомная схема) сохраняется в матче и не теряется при записи", { timeout: 250000 }, async () => {
+  const { seasonId, xi } = await setup();
+  const slots = ["GK", "CB1", "CB2", "CB3", "LM", "CM1", "CM2", "RM", "LF", "ST", "RF"].map((slot, i) => ({ slot, x: 8 + i * 8, y: 15 + (i % 4) * 20, playerId: xi[i].id, pos: xi[i].position }));
+  const layout = { formation: "my-custom", slots };
+  const r = await stepLeague({ seasonId, userClubId: USER, tactic: "Balanced", lineup: xi, layout });
+  assert.ok(r.ok);
+  const fx = db.get("fixtures").find(f => f.played && (f.home_club === USER || f.away_club === USER));
+  const side = fx.home_club === USER ? "home" : "away";
+  assert.equal(fx.ratings.layout[side].formation, "my-custom");
+  assert.deepEqual(fx.ratings.layout[side].slots.map(s => [s.slot, s.x, s.y]), slots.map(s => [s.slot, s.x, s.y]));
+  assert.equal(fx.ratings.layout[side === "home" ? "away" : "home"], undefined, "расстановка записана и за соперника");
+  // мусорная расстановка не записывается
+  const r2 = await stepLeague({ seasonId, userClubId: USER, tactic: "Balanced", lineup: xi, layout: { formation: "x", slots: slots.slice(0, 3) } });
+  assert.ok(r2.ok);
+  const fx2 = db.get("fixtures").filter(f => f.played && (f.home_club === USER || f.away_club === USER))[1];
+  assert.equal(fx2.ratings.layout, undefined);
+});
+
 test("подделанный результат не принимается: матч просто считается обычным способом", { timeout: 250000 }, async () => {
   const { seasonId, xi } = await setup();
   const fh = await post("/api/match/live/first-half", { seasonId, userClubId: USER, kind: "league", lineup: xi, tactic: "Balanced" });
@@ -113,6 +132,63 @@ test("неверные замены отклоняются сервером", { 
   assert.equal(bad.status, 400);
   const six = await post("/api/match/live/finish", { state: fh.state, tactic: "Balanced", subs: fh.onPitch.filter(p => p.position !== "GK").slice(0, 6).map((p, i) => ({ outId: p.id, inId: fh.bench.filter(x => x.position !== "GK")[i % 4].id })) });
   assert.equal(six.status, 400);
-  const nope = await post("/api/match/live/finish", { state: { ...fh.state, v: 2 }, tactic: "Balanced", subs: [] });
+  const nope = await post("/api/match/live/finish", { state: { ...fh.state, v: 1 }, tactic: "Balanced", subs: [] });
   assert.equal(nope.status, 400);
+});
+
+test("пауза посреди матча: замены и тактика меняют остаток, показанное не трогают, лимит 5 замен", { timeout: 250000 }, async () => {
+  const { seasonId, xi } = await setup();
+  const fh = (await post("/api/match/live/first-half", { seasonId, userClubId: USER, kind: "league", lineup: xi, tactic: "Balanced" })).body;
+  const side = fh.userSide, ids = (evs) => new Set(evs.flatMap(e => [e.playerId, e.player2Id, e.assistPlayerId]).filter(Boolean));
+  const squadAt = (events, minute) => lineupAfterEvents(fh.startXI, fh.benchAll, events.filter(e => e.minute <= minute), side);
+  const pickPair = (events, minute, skip = new Set()) => {
+    const sq = squadAt(events, minute); const busy = ids(events.filter(e => e.minute <= minute));
+    const out = sq.on.find(p => p.position !== "GK" && !busy.has(p.id) && !skip.has(p.id)), inn = sq.bench.find(p => p.position !== "GK" && !skip.has(p.id));
+    return { out, inn };
+  };
+
+  // 1) пауза на 20-й минуте первого тайма
+  const known20 = fh.state.events.filter(e => e.minute <= 20);
+  const p1 = pickPair(fh.state.events, 20);
+  const r1 = await post("/api/match/live/change", { state: fh.state, minute: 20, tactic: "Gegenpress", subs: [{ outId: p1.out.id, inId: p1.inn.id }] });
+  assert.equal(r1.status, 200, JSON.stringify(r1.body).slice(0, 200));
+  const e1 = r1.body.events;
+  assert.deepEqual(e1.filter(e => e.minute <= 20 && e.type !== "substitution").map(e => [e.minute, e.type, e.player]), known20.filter(e => e.type !== "substitution").map(e => [e.minute, e.type, e.player]), "показанные события изменились");
+  assert.ok(e1.some(e => e.type === "substitution" && e.minute === 20 && e.playerId === p1.out.id && e.player2Id === p1.inn.id), "замена на 20-й минуте не записана");
+  assert.ok(e1.filter(e => e.minute > 20).every(e => e.minute >= 21 && e.minute <= 45), "остаток первого тайма вышел за 21–45");
+  assert.equal(r1.body.state.userTactic, "Gegenpress"); assert.equal(r1.body.state.minute, 20);
+  assert.equal(goalsOf(e1, "home"), r1.body.homeGoals); assert.equal(goalsOf(e1, "away"), r1.body.awayGoals);
+
+  // 2) перерыв: тактика и ещё одна замена, генерируется второй тайм
+  const p2 = pickPair(e1, 45, new Set([p1.out.id, p1.inn.id]));
+  const r2 = await post("/api/match/live/change", { state: r1.body.state, minute: 45, tactic: "Possession", subs: [{ outId: p2.out.id, inId: p2.inn.id }] });
+  assert.equal(r2.status, 200, JSON.stringify(r2.body).slice(0, 200));
+  const e2 = r2.body.events;
+  assert.ok(e2.filter(e => e.minute <= 45).every(e => e1.some(x => x.minute === e.minute && x.type === e.type && x.player === e.player)), "первый тайм изменился на перерыве");
+  assert.ok(e2.some(e => e.type === "substitution" && e.minute === 46 && e.playerId === p2.out.id), "замена на перерыве не попала в события");
+  assert.ok(e2.filter(e => e.minute > 45).every(e => e.minute >= 46 && e.minute <= 90));
+
+  // 3) пауза на 70-й: ещё замены; потом превышение лимита
+  const p3 = pickPair(e2, 70, new Set([p1.out.id, p1.inn.id, p2.out.id, p2.inn.id]));
+  const r3 = await post("/api/match/live/change", { state: r2.body.state, minute: 70, tactic: "Park The Bus", subs: [{ outId: p3.out.id, inId: p3.inn.id }] });
+  assert.equal(r3.status, 200, JSON.stringify(r3.body).slice(0, 200));
+  const e3 = r3.body.events;
+  assert.ok(e3.filter(e => e.minute <= 70 && e.type === "goal").length === e2.filter(e => e.minute <= 70 && e.type === "goal").length, "счёт на 70-й изменился");
+  assert.ok(e3.filter(e => e.minute > 70).every(e => e.minute >= 71 && e.minute <= 90));
+  const six = sq => sq.on.filter(p => p.position !== "GK").slice(0, 6).map((p, i) => ({ outId: p.id, inId: fh.benchAll.filter(b => b.position !== "GK")[i % 5].id }));
+  const over = await post("/api/match/live/change", { state: r3.body.state, minute: 75, tactic: "Balanced", subs: six(squadAt(e3, 75)) });
+  assert.equal(over.status, 400);
+  const badMinute = await post("/api/match/live/change", { state: r3.body.state, minute: 120, tactic: "Balanced", subs: [] });
+  assert.equal(badMinute.status, 400);
+
+  // 4) итог записывается как обычный матч, замены попали в минуты игроков
+  const final = r3.body;
+  const override = { home: final.home, away: final.away, homeGoals: final.homeGoals, awayGoals: final.awayGoals, events: final.events };
+  const rr = await stepLeague({ seasonId, userClubId: USER, tactic: "Park The Bus", lineup: fh.lineupUsed, userMatchOverride: override });
+  assert.ok(rr.ok, JSON.stringify(rr.data).slice(0, 200));
+  const fx = db.get("fixtures").find(f => f.id === fh.state.fixtureId);
+  const mine = side === "home" ? fx.ratings.home : fx.ratings.away;
+  const outR = mine.find(p => p.playerId === p1.out.id), inR = mine.find(p => p.playerId === p1.inn.id);
+  assert.ok(outR && inR && outR.stats.minutesPlayed <= 21, `ушедший на 20-й сыграл ${outR?.stats.minutesPlayed}'`);
+  assert.ok(inR.stats.minutesPlayed >= 60, `вышедший на 20-й сыграл ${inR?.stats.minutesPlayed}'`);
 });

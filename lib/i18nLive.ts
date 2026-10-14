@@ -9,6 +9,7 @@ export interface LiveCopy {
   htTitle: string; htHint: string; tacticTitle: string; tacticKeep: string; tacticNow: string; oppAdapted: (t: string) => string;
   subsTitle: string; subsHint: string; onPitch: string; bench: string; fresh: string; pickOut: string; pickIn: string; subsEmpty: string; subsMax: (n: number) => string;
   gkRule: string; remove: string; startSecond: string; ftFinish: string; ftHint: string; winner: (n: string) => string; draw: string;
+  pauseTitle: string; pauseHint: string; applyResume: string; resumeNoChange: string; subsLeft: (n: number) => string; applying: string; noSubsLeft: string;
 }
 
 const EN: LiveCopy = {
@@ -22,6 +23,8 @@ const EN: LiveCopy = {
   pickOut: "Who comes off?", pickIn: "Who comes on?", subsEmpty: "No changes planned", subsMax: n => `Up to ${n} substitutions`, gkRule: "A goalkeeper can only be replaced by a goalkeeper",
   remove: "Remove", startSecond: "Start the second half", ftFinish: "Finish and open the report", ftHint: "The result will be recorded as a normal matchday.",
   winner: n => `${n} win`, draw: "Draw",
+  pauseTitle: "Paused — your call, coach", pauseHint: "Change the tactic or make substitutions. The rest of the match will play out with your changes.", applyResume: "Apply and resume", resumeNoChange: "Resume",
+  subsLeft: n => `Substitutions left: ${n}`, applying: "Applying…", noSubsLeft: "No substitutions left",
 };
 const RU: LiveCopy = {
   title: "Матч вживую", preparing: "Готовим матч…", error: "Не удалось начать матч", retry: "Повторить", close: "Закрыть", kickoff: "Стартовый свисток",
@@ -34,11 +37,13 @@ const RU: LiveCopy = {
   pickOut: "Кого заменить?", pickIn: "Кто выйдет?", subsEmpty: "Замен не запланировано", subsMax: n => `Не больше ${n} замен`, gkRule: "Вратаря можно заменить только вратарём",
   remove: "Убрать", startSecond: "Начать второй тайм", ftFinish: "Завершить и открыть отчёт", ftHint: "Результат запишется как обычный тур.",
   winner: n => `Победа: ${n}`, draw: "Ничья",
+  pauseTitle: "Пауза — решает тренер", pauseHint: "Смени тактику или сделай замены. Остаток матча пройдёт уже с твоими изменениями.", applyResume: "Применить и продолжить", resumeNoChange: "Продолжить",
+  subsLeft: n => `Замен осталось: ${n}`, applying: "Применяем…", noSubsLeft: "Замены закончились",
 };
-const AUR_EN: Partial<LiveCopy> = { title: "✦ The match, live", halftime: "Interval ✦", htTitle: "✦ A word in the dressing room", startSecond: "Begin the second half ✦", goal: "GOAL ✦", ftFinish: "Finish and open the story ✦", quiet: "A calm moment ✦" };
-const AUR_RU: Partial<LiveCopy> = { title: "✦ Матч вживую", halftime: "Перерыв ✦", htTitle: "✦ Слово в раздевалке", startSecond: "Начать второй тайм ✦", goal: "ГОЛ ✦", ftFinish: "Завершить и открыть историю ✦", quiet: "Спокойный момент ✦" };
-const MAL_EN: Partial<LiveCopy> = { title: ">_ LIVE FEED", preparing: ">_ INITIALIZING…", halftime: "HALF TIME", htTitle: ">_ HALF-TIME BRIEFING", tacticTitle: "DOCTRINE SHIFT", subsTitle: "REPLACEMENTS", startSecond: "RESUME PLAY", ftFinish: "COMMIT RESULT", fulltime: "FULL TIME", goal: "GOAL", red: "RED CARD", quiet: ">_ NO ACTIVITY" };
-const MAL_RU: Partial<LiveCopy> = { title: ">_ ПРЯМОЙ ЭФИР", preparing: ">_ ИНИЦИАЛИЗАЦИЯ…", halftime: "ПЕРЕРЫВ", htTitle: ">_ БРИФИНГ НА ПЕРЕРЫВЕ", tacticTitle: "СМЕНА ДОКТРИНЫ", subsTitle: "ЗАМЕНЫ", startSecond: "ПРОДОЛЖИТЬ МАТЧ", ftFinish: "ЗАФИКСИРОВАТЬ РЕЗУЛЬТАТ", fulltime: "КОНЕЦ МАТЧА", goal: "ГОЛ", red: "КРАСНАЯ КАРТОЧКА", quiet: ">_ АКТИВНОСТИ НЕТ" };
+const AUR_EN: Partial<LiveCopy> = { title: "✦ The match, live", halftime: "Interval ✦", htTitle: "✦ A word in the dressing room", startSecond: "Begin the second half ✦", goal: "GOAL ✦", ftFinish: "Finish and open the story ✦", quiet: "A calm moment ✦", pauseTitle: "✦ A moment to think", applyResume: "Apply and play on ✦" };
+const AUR_RU: Partial<LiveCopy> = { title: "✦ Матч вживую", halftime: "Перерыв ✦", htTitle: "✦ Слово в раздевалке", startSecond: "Начать второй тайм ✦", goal: "ГОЛ ✦", ftFinish: "Завершить и открыть историю ✦", quiet: "Спокойный момент ✦", pauseTitle: "✦ Время подумать", applyResume: "Применить и играть дальше ✦" };
+const MAL_EN: Partial<LiveCopy> = { title: ">_ LIVE FEED", preparing: ">_ INITIALIZING…", halftime: "HALF TIME", htTitle: ">_ HALF-TIME BRIEFING", tacticTitle: "DOCTRINE SHIFT", subsTitle: "REPLACEMENTS", startSecond: "RESUME PLAY", ftFinish: "COMMIT RESULT", fulltime: "FULL TIME", goal: "GOAL", red: "RED CARD", quiet: ">_ NO ACTIVITY", pauseTitle: ">_ SIMULATION PAUSED", applyResume: "APPLY AND RESUME", resumeNoChange: "RESUME", noSubsLeft: "NO REPLACEMENTS LEFT" };
+const MAL_RU: Partial<LiveCopy> = { title: ">_ ПРЯМОЙ ЭФИР", preparing: ">_ ИНИЦИАЛИЗАЦИЯ…", halftime: "ПЕРЕРЫВ", htTitle: ">_ БРИФИНГ НА ПЕРЕРЫВЕ", tacticTitle: "СМЕНА ДОКТРИНЫ", subsTitle: "ЗАМЕНЫ", startSecond: "ПРОДОЛЖИТЬ МАТЧ", ftFinish: "ЗАФИКСИРОВАТЬ РЕЗУЛЬТАТ", fulltime: "КОНЕЦ МАТЧА", goal: "ГОЛ", red: "КРАСНАЯ КАРТОЧКА", quiet: ">_ АКТИВНОСТИ НЕТ", pauseTitle: ">_ СИМУЛЯЦИЯ НА ПАУЗЕ", applyResume: "ПРИМЕНИТЬ И ПРОДОЛЖИТЬ", resumeNoChange: "ПРОДОЛЖИТЬ", noSubsLeft: "ЗАМЕН НЕ ОСТАЛОСЬ" };
 const TABLE: Record<Locale, Record<ThemeKey, LiveCopy>> = {
   en: { classic: EN, aurora: { ...EN, ...AUR_EN }, maleficent: { ...EN, ...MAL_EN } },
   ru: { classic: RU, aurora: { ...RU, ...AUR_RU }, maleficent: { ...RU, ...MAL_RU } },

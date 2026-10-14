@@ -22,6 +22,8 @@ import { getCal } from "@/lib/i18nCal";
 import { icons } from "@/lib/themeFlavor";
 import { getClubLogo } from "@/data/clublogos";
 import { getMatchReadiness } from "@/lib/matchReadiness";
+import { buildLayout } from "@/lib/lineupLayout";
+import { FORMATIONS } from "@/lib/formations";
 import Link from "next/link";
 
 export const PENDING_DRAWS_KEY = "fc26-pending-draws";
@@ -56,6 +58,8 @@ export default function CalendarModal({ theme, locale, glowColor, onClose }: {
   const tactic = useCareerStore(s => s.tactic);
   const customTactic = useCareerStore(s => s.customTactic);
   const lineup = useCareerStore(s => s.lineup);
+  const formation = useCareerStore(s => s.formation);
+  const customFormations = useCareerStore(s => s.customFormations);
   const setMatchday = useCareerStore(s => s.setMatchday);
   const lineupConfirmed = useCareerStore(s => s.lineupConfirmed);
   const tacticConfirmed = useCareerStore(s => s.tacticConfirmed);
@@ -132,7 +136,7 @@ export default function CalendarModal({ theme, locale, glowColor, onClose }: {
     let played = 0; const allDraws: DrawInfo[] = [];
     try {
       const result = await runTimeline(
-        { seasonId, userClubId: userClub, tactic: tactic || "Balanced", customTactic, lineup: Object.values(lineup || {}).filter(Boolean) },
+        { seasonId, userClubId: userClub, tactic: tactic || "Balanced", customTactic, lineup: Object.values(lineup || {}).filter(Boolean), layout: buildLayout(formation, lineup || {}, customFormations, FORMATIONS) },
         matchday, selected,
         {
           shouldStop: () => stopRef.current,

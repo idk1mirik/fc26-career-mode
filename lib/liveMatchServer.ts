@@ -8,7 +8,7 @@ import { getClubTactic } from "./matchEngine";
 import { generateMatchEvents, type MatchEvent } from "./matchReport";
 import { loadFitness } from "./fitnessServer";
 import { applyFitness, injuryRiskById } from "./fitness";
-import { simulateHalfGoals, lineupAfterEvents, validateSubs, applyHalftimeSubs, FIRST_HALF, SECOND_HALF, type Side, type Sub } from "./liveMatch";
+import { simulateHalfGoals, simulateSegmentGoals, lineupAfterEvents, validateSubs, applyHalftimeSubs, entryMinutes, inMatchDrain, subsUsed, MAX_TOTAL_SUBS, FIRST_HALF, type Side, type Sub } from "./liveMatch";
 
 const keyOf = (p: any) => String(p?.id ?? p?.name);
 const light = (p: any, fitness?: Map<string, number>) => ({
@@ -30,10 +30,11 @@ function benchOf(available: any[], xi: any[], size = 9): any[] {
 }
 
 export interface LiveState {
-  v: 1; kind: "league" | "cup"; seasonId: string; userClubId: string; competitionId?: string; competitionName: string; roundName?: string;
+  v: 2; kind: "league" | "cup"; seasonId: string; userClubId: string; competitionId?: string; competitionName: string; roundName?: string;
   fixtureId: string; home: string; away: string; userSide: Side; userTactic: string; oppTactic: string; captainId: string | null; matchday: number;
   userStartIds: string[]; userBenchIds: string[]; oppStartIds: string[]; oppBenchIds: string[];
-  goals1: { home: number; away: number }; events1: MatchEvent[];
+  /** ВСЕ события матча на текущий момент, включая ещё не показанные «будущие» (их пересчитывает пауза). */
+  events: MatchEvent[]; minute: number;
 }
 export type LiveError = { error: string; status: number };
 
@@ -103,67 +104,97 @@ export async function firstHalf(input: { seasonId: string; userClubId: string; k
   const events1 = generateMatchEvents(g.homeGoals, g.awayGoals, homeStarters, awayStarters, homeBench, awayBench, { window: FIRST_HALF, riskById: risk });
 
   const state: LiveState = {
-    v: 1, kind: input.kind, seasonId: input.seasonId, userClubId: input.userClubId, competitionId: input.competitionId,
+    v: 2, kind: input.kind, seasonId: input.seasonId, userClubId: input.userClubId, competitionId: input.competitionId,
     competitionName: ctx.competitionName, roundName: ctx.roundName, fixtureId: fixture.id, home: fixture.home_club, away: fixture.away_club,
     userSide, userTactic: input.tactic || "Balanced", oppTactic, captainId, matchday: ctx.matchday,
     userStartIds: xi.map(keyOf), userBenchIds: userBench.map(keyOf), oppStartIds: oppXI.map(keyOf), oppBenchIds: oppBench.map(keyOf),
-    goals1: { home: g.homeGoals, away: g.awayGoals }, events1,
+    events: events1, minute: 0,
   };
   const mySquad = lineupAfterEvents(xi, userBench, events1, userSide);
   return {
     state, home: fixture.home_club, away: fixture.away_club, userSide, competitionName: ctx.competitionName, roundName: ctx.roundName,
-    goals1: state.goals1, events1,
+    goals1: { home: g.homeGoals, away: g.awayGoals }, events1,
+    // полные составы на старте матча (клиент сам считает, кто на поле на любой минуте паузы)
+    startXI: xi.map(p => light(p, fitness)), benchAll: userBench.map(p => light(p, fitness)),
     lineupUsed: xi, // полные объекты — для записи матча
     onPitch: mySquad.on.map(p => light(p, fitness)), bench: mySquad.bench.map(p => light(p, fitness)),
     oppTactic,
   };
 }
 
-export async function finishSecondHalf(input: { state: LiveState; tactic: string; subs: Sub[] }) {
+export interface ChangeInput { state: LiveState; minute: number; tactic: string; subs: Sub[] }
+
+/**
+ * Применяет изменения пользователя на минуте `minute` (пауза во время матча; 45 — перерыв):
+ * замены (не больше 5 за матч с учётом вынужденных), новая тактика. Показанные события (≤ minute) не меняются;
+ * остаток текущего тайма (на перерыве — весь второй тайм) считается заново с новыми составом и тактикой.
+ */
+export async function applyChange(input: ChangeInput) {
   const st = input.state;
-  if (!st || st.v !== 1) return { error: "Bad match state", status: 400 } as LiveError;
+  if (!st || st.v !== 2 || !Array.isArray(st.events)) return { error: "Bad match state", status: 400 } as LiveError;
+  const m = Math.floor(Number(input.minute));
+  if (!Number.isFinite(m) || m < 0 || m > 89) return { error: "Bad minute", status: 400 } as LiveError;
   const oppClub = st.userSide === "home" ? st.away : st.home;
   const [userSquad, oppSquad] = await Promise.all([getPlayersByClub(st.userClubId.toLowerCase(), st.seasonId), getPlayersByClub(oppClub.toLowerCase(), st.seasonId)]);
-  const pick = (squad: any[], ids: string[]) => { const m = new Map(squad.map(p => [keyOf(p), p])); return ids.map(i => m.get(i)).filter(Boolean) as any[]; };
+  const pick = (squad: any[], ids: string[]) => { const mp = new Map(squad.map(p => [keyOf(p), p])); return ids.map(i => mp.get(i)).filter(Boolean) as any[]; };
   const userXI = pick(userSquad, st.userStartIds), userBench = pick(userSquad, st.userBenchIds);
   const oppXI = pick(oppSquad, st.oppStartIds), oppBench = pick(oppSquad, st.oppBenchIds);
   if (userXI.length < 11 || oppXI.length < 11) return { error: "Squad changed during the match", status: 409 } as LiveError;
   const fitness = await loadFitness(st.seasonId, st.userClubId, st.matchday);
 
   const mine = st.userSide, theirs: Side = mine === "home" ? "away" : "home";
-  const userAfter1 = lineupAfterEvents(userXI, userBench, st.events1, mine);
-  const oppAfter1 = lineupAfterEvents(oppXI, oppBench, st.events1, theirs);
+  const known = st.events.filter(e => e.minute <= m);
+  const userNow = lineupAfterEvents(userXI, userBench, known, mine);
+  const oppNow = lineupAfterEvents(oppXI, oppBench, known, theirs);
 
   const subs = (input.subs ?? []).map(s => ({ outId: String(s.outId), inId: String(s.inId) }));
-  const v = validateSubs(userAfter1, subs);
-  if (!v.ok) return { error: v.error, status: 400 } as LiveError;
-  const ht = applyHalftimeSubs(userAfter1, subs, mine);
+  const left = MAX_TOTAL_SUBS - subsUsed(known, mine);
+  const v = validateSubs(userNow, subs, Math.max(0, left));
+  if (!v.ok) return { error: left <= 0 ? "No substitutions left" : v.error, status: 400 } as LiveError;
+  const subMinute = m === 45 ? 46 : Math.max(1, m);                         // замены на перерыве — первая минута второго тайма
+  const applied = applyHalftimeSubs(userNow, subs, mine, subMinute);
 
-  // усталость: те, кто отыграл первый тайм, ещё потеряли свежесть; вышедшие на замену свежи
-  const startIds = new Set(st.userStartIds);
+  // свежесть прямо в матче: чем дольше на поле, тем сильнее усталость; вышедшие на замену свежи
+  const entry = entryMinutes([...known, ...applied.events], mine, st.userStartIds);
   const fit2 = new Map(fitness);
-  for (const p of ht.squad.on) { const id = keyOf(p); fit2.set(id, Math.max(0, (fit2.get(id) ?? 100) - (startIds.has(id) ? 10 : 0))); }
-  const userOnTired = applyFitness(ht.squad.on, fit2);
+  for (const p of applied.squad.on) { const id = keyOf(p); fit2.set(id, Math.max(0, (fit2.get(id) ?? 100) - inMatchDrain(Math.max(0, Math.min(m, 90) - (entry.get(id) ?? 0))))); }
+  const userOnTired = applyFitness(applied.squad.on, fit2);
 
-  // соперник подстраивается под счёт
-  const diff = (mine === "home" ? 1 : -1) * (st.goals1.home - st.goals1.away);   // >0 — пользователь ведёт
-  const oppTactic2 = diff > 0 ? "High Press" : diff <= -2 ? "Defensive" : st.oppTactic;
-  const userTactic2 = input.tactic || st.userTactic;
-
-  const [homeOn, awayOn] = mine === "home" ? [userOnTired, oppAfter1.on] : [oppAfter1.on, userOnTired];
-  const [homeT, awayT] = mine === "home" ? [userTactic2, oppTactic2] : [oppTactic2, userTactic2];
-  const g2 = simulateHalfGoals(homeOn, awayOn, homeT, awayT, mine === "home" ? st.captainId : null, mine === "away" ? st.captainId : null, 2, st.goals1);
-
-  const [homeStarters2, awayStarters2] = mine === "home" ? [ht.squad.on, oppAfter1.on] : [oppAfter1.on, ht.squad.on];
-  const [homeBench2, awayBench2] = mine === "home" ? [ht.squad.bench, oppAfter1.bench] : [oppAfter1.bench, ht.squad.bench];
-  const risk = injuryRiskById(ht.squad.on.map(keyOf), fit2);
-  const events2 = generateMatchEvents(g2.homeGoals, g2.awayGoals, homeStarters2, awayStarters2, homeBench2, awayBench2,
-    { window: SECOND_HALF, riskById: risk, noTacticalSubs: { [mine]: true } });
-
-  const events = [...st.events1, ...ht.events, ...events2].sort((a, b) => a.minute - b.minute);
-  const homeGoals = st.goals1.home + g2.homeGoals, awayGoals = st.goals1.away + g2.awayGoals;
-  return {
-    homeGoals, awayGoals, events, events2: [...ht.events, ...events2], goals2: { home: g2.homeGoals, away: g2.awayGoals },
-    home: st.home, away: st.away, userSide: mine, oppTactic2,
+  const score = {
+    home: known.filter(e => e.type === "goal" && e.team === "home").length,
+    away: known.filter(e => e.type === "goal" && e.team === "away").length,
   };
+  // соперник подстраивается под счёт на перерыве
+  let oppTactic = st.oppTactic;
+  if (m === 45) {
+    const diff = (mine === "home" ? 1 : -1) * (score.home - score.away);
+    oppTactic = diff > 0 ? "High Press" : diff <= -2 ? "Defensive" : st.oppTactic;
+  }
+  const userTactic = input.tactic || st.userTactic;
+
+  const segFrom = m === 45 ? 46 : m + 1, segTo = segFrom <= 45 ? 45 : 90;
+  const [homeOn, awayOn] = mine === "home" ? [userOnTired, oppNow.on] : [oppNow.on, userOnTired];
+  const [homeT, awayT] = mine === "home" ? [userTactic, oppTactic] : [oppTactic, userTactic];
+  const g = simulateSegmentGoals(homeOn, awayOn, homeT, awayT, mine === "home" ? st.captainId : null, mine === "away" ? st.captainId : null, segFrom, segTo, score);
+
+  const [homeStarters, awayStarters] = mine === "home" ? [applied.squad.on, oppNow.on] : [oppNow.on, applied.squad.on];
+  const [homeBench, awayBench] = mine === "home" ? [applied.squad.bench, oppNow.bench] : [oppNow.bench, applied.squad.bench];
+  const risk = injuryRiskById(applied.squad.on.map(keyOf), fit2);
+  const future = generateMatchEvents(g.homeGoals, g.awayGoals, homeStarters, awayStarters, homeBench, awayBench,
+    { window: { from: segFrom, to: segTo }, riskById: risk, noTacticalSubs: { [mine]: true } });
+
+  const events = [...known, ...applied.events, ...future].sort((a, b) => a.minute - b.minute);
+  const newState: LiveState = { ...st, events, minute: m, userTactic, oppTactic };
+  const homeGoals = events.filter(e => e.type === "goal" && e.team === "home").length, awayGoals = events.filter(e => e.type === "goal" && e.team === "away").length;
+  return { state: newState, events, homeGoals, awayGoals, home: st.home, away: st.away, userSide: mine, oppTactic, subsLeft: MAX_TOTAL_SUBS - subsUsed(events.filter(e => e.minute <= Math.max(m, subMinute)), mine) };
+}
+
+/** Совместимость: перерыв (минута 45) — частный случай паузы. */
+export async function finishSecondHalf(input: { state: LiveState; tactic: string; subs: Sub[] }) {
+  const r = await applyChange({ state: input.state, minute: 45, tactic: input.tactic, subs: input.subs });
+  if ("error" in r) return r;
+  const events2 = r.events.filter(e => e.minute > 45);
+  const goals1 = { home: r.events.filter(e => e.minute <= 45 && e.type === "goal" && e.team === "home").length, away: r.events.filter(e => e.minute <= 45 && e.type === "goal" && e.team === "away").length };
+  return { homeGoals: r.homeGoals, awayGoals: r.awayGoals, events: r.events, events2, goals2: { home: r.homeGoals - goals1.home, away: r.awayGoals - goals1.away },
+    home: r.home, away: r.away, userSide: r.userSide, oppTactic2: r.oppTactic, state: r.state };
 }
