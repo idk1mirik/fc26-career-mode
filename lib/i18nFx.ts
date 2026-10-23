@@ -8,7 +8,7 @@
 import type { Locale, ThemeKey } from "./i18n";
 
 export interface FxCopy {
-  navHistory: string; navCompare: string; navCareers: string; navSearch: string;
+  navHistory: string; navCompare: string; navCareers: string; navSearch: string; navScouting: string;
   live: string;
   // совет директоров
   boardTitle: string; boardConfidence: string;
@@ -51,7 +51,7 @@ export interface FxCopy {
 type Partials = Partial<FxCopy>;
 
 const EN: FxCopy = {
-  navHistory: "History", navCompare: "Compare", navCareers: "Careers", navSearch: "Search",
+  navHistory: "History", navCompare: "Compare", navCareers: "Careers", navSearch: "Search", navScouting: "Scouting",
   live: "LIVE",
   boardTitle: "Board objectives", boardConfidence: "Board confidence",
   stAchieved: "Done", stOnTrack: "On track", stAtRisk: "At risk", stFailed: "Failed", stPending: "Too early",
@@ -87,7 +87,7 @@ const EN: FxCopy = {
 };
 
 const RU: FxCopy = {
-  navHistory: "Архив", navCompare: "Сравнение", navCareers: "Карьеры", navSearch: "Поиск",
+  navHistory: "Архив", navCompare: "Сравнение", navCareers: "Карьеры", navSearch: "Поиск", navScouting: "Скаутинг",
   live: "LIVE",
   boardTitle: "Цели от совета директоров", boardConfidence: "Доверие руководства",
   stAchieved: "Выполнено", stOnTrack: "Идём по плану", stAtRisk: "Под угрозой", stFailed: "Провалено", stPending: "Рано судить",
@@ -124,7 +124,7 @@ const RU: FxCopy = {
 
 // ── Aurora: сказочный, мягкий ────────────────────────────────────────────
 const AURORA_EN: Partials = {
-  navHistory: "✦ Past Chapters", navCompare: "✦ Side by Side", navCareers: "✦ Story Shelf", navSearch: "Search the story…",
+  navHistory: "✦ Past Chapters", navCompare: "✦ Side by Side", navCareers: "✦ Story Shelf", navSearch: "Search the story…", navScouting: "✦ Star Seekers",
   boardTitle: "The Board's Wishes", boardConfidence: "The board's trust",
   stAchieved: "Granted ✦", stOnTrack: "On the right path", stAtRisk: "A little worried", stFailed: "Not this time", stPending: "Too soon to tell",
   vExcellent: "The board is over the moon", vSatisfied: "The board is smiling", vConcerned: "The board is a little worried", vAngry: "The board is cross",
@@ -147,7 +147,7 @@ const AURORA_EN: Partials = {
   panelLeague: "League", panelLeagueTable: "League Table", panelNoStandings: "The table is still blank",
 };
 const AURORA_RU: Partials = {
-  navHistory: "✦ Прошлые главы", navCompare: "✦ Бок о бок", navCareers: "✦ Книжная полка", navSearch: "Искать в истории…",
+  navHistory: "✦ Прошлые главы", navCompare: "✦ Бок о бок", navCareers: "✦ Книжная полка", navSearch: "Искать в истории…", navScouting: "✦ Искатели звёзд",
   boardTitle: "Пожелания совета", boardConfidence: "Доверие совета",
   stAchieved: "Исполнено ✦", stOnTrack: "Верный путь", stAtRisk: "Есть тревога", stFailed: "В другой раз", stPending: "Рано судить",
   vExcellent: "Совет в полном восторге", vSatisfied: "Совет улыбается", vConcerned: "Совет немного тревожится", vAngry: "Совет сердится",
@@ -171,7 +171,7 @@ const AURORA_RU: Partials = {
 
 // ── Maleficent: терминальный, тёмный ──────────────────────────────────────
 const MAL_EN: Partials = {
-  navHistory: ">_ ARCHIVE", navCompare: ">_ COMPARE", navCareers: ">_ SAVES", navSearch: ">_ SEARCH",
+  navHistory: ">_ ARCHIVE", navCompare: ">_ COMPARE", navCareers: ">_ SAVES", navSearch: ">_ SEARCH", navScouting: ">_ RECON",
   live: "● LIVE",
   boardTitle: ">_ BOARD DIRECTIVES", boardConfidence: "BOARD LOYALTY",
   stAchieved: "COMPLETE", stOnTrack: "ON COURSE", stAtRisk: "AT RISK", stFailed: "FAILED", stPending: "PENDING",
@@ -199,7 +199,7 @@ const MAL_EN: Partials = {
   panelLeague: "LEAGUE", panelLeagueTable: ">_ LEAGUE TABLE", panelNoStandings: ">_ NO STANDINGS", panelPhase: "LEAGUE PHASE", panelKnockout: "KNOCKOUT", panelSoon: ">_ FIXTURES PENDING",
 };
 const MAL_RU: Partials = {
-  navHistory: ">_ АРХИВ", navCompare: ">_ СРАВНЕНИЕ", navCareers: ">_ СОХРАНЕНИЯ", navSearch: ">_ ПОИСК",
+  navHistory: ">_ АРХИВ", navCompare: ">_ СРАВНЕНИЕ", navCareers: ">_ СОХРАНЕНИЯ", navSearch: ">_ ПОИСК", navScouting: ">_ РАЗВЕДКА",
   live: "● LIVE",
   boardTitle: ">_ ДИРЕКТИВЫ СОВЕТА", boardConfidence: "ЛОЯЛЬНОСТЬ СОВЕТА",
   stAchieved: "ВЫПОЛНЕНО", stOnTrack: "НА КУРСЕ", stAtRisk: "ПОД УГРОЗОЙ", stFailed: "ПРОВАЛ", stPending: "ОЖИДАНИЕ",

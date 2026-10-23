@@ -62,9 +62,13 @@ test("интерес и предложения: клубы разных лиг, 
 
 test("торг, решение игрока и сделка", { timeout: 200000 }, async () => {
   const { seasonId } = await setup();
-  for (const md of [2, 3, 4, 5, 6, 7]) await runInterestTick(seasonId, USER, md);
-  const offer = (db.get("transfer_offers") ?? []).find(o => o.status === "pending");
-  assert.ok(offer, "нет предложения для проверки");
+  // предложения вероятностны — тикаем, пока не появится живое (не истёкшее) предложение
+  let offer = null;
+  for (let md = 2; md <= 25 && !offer; md++) {
+    await runInterestTick(seasonId, USER, md);
+    offer = (db.get("transfer_offers") ?? []).find(o => o.status === "pending" && o.expires_matchday >= md) ?? null;
+  }
+  assert.ok(offer, "за 24 тика не появилось ни одного предложения");
 
   // встречное предложение выше потолка в 2 раза — клуб уходит; в пределах — соглашается
   const crazy = await post("/api/transfers/offers/respond", { seasonId, offerId: offer.id, action: "counter", fee: offer.max_fee * 2 });
@@ -96,7 +100,7 @@ test("торг, решение игрока и сделка", { timeout: 200000 
 
   // игрок, которого ничто не гонит, отказывается; деньги и состав не меняются
   const refuser = (await getPlayersByClub(USER.toLowerCase(), seasonId)).find(p => p.id !== agreed.player_id);
-  const ref = { ...offer, id: "manual-ref", player_id: refuser.id, player_name: refuser.name, status: "club_agreed", expires_matchday: 99,
+  const ref = { ...offer, id: "manual-ref", player_id: refuser.id, player_name: refuser.name, status: "club_agreed", expires_matchday: 99, fee: 100_000, max_fee: 200_000,   // сумма посильна любому покупателю: проверяем именно отказ игрока
     terms: { ...offer.terms, happiness: 100, buyerTier: 55, buyerLeague: 55, wageOffer: 50000, currentWage: 100000, starterGap: -8, age: 33 } };
   db.get("transfer_offers").push(ref);
   const budgetNow = db.get("standings").find(s => s.season_id === seasonId && s.club_id === USER).budget;

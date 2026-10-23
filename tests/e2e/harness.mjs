@@ -17,6 +17,8 @@ export async function bootRoutes() {
     "/api/leaders": await load("app/api/leaders/route.ts"),
     "/api/season/new": await load("app/api/season/new/route.ts"),
     "/api/fitness": await load("app/api/fitness/route.ts"),
+    "/api/scouting": await load("app/api/scouting/route.ts"),
+    "/api/scouting/start": await load("app/api/scouting/start/route.ts"),
     "/api/match/live/first-half": await load("app/api/match/live/first-half/route.ts"),
     "/api/match/live/finish": await load("app/api/match/live/finish/route.ts"),
     "/api/match/live/change": await load("app/api/match/live/change/route.ts"),

@@ -28,9 +28,10 @@ const TITLE_EN: Record<string, string> = {
   "Быстрая продажа совершена": "Quick sale completed", "Игрок взят в аренду": "Player loaned in",
   "Можно возобновить переговоры": "Negotiations can resume", "Предложение принято": "Offer accepted",
   "🎉 Повышение в классе!": "🎉 Promoted!", "📉 Вылет из лиги": "📉 Relegated",
-  "Новое предложение": "New offer", "Игрок отказался": "Player refused", "Клуб отозвал предложение": "Club withdrew its offer", "Трансфер завершён": "Transfer completed",
+  "Новое предложение": "New offer", "Отчёт скаута": "Scout report", "Игрок отказался": "Player refused", "Клуб отозвал предложение": "Club withdrew its offer", "Трансфер завершён": "Transfer completed",
 };
 const MSG_EN: [RegExp, string][] = [
+  [/^Скаут вернулся из лиги (.+): найдено целей — (\d+)\.$/, "The scout is back from $1: targets found — $2."],
   [/^(.+) \((.+)\) предлагает (.+) за (.+)\. Ответ нужен в течение (\d+) туров\.$/, "$1 ($2) offers $3 for $4. A reply is needed within $5 matchdays."],
   [/^(.+) не захотел переходить в (.+)\.$/, "$1 refused to join $2."],
   [/^(.+) счёл цену за (.+) завышенной и вышел из переговоров\.$/, "$1 found the price for $2 too high and walked away."],

@@ -12,6 +12,7 @@ import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStat
 import { payWeeklyWages } from "@/lib/contracts";
 import { notifyReadyNegotiations } from "@/lib/contracts-server";
 import { runInterestTick } from "@/lib/transferInterestServer";
+import { resolveMissions } from "@/lib/scoutingServer";
 import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessServer";
 import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { sanitizeLayout, type LineupLayout } from "@/lib/lineupLayout";
@@ -300,6 +301,8 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   // Интерес клубов к моим игрокам → слухи и предложения (сначала мне, потом решает игрок).
   // Раньше выставленный лот продавался автоматически и только внутри лиги игрока.
   if (userClubId) { try { await runInterestTick(seasonId, userClubId, matchday); } catch (e) { console.error("runInterestTick failed", e); } }
+  // Скауты: завершившиеся миссии превращаются в отчёты
+  if (userClubId) { try { await resolveMissions(seasonId, userClubId, matchday); } catch (e) { console.error("resolveMissions failed", e); } }
   // ИИ-клубы тоже торгуют между собой и подписывают свободных агентов
   try { await runAiTransfers(seasonId, userClubId); } catch (e) { console.error("runAiTransfers failed", e); }
   try { await notifyReadyNegotiations(seasonId, matchday); } catch (e) { console.error("notifyReadyNegotiations failed", e); }

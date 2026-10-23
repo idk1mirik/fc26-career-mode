@@ -20,6 +20,7 @@ const CHECKS: Check[] = [
   { name: "Интерес клубов (слухи)", table: "transfer_interest", columns: "id, level, score", migration: "0006_transfer_offers.sql" },
   { name: "Предложения за игроков", table: "transfer_offers", columns: "id, status, terms", migration: "0006_transfer_offers.sql" },
   { name: "Усталость игроков", table: "player_fitness", columns: "id, fitness", migration: "0007_player_fitness.sql" },
+  { name: "Скаутинг", table: "scout_missions", columns: "id, status, report", migration: "0008_scouting.sql" },
 ];
 
 export async function GET() {

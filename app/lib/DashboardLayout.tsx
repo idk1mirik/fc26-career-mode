@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap, CalendarClock, History, GitCompare, FolderOpen, Search } from "lucide-react";
+import { LayoutDashboard, Users, ArrowRightLeft, CalendarDays, Trophy, Target, Menu, X, Award, GraduationCap, CalendarClock, History, GitCompare, Telescope, FolderOpen, Search } from "lucide-react";
 import SearchModal from "@/components/SearchModal";
 import { DashBackdrop } from "@/components/dashboard/DashBackdrop";
 import { getFx } from "@/lib/i18nFx";
@@ -32,6 +32,7 @@ const NAV_ICONS = [
 const EXTRA_NAV = [
   { href: "/history",  icon: History,    key: "navHistory" },
   { href: "/compare",  icon: GitCompare, key: "navCompare" },
+  { href: "/scouting", icon: Telescope,  key: "navScouting" },
   { href: "/careers",  icon: FolderOpen, key: "navCareers" },
 ] as const;
 
