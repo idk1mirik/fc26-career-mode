@@ -5,6 +5,9 @@ import { useThemeStore } from "@/app/store/themeStore";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useCareerStore } from "@/app/store/careerStore";
+import { roomApi, NICK_STORAGE_KEY } from "@/lib/roomClient";
+import { roomError } from "@/lib/i18nRoom";
 
 // ─── PARTICLES (Classic) ──────────────────────────────────────────────────────
 function Particles() {
@@ -358,18 +361,33 @@ export default function MultiplayerPage() {
   const hdr = (cfg as any).header;
 
   const [mounted, setMounted] = useState(false);
-  const [roomCode, setRoomCode] = useState("");
+  const roomCode = "······"; // настоящий код выдаёт сервер при создании комнаты
+  const [nick, setNick] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const locale = useCareerStore(s => s.locale);
   const [joinInput, setJoinInput] = useState("");
   const [joinError, setJoinError] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    setRoomCode(
-      Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("")
-    );
+    useCareerStore.persist.rehydrate();
+    try { setNick(localStorage.getItem(NICK_STORAGE_KEY) ?? ""); } catch {}
     setMounted(true);
   }, []);
+
+  const createRoom = useCallback(async () => {
+    if (creating || nick.trim().length < 2) return;
+    setCreating(true); setCreateError("");
+    try {
+      const { code } = await roomApi<{ code: string }>("", { body: { nick } });
+      try { localStorage.setItem(NICK_STORAGE_KEY, nick.trim()); } catch {}
+      router.push(`/multiplayer/${code}`);
+    } catch (e: any) {
+      setCreateError(roomError(locale, e?.code ?? "server_error"));
+      setCreating(false);
+    }
+  }, [creating, nick, locale, router]);
 
   const joinRoom = useCallback(() => {
     if (joinInput.length < 6) return;
@@ -532,7 +550,7 @@ export default function MultiplayerPage() {
                 {/* Badge */}
                 <div className="flex items-start justify-between">
                   <span className={c.badge.cls}>{c.badge.text}</span>
-                  <CopyButton code={roomCode} theme={theme} />
+                  <span />
                 </div>
 
                 {/* Title */}
@@ -551,13 +569,24 @@ export default function MultiplayerPage() {
                   <p className={c.statusLabel}>{c.statusText}</p>
                   <WaitingDots theme={theme} />
 
+                  <input
+                    value={nick}
+                    maxLength={20}
+                    onChange={e => setNick(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") createRoom(); }}
+                    placeholder={locale === "ru" ? "ТВОЙ НИК" : "YOUR NICKNAME"}
+                    className={cfg.joinCard.inputCls}
+                    style={{ fontSize: "1.1rem", letterSpacing: "0.1em", marginTop: 8 }}
+                  />
                   <button
-                    onClick={() => router.push(`/multiplayer/${roomCode}`)}
+                    onClick={createRoom}
+                    disabled={creating || nick.trim().length < 2}
                     className={cfg.joinCard.btnCls}
-                    style={{ marginTop: 8 }}
+                    style={{ marginTop: 8, opacity: creating || nick.trim().length < 2 ? 0.5 : 1 }}
                   >
-                    {theme === "maleficent" ? "OPEN DOMAIN →" : theme === "aurora" ? "Open Room →" : "START HOSTING →"}
+                    {creating ? "…" : theme === "maleficent" ? "OPEN DOMAIN →" : theme === "aurora" ? "Open Room →" : "START HOSTING →"}
                   </button>
+                  {createError && <p className="text-red-400 text-xs mt-2">{createError}</p>}
                 </div>
 
                 {/* Sub */}
