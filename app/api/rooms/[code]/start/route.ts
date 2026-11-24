@@ -1,6 +1,6 @@
 // POST /api/rooms/[code]/start — хост запускает сезон комнаты.
 // Сезон создаётся существующим /api/season (room_code + is_multi уже поддержаны в таблице seasons).
-// ВАЖНО (фаза 1): сезон создаётся на клуб хоста; общий ход тура и мульти-клубная симуляция — фаза 2.
+// Сезон создаётся на клуб хоста; дальше время двигает общий ход комнаты (lib/roomTick.ts), клубы остальных игроков подхватываются по room_members.
 import { getAdmin } from "@/lib/supabaseAdmin";
 import { checkStart } from "@/lib/roomRules";
 import { POST as createSeason } from "@/app/api/season/route";
@@ -32,7 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
       }));
       const out = await res.json();
       if (!res.ok || !out.seasonId) throw new Error(out?.error || "season_create_failed");
-      await db.from("rooms").update({ status: "playing", season_id: out.seasonId }).eq("id", room.id);
+      await db.from("rooms").update({ status: "playing", season_id: out.seasonId, tick_deadline: new Date(Date.now() + (room.tick_seconds ?? 120) * 1000).toISOString() }).eq("id", room.id);
       await systemMessage(room.id, { e: "start" });
       return Response.json({ ok: true, seasonId: out.seasonId });
     } catch (e) {

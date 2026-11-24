@@ -28,6 +28,9 @@ export async function resolve(specifier, context, next) {
     if (file && process.env.FAKE_DB === "1" && file === path.join(ROOT, "lib", "supabase.ts")) {
       return next(pathToFileURL(path.join(ROOT, "tests", "fakeSupabase.mjs")).href, context);
     }
+    if (file && process.env.FAKE_DB === "1" && file === path.join(ROOT, "lib", "supabaseAdmin.ts")) {
+      return next(pathToFileURL(path.join(ROOT, "tests", "fakeAdmin.mjs")).href, context);   // комнаты: service-role клиент тоже в памяти
+    }
     if (file) return next(pathToFileURL(file).href, context);
   }
   return next(specifier, context);

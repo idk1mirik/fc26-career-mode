@@ -33,9 +33,10 @@ export async function requireUser(req: Request): Promise<string> {
 export interface RoomRow {
   id: string; code: string; host_user_id: string; league_id: string | null;
   max_players: number; status: "lobby" | "starting" | "playing" | "closed"; season_id: string | null;
+  tick_state: "idle" | "running"; tick_no: number; tick_deadline: string | null; tick_seconds: number; season_finished: boolean;
 }
 export interface MemberRow {
-  id: string; room_id: string; user_id: string; nick: string; club_id: string | null; ready: boolean; joined_at: string;
+  id: string; room_id: string; user_id: string; nick: string; club_id: string | null; ready: boolean; tick_ready: boolean; joined_at: string;
 }
 
 export async function loadRoom(rawCode: string): Promise<RoomRow> {
@@ -94,9 +95,20 @@ export async function buildState(room: RoomRow, userId: string) {
   if (msgs.error) throw msgs.error;
   const me = members.find(m => m.user_id === userId);
   if (!me) throw new ApiError(403, "not_member");
+  // Номер ближайшего тура лиги — из сезона комнаты (сервер единственный источник истины)
+  let matchday: number | null = null;
+  if (room.season_id) {
+    const { data: s } = await getAdmin().from("seasons").select("matchday").eq("id", room.season_id).maybeSingle();
+    matchday = s?.matchday ?? null;
+  }
   return {
-    room: { id: room.id, code: room.code, status: room.status, leagueId: room.league_id, maxPlayers: room.max_players, seasonId: room.season_id },
-    members: members.map(m => ({ id: m.id, nick: m.nick, clubId: m.club_id, ready: m.ready, isHost: m.user_id === room.host_user_id })),
+    room: {
+      id: room.id, code: room.code, status: room.status, leagueId: room.league_id, maxPlayers: room.max_players, seasonId: room.season_id,
+      tickNo: room.tick_no ?? 0, tickState: room.tick_state ?? "idle", tickDeadline: room.tick_deadline ?? null,
+      tickSeconds: room.tick_seconds ?? 120, seasonFinished: !!room.season_finished, matchday,
+    },
+    serverNow: new Date().toISOString(),
+    members: members.map(m => ({ id: m.id, nick: m.nick, clubId: m.club_id, ready: m.ready, tickReady: !!m.tick_ready, isHost: m.user_id === room.host_user_id })),
     messages: (msgs.data ?? []).reverse(),
     me: { memberId: me.id, isHost: me.user_id === room.host_user_id },
   };

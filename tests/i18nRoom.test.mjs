@@ -8,6 +8,7 @@ const API_CODES = [
   "not_member", "not_host", "league_unknown", "league_too_small", "no_league", "club_unknown", "club_taken", "pick_club",
   "start_no_league", "start_no_club", "start_not_ready", "start_too_many", "too_fast", "bad_message", "cant_kick_self",
   "member_not_found", "rate_limited", "already_member", "network", "server_error", "anon_auth_failed",
+  "room_not_playing", "season_finished", "tick_running", "not_expired", "tick_failed", "room_season",
 ];
 
 test("лобби: en и ru имеют одинаковый набор ключей и непустые тексты", () => {

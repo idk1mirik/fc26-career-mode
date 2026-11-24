@@ -18,6 +18,10 @@ export interface RoomCopy {
     join: (n: string) => string; leave: (n: string) => string; kick: (n: string) => string;
     host: (n: string) => string; league: (l: string) => string; start: () => string;
   };
+  tour: {
+    step: (n: number) => string; waiting: (ready: number, total: number) => string; imReady: string; cancel: string;
+    playing: string; finished: string; saveNote: string; timeLeft: (t: string) => string; auto: string; lobby: string; notReadyHint: string;
+  };
   errors: Record<string, string>;
 }
 
@@ -38,7 +42,15 @@ const EN: RoomCopy = {
     join: n => `${n} joined`, leave: n => `${n} left`, kick: n => `${n} was removed`,
     host: n => `${n} is the host now`, league: l => `League: ${l}`, start: () => "The season has started",
   },
+  tour: {
+    step: n => `Round ${n}`, waiting: (r, t) => `${r}/${t} ready`, imReady: "I'm ready", cancel: "Cancel ready",
+    playing: "Playing the round…", finished: "The season is finished. Starting a new season in a room is coming soon.",
+    saveNote: "Your lineup and tactic are saved when you press Ready.", timeLeft: t => `Time left ${t}`,
+    auto: "When time runs out, the round is played with each player's saved lineup.", lobby: "Lobby & chat", notReadyHint: "Confirm your lineup and tactic first",
+  },
   errors: {
+    room_not_playing: "The season has not started yet.", season_finished: "The season is finished.", tick_running: "The round is being played.",
+    not_expired: "Time is not up yet.", tick_failed: "The round could not be played. Try again.", room_season: "In a room only the room moves time.",
     unauthorized: "Session problem. Reload the page.", anon_auth_failed: "Could not sign in. Is anonymous sign-in enabled in Supabase?",
     nick_length: "Nickname must be 2–20 characters.", nick_chars: "Nickname has unsupported characters.", nick_reserved: "This nickname is reserved.", nick_taken: "This nickname is already used in the room.",
     room_not_found: "Room not found.", room_full: "The room is full.", room_started: "The room has already started.", not_member: "You are not in this room.", not_host: "Only the host can do this.",
@@ -66,7 +78,15 @@ const RU: RoomCopy = {
     join: n => `${n} зашёл в комнату`, leave: n => `${n} вышел`, kick: n => `${n} исключён`,
     host: n => `${n} теперь хост`, league: l => `Лига: ${l}`, start: () => "Сезон начался",
   },
+  tour: {
+    step: n => `Ход ${n}`, waiting: (r, t) => `готовы ${r}/${t}`, imReady: "Я готов", cancel: "Отменить готовность",
+    playing: "Играем ход…", finished: "Сезон завершён. Новый сезон в комнате скоро появится.",
+    saveNote: "Состав и тактика сохраняются, когда ты нажимаешь «Готов».", timeLeft: t => `Осталось ${t}`,
+    auto: "Когда время выйдет, ход сыграется с сохранёнными составами игроков.", lobby: "Лобби и чат", notReadyHint: "Сначала подтверди состав и тактику",
+  },
   errors: {
+    room_not_playing: "Сезон ещё не начался.", season_finished: "Сезон завершён.", tick_running: "Ход уже играется.",
+    not_expired: "Время ещё не вышло.", tick_failed: "Не удалось сыграть ход. Попробуй ещё раз.", room_season: "В комнате время двигает только сама комната.",
     unauthorized: "Проблема с сессией. Перезагрузи страницу.", anon_auth_failed: "Не удалось войти. Включён ли анонимный вход в Supabase?",
     nick_length: "Ник должен быть от 2 до 20 символов.", nick_chars: "В нике есть недопустимые символы.", nick_reserved: "Этот ник зарезервирован.", nick_taken: "Такой ник уже есть в комнате.",
     room_not_found: "Комната не найдена.", room_full: "Комната заполнена.", room_started: "Комната уже началась.", not_member: "Тебя нет в этой комнате.", not_host: "Это может только хост.",

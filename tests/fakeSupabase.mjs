@@ -12,6 +12,8 @@ const DEFAULTS = {
   cup_fixtures: { played: false, is_bye: false },
   competitions: { status: "active", current_round: 1 },
   contracts: {}, transfers: {}, notifications: { read: false },
+  rooms: { status: "lobby", tick_state: "idle", tick_no: 0, tick_seconds: 120, season_finished: false },
+  room_members: { ready: false, tick_ready: false },
 };
 const NOT_NULL = {
   cup_fixtures: ["is_bye", "played", "competition_id", "round"],
@@ -118,5 +120,22 @@ class Query {
     return { data, error, count };
   }
 }
-export const supabase = { from: (t) => new Query(t), rpc: async () => ({ data: null, error: err("rpc not supported", "42883") }) };
+// RPC комнат (sql/002_room_tour.sql) — те же правила, что в SQL-функциях
+async function rpc(name, a = {}) {
+  const room = tbl("rooms").find(r => r.id === a.p_room);
+  if (name === "claim_room_tick") {
+    if (!room || room.status !== "playing" || room.season_finished || room.tick_state === "running") return { data: false, error: null };
+    room.tick_state = "running"; room.tick_started_at = new Date().toISOString();
+    return { data: true, error: null };
+  }
+  if (name === "finish_room_tick" && room) {
+    room.tick_state = "idle"; room.tick_no += 1; room.season_finished = !!a.p_finished;
+    room.tick_deadline = a.p_finished ? null : new Date(Date.now() + a.p_seconds * 1000).toISOString();
+    tbl("room_members").filter(m => m.room_id === room.id).forEach(m => { m.tick_ready = false; });
+    return { data: null, error: null };
+  }
+  if (name === "release_room_tick" && room) { room.tick_state = "idle"; return { data: null, error: null }; }
+  return { data: null, error: err("rpc not supported", "42883") };
+}
+export const supabase = { from: (t) => new Query(t), rpc };
 export default supabase;

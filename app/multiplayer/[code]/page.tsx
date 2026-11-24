@@ -128,9 +128,10 @@ export default function RoomPage() {
       cs.setSeasonId(state.room.seasonId);
       cs.setMatchday(1);
     }
+    cs.setRoomCode(code);   // с этого момента игровой экран работает в режиме комнаты (общий ход)
     const tm = setTimeout(() => router.push("/dashboard"), 1200);
     return () => clearTimeout(tm);
-  }, [state, router]);
+  }, [state, router, code]);
 
   // ── Действия ──
   const act = async (fn: () => Promise<unknown>) => {

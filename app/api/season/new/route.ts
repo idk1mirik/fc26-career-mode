@@ -1,6 +1,7 @@
 // app/api/season/new/route.ts
 // Создаёт новый сезон для той же карьеры (тот же клуб), на основе результатов прошлого
 import { supabase } from "@/lib/supabase";
+import { blockRoomSeason } from "@/lib/roomGuard";
 
 // Новый сезон пересчитывает прогресс всех игроков — даём функции больше времени
 export const maxDuration = 60;
@@ -54,6 +55,8 @@ function buildFixtures(clubs: string[], seasonId: string) {
 export async function POST(req: Request) {
   const { oldSeasonId } = await req.json();
   if (!oldSeasonId) return Response.json({ error: "oldSeasonId required" }, { status: 400 });
+  const blocked = await blockRoomSeason(oldSeasonId, req); // сезон комнаты: новый сезон — общее решение комнаты (фаза 3+)
+  if (blocked) return blocked;
 
   const { data: oldSeason } = await supabase.from("seasons").select("*").eq("id", oldSeasonId).single();
   if (!oldSeason) return Response.json({ error: "Old season not found" }, { status: 404 });

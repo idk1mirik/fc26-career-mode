@@ -39,6 +39,8 @@ import { icons } from "@/lib/themeFlavor";
 import { Stars, SectionTitle } from "@/components/ThemeBits";
 import { DrawModal } from "@/components/DrawModal";
 import { runTimeline, pickNextAction, stepLeague, stepCup, type DrawInfo, type SimContext } from "@/lib/simClient";
+import RoomTourBar from "@/components/room/RoomTourBar";
+import { useRoomTour } from "@/lib/useRoomTour";
 import { seasonLabel, formatGameDate } from "@/lib/seasonLabel";
 import React from "react";
 
@@ -234,6 +236,7 @@ export default function DashboardPage() {
   const selectedClub   = useCareerStore(s => s.selectedClub);
   const selectedLeague = useCareerStore(s => s.selectedLeague);
   const seasonId       = useCareerStore(s => s.seasonId);
+  const roomCode       = useCareerStore(s => s.roomCode);   // не null — игра в комнате мультиплеера
   const matchday       = useCareerStore(s => s.matchday);
   const setMatchday    = useCareerStore(s => s.setMatchday);
   const tactic         = useCareerStore(s => s.tactic) || "Balanced";
@@ -484,8 +487,37 @@ export default function DashboardPage() {
     layout: buildLayout(formation, lineup || {}, customFormationsStore, FORMATIONS),      // точная расстановка (в т.ч. кастомная схема)
   });
 
+  // ── Комната мультиплеера: время двигает общий ход сервера ──
+  // Кнопки «Играть» здесь превращаются в «Готов»: состав и тактика уходят на сервер, а когда готовы все
+  // (или вышел таймер), сервер играет следующее событие календаря для всех сразу.
+  const tour = useRoomTour(roomCode);
+  const roomToggleReady = async () => {
+    if (!roomCode || tour.busy) return;
+    const isReady = !!tour.me?.tickReady;
+    if (!isReady && !readyForSeasonSim) return;
+    await tour.setReady(!isReady, {
+      tactic,
+      lineupIds: Object.values(lineup || {}).filter(Boolean).map((p: any) => String(p.id ?? p.name)),
+      layout: buildLayout(formation, lineup || {}, customFormationsStore, FORMATIONS),
+    });
+  };
+  // Ход сыгран (номер хода вырос) — обновляем таблицу, календарь и кубки; номер тура берём с сервера
+  const seenTickRef = useRef<number | null>(null);
+  const tourRoom = tour.state?.room;
+  useEffect(() => {
+    if (!roomCode || !tourRoom || !seasonId) return;
+    const first = seenTickRef.current === null;
+    if (!first && seenTickRef.current === tourRoom.tickNo) return;
+    seenTickRef.current = tourRoom.tickNo;
+    if (tourRoom.matchday && tourRoom.matchday !== matchday) setMatchday(tourRoom.matchday);
+    if (tourRoom.seasonFinished) setSeasonFinished(true);
+    if (!first) { loadData(seasonId); loadCalendar(seasonId, userClub); loadCompetitions(seasonId); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, tourRoom?.tickNo, tourRoom?.matchday, tourRoom?.seasonFinished, seasonId]);
+
   // Симуляция кубкового раунда
   const advanceCupRound = async (live?: LiveResult) => {
+    if (roomCode) { await roomToggleReady(); return; }   // комната: «Готов», ход играет сервер
     const liveRes = live && (live as any).override ? live : undefined;   // (из кнопки приходит событие клика — игнорируем)
     if (!nextMatch?.competition_id || simulatingCup || !readyForSeasonSim) return;
     setSimulatingCup(true);
@@ -525,6 +557,7 @@ export default function DashboardPage() {
 
   // Симуляция тура
   const advanceMatchday = async (live?: LiveResult) => {
+    if (roomCode) { await roomToggleReady(); return; }   // комната: «Готов», ход играет сервер
     const liveRes = live && (live as any).override ? live : undefined;
     if (!seasonId || simulating || !readyForSeasonSim) return;
     setSimulating(true);
@@ -578,6 +611,7 @@ export default function DashboardPage() {
   };
 
   const simulateWholeSeason = async () => {
+    if (roomCode) return;   // в комнате весь сезон разом не промотать: ходы общие
     if (!seasonId || simulating || simulatingSeason || !readyForSeasonSim) return;
     setSimulatingSeason(true);
     setApiError(null);
@@ -666,7 +700,7 @@ export default function DashboardPage() {
 
   const [startingNewSeason, setStartingNewSeason] = useState(false);
   const handleStartNewSeason = async () => {
-    if (!seasonId || startingNewSeason) return;
+    if (!seasonId || startingNewSeason || roomCode) return;   // новый сезон в комнате — общее решение, пока не реализовано
     setStartingNewSeason(true);
     try {
       const res = await fetch("/api/season/new", {
@@ -933,6 +967,10 @@ export default function DashboardPage() {
           );
         })()}
 
+        {roomCode && (
+          <RoomTourBar tour={tour} roomCode={roomCode} locale={locale as "en" | "ru"} theme={theme} canReady={readyForSeasonSim} onToggle={roomToggleReady} />
+        )}
+
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
 
           {/* LEFT: fixtures + simulate */}
@@ -954,10 +992,10 @@ export default function DashboardPage() {
                       dateLabel={formatGameDate(nextMatch.match_date ?? careerDate, seasonNum, locale as "en" | "ru")}
                       playLabel={copy.dashPlayMatch} playingLabel={copy.dashSimulating} playing={simulatingCup}
                       playDisabled={simulatingCup || !readyForSeasonSim} onPlay={() => advanceCupRound()}
-                      liveBtn={{ label: locale === "ru" ? "Играть вживую" : "Play live", disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim, onClick: () => setLiveOpen({ kind: "cup", competitionId: nextMatch.competition_id }) }}
+                      liveBtn={{ label: locale === "ru" ? "Играть вживую" : "Play live", disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim || !!roomCode, onClick: () => setLiveOpen({ kind: "cup", competitionId: nextMatch.competition_id }) }}
                       seasonBtn={{
                         label: simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season"),
-                        disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim,
+                        disabled: simulating || simulatingCup || simulatingSeason || !readyForSeasonSim || !!roomCode,
                         onClick: simulateWholeSeason,
                         title: !readyForSeasonSim
                           ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
@@ -993,7 +1031,7 @@ export default function DashboardPage() {
                     const date = getLeagueMatchdayDate(matchday);
                     const seasonBtn = {
                       label: simulatingSeason ? `${copy.dashSimulating} (${seasonSimProgress?.done ?? 0})` : (locale === "ru" ? "Весь сезон" : "Sim Season"),
-                      disabled: simulating || simulatingSeason || seasonFinished || !readyForSeasonSim,
+                      disabled: simulating || simulatingSeason || seasonFinished || !readyForSeasonSim || !!roomCode,
                       onClick: simulateWholeSeason,
                       title: !readyForSeasonSim
                         ? (locale === "ru" ? "Сначала подтверди состав (/squad) и тактику (/tactics)" : "Confirm your lineup (/squad) and tactic (/tactics) first")
@@ -1015,7 +1053,7 @@ export default function DashboardPage() {
                         dateLabel={formatGameDate(date, seasonNum, locale as "en" | "ru")}
                         playLabel={copy.dashSimulate} playingLabel={copy.dashSimulating} playing={simulating}
                         playDisabled={playDisabled} onPlay={() => advanceMatchday()} seasonBtn={seasonBtn} help={help}
-                        liveBtn={{ label: locale === "ru" ? "Играть вживую" : "Play live", disabled: playDisabled, onClick: () => setLiveOpen({ kind: "league" }) }} />
+                        liveBtn={{ label: locale === "ru" ? "Играть вживую" : "Play live", disabled: playDisabled || !!roomCode, onClick: () => setLiveOpen({ kind: "league" }) }} />
                     ) : (
                       <div className={`p-6 ${ui.card} flex items-center justify-between gap-4 flex-wrap`}>
                         <div className={`text-lg font-black ${ui.text}`}>{currentFixtures.length} {copy.dashMatchesToPlay}</div>

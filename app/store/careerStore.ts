@@ -6,6 +6,8 @@ interface CareerState {
   selectedClub:    any;
   selectedLeague:  any;
   seasonId:        string | null;
+  /** Код комнаты мультиплеера; null — обычная одиночная игра. В комнате время двигает общий ход сервера. */
+  roomCode:        string | null;
   /** Номер сезона карьеры (1, 2, 3 …) — для подписи "2025/26", "2026/27" и т.д. */
   seasonNum:       number;
   matchday:        number;
@@ -37,6 +39,7 @@ interface CareerState {
   confirmTactic:     ()                        => void;
   toggleFavorite:    (player: { id: string; [k: string]: any }) => void;
   resetCareer:       ()                       => void;
+  setRoomCode:       (code: string | null)    => void;
 }
 
 export const useCareerStore = create<CareerState>()(
@@ -45,6 +48,7 @@ export const useCareerStore = create<CareerState>()(
       selectedClub:   null,
       selectedLeague: null,
       seasonId:       null,
+      roomCode:       null,
       seasonNum:      1,
       matchday:       1,
       lineup:         {},
@@ -61,6 +65,7 @@ export const useCareerStore = create<CareerState>()(
       setSelectedClub:   (club)    => set({ selectedClub: club }),
       setSelectedLeague: (league)  => set({ selectedLeague: league }),
       setSeasonId:       (id)      => set({ seasonId: id }),
+      setRoomCode:       (code)    => set({ roomCode: code }),
       setSeasonNum:      (n)       => set({ seasonNum: Math.max(1, Math.floor(n || 1)) }),
       setMatchday:       (day)     => set({ matchday: day }),
       setLineup:         (lineup)  => set({ lineup, lineupConfirmed: false }),
@@ -95,7 +100,7 @@ export const useCareerStore = create<CareerState>()(
         };
       }),
       resetCareer: () => set({
-        selectedClub: null, selectedLeague: null, seasonId: null, seasonNum: 1, matchday: 1,
+        selectedClub: null, selectedLeague: null, seasonId: null, roomCode: null, seasonNum: 1, matchday: 1,
         lineup: {}, formation: "4-3-3", tactic: "Balanced",
         customTactic: { defensiveLine: 5, pressing: 5, width: 5, tempo: 5, passingRisk: 5, buildUpSpeed: 5, attackingWidth: 5 },
         lineupsByFormation: {}, customFormations: {},

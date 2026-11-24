@@ -17,6 +17,7 @@ import { loadFitness, fitnessRowsAfterMatch, saveFitness } from "@/lib/fitnessSe
 import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { sanitizeLayout, type LineupLayout } from "@/lib/lineupLayout";
 import { runAiTransfers } from "@/lib/aiTransfers";
+import { normalizeHumans, fillUnavailable, type HumanSetup } from "@/lib/humans";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
@@ -48,6 +49,8 @@ export interface SimulateMatchdayOptions {
   userAwayGoals?: number;
   userTactic?: string;
   userLineup?: any[];
+  /** Несколько человеческих клубов (комната мультиплеера). Если задано — legacy user* параметры не используются. */
+  humans?: HumanSetup[];
 }
 
 export interface SimulateMatchdayResult {
@@ -57,10 +60,11 @@ export interface SimulateMatchdayResult {
 }
 
 export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayOptions = {}): Promise<SimulateMatchdayResult> {
-  const { userClubId, userHomeGoals, userAwayGoals, userTactic } = opts;
+  const { userHomeGoals, userAwayGoals } = opts;
   const rawOverride = opts.userMatchOverride;
-  const userLayout = sanitizeLayout(opts.userLayout);
-  let userLineup = opts.userLineup;
+  const H = normalizeHumans(opts);
+  const humanByClub = H.byClub;
+  const legacyClub = H.legacyClubId;   // одиночная игра: принимаем готовый счёт/матч по минутам от клиента
 
   const { data: season, error: sErr } = await supabase.from("seasons").select("*").eq("id", seasonId).single();
   if (sErr || !season) return { error: "Season not found", status: 404 };
@@ -100,52 +104,26 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     }
   }
 
-  if (userLineup && userClubId) {
-    const userUnavail = unavailableByClub[userClubId] ?? new Set();
-    const missingSlots = userLineup.filter((p: any) => p && userUnavail.has(keyOf(p)));
-    if (missingSlots.length) {
-      // Автозамена вместо жёсткой ошибки: раньше недоступность ЛЮБОГО игрока
-      // стартового состава останавливала весь тур ошибкой 400 — это работало
-      // для одиночного ручного матча (пользователь мог поправить состав), но
-      // полностью ломало автопрокрутку всего сезона (она просто переставала
-      // передавать userLineup вообще, и сервер каждый раз собирал "топ-11 по
-      // overall" с нуля, теряя реальный состав и тактику пользователя).
-      // Теперь: игроки СТАРТОВОГО состава сохраняют приоритет, недостающие
-      // позиции закрываются лучшим ДОСТУПНЫМ игроком той же позиции со
-      // скамейки; только если такого нет — любым доступным игроком.
-      const squad = playersByClub[userClubId] ?? [];
-      const lineupIds = new Set(userLineup.filter(Boolean).map((p: any) => keyOf(p)));
-      const bench = squad.filter((p: any) => !lineupIds.has(keyOf(p)) && !userUnavail.has(keyOf(p)));
-
-      const usedReplacementIds = new Set<string>();
-      const filledLineup = userLineup.map((p: any) => {
-        if (!p || !userUnavail.has(keyOf(p))) return p;
-        const samePos = bench.filter((b: any) => b.position === p.position && !usedReplacementIds.has(keyOf(b)))
-          .sort((a: any, b: any) => b.overall - a.overall)[0];
-        const anyPos = bench.filter((b: any) => !usedReplacementIds.has(keyOf(b)))
-          .sort((a: any, b: any) => b.overall - a.overall)[0];
-        const replacement = samePos ?? anyPos;
-        if (replacement) usedReplacementIds.add(keyOf(replacement));
-        return replacement ?? null; // скамейка пустая — доигрываем без замены на этой позиции
-      }).filter(Boolean);
-
-      userLineup = filledLineup;
-
-      const availableCount = userLineup.length;
-      if (availableCount < 7) {
-        // Меньше 7 доступных игроков — реалистично отказать матч, это уже
-        // не "нехватка одного-двух", а массовая эпидемия травм/дисквалификаций
-        const unavailableInLineup = missingSlots.map((p: any) => p.name);
-        return {
-          error: `Too many unavailable players (only ${availableCount} left, need at least 7). Unavailable: ${unavailableInLineup.join(", ")}.`,
-          status: 400, availableCount, unavailablePlayers: unavailableInLineup,
-        };
-      }
+  for (const h of H.list) {
+    if (!h.lineup) continue;
+    const unavail = unavailableByClub[h.clubId] ?? new Set<string>();
+    if (!h.lineup.some((p: any) => p && unavail.has(keyOf(p)))) continue;
+    // Автозамена вместо жёсткой ошибки: игроки стартового состава сохраняют приоритет, недостающие
+    // позиции закрываются лучшим доступным игроком той же позиции со скамейки (см. lib/humans.ts).
+    const filled = fillUnavailable(h.lineup, playersByClub[h.clubId] ?? [], unavail, keyOf);
+    if (filled.error) {
+      // Одиночная игра: ошибка пользователю, чтобы он поправил состав. Комната: тур не должен вставать
+      // из-за одного клуба — этот клуб играет автосоставом.
+      if (legacyClub) return { error: filled.error.message, status: 400, availableCount: filled.error.availableCount, unavailablePlayers: filled.error.unavailablePlayers };
+      h.lineup = undefined;
+    } else {
+      h.lineup = filled.lineup;
     }
   }
 
   // Усталость игроков клуба пользователя: влияет на силу в матче и на риск травм
-  const fitness = userClubId ? await loadFitness(seasonId, userClubId, matchday) : new Map<string, number>();
+  const fitness = new Map<string, number>();
+  for (const h of H.list) for (const [k, v] of await loadFitness(seasonId, h.clubId, matchday)) fitness.set(k, v);
 
   const ratingCache: Record<string, number> = {};
   const getRating = (clubId: string) => {
@@ -174,28 +152,24 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     const homeAvailable = (playersByClub[fix.home_club] ?? []).filter((p: any) => !homeUnavailable.has(keyOf(p)));
     const awayAvailable = (playersByClub[fix.away_club] ?? []).filter((p: any) => !awayUnavailable.has(keyOf(p)));
 
-    const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
+    const hs = humanByClub.get(fix.home_club);
+    const as_ = humanByClub.get(fix.away_club);
+    const isUserMatch = !!hs || !!as_;
     let homeGoals: number, awayGoals: number;
 
-    const override = isUserMatch ? sanitizeOverride(rawOverride, fix.home_club, fix.away_club) : null;
+    const override = legacyClub && isUserMatch ? sanitizeOverride(rawOverride, fix.home_club, fix.away_club) : null;
     if (override) {
       homeGoals = override.homeGoals; awayGoals = override.awayGoals;      // матч по минутам: результат уже посчитан по таймам
-    } else if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
+    } else if (legacyClub && isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
       homeGoals = userHomeGoals; awayGoals = userAwayGoals;
-    } else if (isUserMatch && userLineup?.length) {
-      const userIsHome = fix.home_club === userClubId;
-      const oppAvailable = userIsHome ? awayAvailable : homeAvailable;
-      const oppXI = getStartingXI(oppAvailable);
-      const userTac = userTactic || "Balanced";
-      const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
-      const userUnavail = userIsHome ? homeUnavailable : awayUnavailable;
-      const cleanLineup = userLineup.filter((p: any) => !userUnavail.has(keyOf(p)));
-      const userCaptainId = standingsRows.find((r: any) => r.club_id === userClubId)?.captain_id ?? null;
-
-      const tiredLineup = applyFitness(cleanLineup, fitness);       // усталые играют слабее
-      const result = userIsHome
-        ? simulateMatch(tiredLineup, oppXI, userTac, oppTac, userCaptainId, null)
-        : simulateMatch(oppXI, tiredLineup, oppTac, userTac, null, userCaptainId);
+    } else if (isUserMatch && (hs?.lineup?.length || as_?.lineup?.length)) {
+      // Матч с участием человека: его состав/тактика (усталые играют слабее). Соперник — ИИ или другой человек.
+      const captainOf = (clubId: string) => standingsRows.find((r: any) => r.club_id === clubId)?.captain_id ?? null;
+      const homeXI = hs?.lineup?.length ? applyFitness(hs.lineup.filter((p: any) => !homeUnavailable.has(keyOf(p))), fitness) : getStartingXI(homeAvailable);
+      const awayXI = as_?.lineup?.length ? applyFitness(as_.lineup.filter((p: any) => !awayUnavailable.has(keyOf(p))), fitness) : getStartingXI(awayAvailable);
+      const homeTac = hs ? (hs.tactic || "Balanced") : getClubTactic(fix.home_club);
+      const awayTac = as_ ? (as_.tactic || "Balanced") : getClubTactic(fix.away_club);
+      const result = simulateMatch(homeXI, awayXI, homeTac, awayTac, hs ? captainOf(fix.home_club) : null, as_ ? captainOf(fix.away_club) : null);
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const homeTactic = getClubTactic(fix.home_club);
@@ -204,11 +178,11 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     }
 
-    const homeStarters = (fix.home_club === userClubId && userLineup?.length)
-      ? userLineup.filter((p: any) => !homeUnavailable.has(keyOf(p)))
+    const homeStarters = hs?.lineup?.length
+      ? hs.lineup.filter((p: any) => !homeUnavailable.has(keyOf(p)))
       : getStartingXI(homeAvailable);
-    const awayStarters = (fix.away_club === userClubId && userLineup?.length)
-      ? userLineup.filter((p: any) => !awayUnavailable.has(keyOf(p)))
+    const awayStarters = as_?.lineup?.length
+      ? as_.lineup.filter((p: any) => !awayUnavailable.has(keyOf(p)))
       : getStartingXI(awayAvailable);
 
     const homeStartIds = new Set(homeStarters.map((p: any) => p.id ?? p.name));
@@ -219,11 +193,12 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     const riskById = isUserMatch ? injuryRiskById([...homeStarters, ...awayStarters].map((p: any) => String(p.id ?? p.name)), fitness) : undefined;
     const events = override ? override.events : generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
-    if (isUserMatch && userClubId) {
-      const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;
-      fitnessRows.push(...fitnessRowsAfterMatch(seasonId, userClubId, matchday, mySide, playersByClub[userClubId] ?? [], fitness));
-    }
-    if (isUserMatch && userLayout) (ratings as any).layout = { [fix.home_club === userClubId ? "home" : "away"]: userLayout };
+    if (hs) fitnessRows.push(...fitnessRowsAfterMatch(seasonId, hs.clubId, matchday, ratings.home, playersByClub[hs.clubId] ?? [], fitness));
+    if (as_) fitnessRows.push(...fitnessRowsAfterMatch(seasonId, as_.clubId, matchday, ratings.away, playersByClub[as_.clubId] ?? [], fitness));
+    const layouts: any = {};
+    if (hs?.layout) layouts.home = hs.layout;
+    if (as_?.layout) layouts.away = as_.layout;
+    if (Object.keys(layouts).length) (ratings as any).layout = layouts;
 
     fixtureUpdates.push({
       id: fix.id, home_goals: homeGoals, away_goals: awayGoals,
@@ -300,11 +275,13 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
   // здесь не должен ломать симуляцию тура.
   // Интерес клубов к моим игрокам → слухи и предложения (сначала мне, потом решает игрок).
   // Раньше выставленный лот продавался автоматически и только внутри лиги игрока.
-  if (userClubId) { try { await runInterestTick(seasonId, userClubId, matchday); } catch (e) { console.error("runInterestTick failed", e); } }
-  // Скауты: завершившиеся миссии превращаются в отчёты
-  if (userClubId) { try { await resolveMissions(seasonId, userClubId, matchday); } catch (e) { console.error("resolveMissions failed", e); } }
-  // ИИ-клубы тоже торгуют между собой и подписывают свободных агентов
-  try { await runAiTransfers(seasonId, userClubId); } catch (e) { console.error("runAiTransfers failed", e); }
+  for (const h of H.list) {
+    try { await runInterestTick(seasonId, h.clubId, matchday); } catch (e) { console.error("runInterestTick failed", e); }
+    // Скауты: завершившиеся миссии превращаются в отчёты
+    try { await resolveMissions(seasonId, h.clubId, matchday); } catch (e) { console.error("resolveMissions failed", e); }
+  }
+  // ИИ-клубы тоже торгуют между собой и подписывают свободных агентов (клубы людей не трогаем)
+  try { await runAiTransfers(seasonId, H.list.map(h => h.clubId)); } catch (e) { console.error("runAiTransfers failed", e); }
   try { await notifyReadyNegotiations(seasonId, matchday); } catch (e) { console.error("notifyReadyNegotiations failed", e); }
 
   const { count } = await supabase.from("fixtures")
@@ -320,6 +297,6 @@ export async function simulateMatchday(seasonId: string, opts: SimulateMatchdayO
     await awardLeaguePositionPrizes(seasonId);
   }
 
-  const userResult = results.find(r => r.home === userClubId || r.away === userClubId) || null;
+  const userResult = results.find(r => humanByClub.has(r.home) || humanByClub.has(r.away)) || null;
   return { matchday, nextMatchday, finished: newStatus === "finished", results, userResult };
 }

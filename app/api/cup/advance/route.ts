@@ -27,6 +27,8 @@ import { applyFitness, injuryRiskById } from "@/lib/fitness";
 import { applyClubEarning } from "@/lib/finance";
 import { accumulateCardsAndInjuries, accumulateSeasonStats, persistStatusAndStats, StatusUpdateAcc, SeasonStatAcc } from "@/lib/matchStatsAccumulator";
 import { pushNotification } from "@/lib/notifications";
+import { normalizeHumans, fillUnavailable } from "@/lib/humans";
+import { blockRoomSeason, isInternalTick } from "@/lib/roomGuard";
 
 function getStartingXI(players: any[]): any[] {
   const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
@@ -52,18 +54,20 @@ export interface DrawInfo {
   standings?: { club: string; points: number; gd: number }[];
 }
 
-async function announceDraw(comp: any, userClubId: string | undefined, draw: DrawInfo) {
-  if (!userClubId) return;
-  const involved = draw.byes.includes(userClubId) || draw.pairs.some(p => p.home === userClubId || p.away === userClubId);
-  if (!involved) return;
-  const mine = draw.pairs.find(p => p.home === userClubId || p.away === userClubId);
-  const msg = mine
-    ? `${draw.competitionName} — ${draw.stage}: ${mine.home} vs ${mine.away}`
-    : `${draw.competitionName} — ${draw.stage}: ${userClubId} проходит напрямую`;
-  await pushNotification({
-    seasonId: comp.season_id, clubId: userClubId, type: "cup_draw",
-    title: `Жеребьёвка: ${draw.competitionName}`, message: msg, meta: { draw },
-  });
+async function announceDraw(comp: any, userClubIds: string | string[] | undefined, draw: DrawInfo) {
+  // Уведомление о жеребьёвке — каждому человеческому клубу (в одиночной игре он один)
+  for (const userClubId of Array.isArray(userClubIds) ? userClubIds : userClubIds ? [userClubIds] : []) {
+    const involved = draw.byes.includes(userClubId) || draw.pairs.some(p => p.home === userClubId || p.away === userClubId);
+    if (!involved) continue;
+    const mine = draw.pairs.find(p => p.home === userClubId || p.away === userClubId);
+    const msg = mine
+      ? `${draw.competitionName} — ${draw.stage}: ${mine.home} vs ${mine.away}`
+      : `${draw.competitionName} — ${draw.stage}: ${userClubId} проходит напрямую`;
+    await pushNotification({
+      seasonId: comp.season_id, clubId: userClubId, type: "cup_draw",
+      title: `Жеребьёвка: ${draw.competitionName}`, message: msg, meta: { draw },
+    });
+  }
 }
 
 // Если текущий раунд турнира уже полностью сыгран, а current_round почему-то
@@ -103,11 +107,20 @@ async function healStalledCompetition(comp: any, isNewFormatEuro: boolean): Prom
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { competitionId, userClubId, userHomeGoals, userAwayGoals, userTactic } = body;
-  let userLineup = body.userLineup;
+  const { competitionId, userHomeGoals, userAwayGoals } = body;
+  // Несколько человек (humans) принимаем только от сервера комнаты; снаружи работает одиночный режим user*.
+  const H = normalizeHumans({
+    humans: isInternalTick(req) ? body.humans : undefined,
+    userClubId: body.userClubId, userTactic: body.userTactic, userLineup: body.userLineup, userLayout: body.userLayout,
+  });
+  const humanByClub = H.byClub;
+  const legacyClub = H.legacyClubId;
+  const humanClubIds = H.list.map(h => h.clubId);
 
   const { data: comp } = await supabase.from("competitions").select("*").eq("id", competitionId).single();
   if (!comp || comp.status === "finished") return Response.json({ error: "Competition not found or finished" }, { status: 404 });
+  const blocked = await blockRoomSeason(comp.season_id, req);
+  if (blocked) return blocked;
 
   const isNewFormatEuro = comp.type === "continental" && (comp.league_phase_rounds ?? 0) > 0;
 
@@ -162,39 +175,17 @@ export async function POST(req: Request) {
     return ratingCache[clubId];
   };
 
-  if (userLineup && userClubId) {
-    const userUnavailable = unavailableByClub[userClubId] ?? new Set();
-    const missingSlots = userLineup.filter((p: any) => p && userUnavailable.has(keyOf(p)));
-    if (missingSlots.length) {
-      // Та же автозамена, что и в lib/simulateMatchday.ts — раньше жёсткая
-      // ошибка на недоступного игрока останавливала автопрокрутку сезона
-      // на кубковых турах (а до этого кубковый автопилот вообще не получал
-      // userLineup, см. фикс в app/dashboard/page.tsx: advanceDueCups).
-      const squad = playersByClub[userClubId] ?? [];
-      const lineupIds = new Set(userLineup.filter(Boolean).map((p: any) => keyOf(p)));
-      const bench = squad.filter((p: any) => !lineupIds.has(keyOf(p)) && !userUnavailable.has(keyOf(p)));
-
-      const usedReplacementIds = new Set<string>();
-      const filledLineup = userLineup.map((p: any) => {
-        if (!p || !userUnavailable.has(keyOf(p))) return p;
-        const samePos = bench.filter((b: any) => b.position === p.position && !usedReplacementIds.has(keyOf(b)))
-          .sort((a: any, b: any) => b.overall - a.overall)[0];
-        const anyPos = bench.filter((b: any) => !usedReplacementIds.has(keyOf(b)))
-          .sort((a: any, b: any) => b.overall - a.overall)[0];
-        const replacement = samePos ?? anyPos;
-        if (replacement) usedReplacementIds.add(keyOf(replacement));
-        return replacement ?? null;
-      }).filter(Boolean);
-
-      userLineup = filledLineup;
-
-      if (userLineup.length < 7) {
-        const unavailableInLineup = missingSlots.map((p: any) => p.name);
-        return Response.json({
-          error: `Too many unavailable players (only ${userLineup.length} left, need at least 7). Unavailable: ${unavailableInLineup.join(", ")}.`,
-          availableCount: userLineup.length, unavailablePlayers: unavailableInLineup,
-        }, { status: 400 });
-      }
+  for (const h of H.list) {
+    if (!h.lineup) continue;
+    const unavail = unavailableByClub[h.clubId] ?? new Set<string>();
+    if (!h.lineup.some((p: any) => p && unavail.has(keyOf(p)))) continue;
+    // Та же автозамена, что и в lib/simulateMatchday.ts (см. lib/humans.ts)
+    const filled = fillUnavailable(h.lineup, playersByClub[h.clubId] ?? [], unavail, keyOf);
+    if (filled.error) {
+      if (legacyClub) return Response.json({ error: filled.error.message, availableCount: filled.error.availableCount, unavailablePlayers: filled.error.unavailablePlayers }, { status: 400 });
+      h.lineup = undefined; // комната: тур не встаёт из-за одного клуба — автосостав
+    } else {
+      h.lineup = filled.lineup;
     }
   }
 
@@ -219,7 +210,14 @@ export async function POST(req: Request) {
   // Усталость клуба пользователя: кубковый матч в один тур с лигой — без восстановления между ними
   const { data: seasonRow } = await supabase.from("seasons").select("matchday").eq("id", comp.season_id).maybeSingle();
   const seasonMatchday: number = seasonRow?.matchday ?? 1;
-  const fitness = userClubId ? await loadFitness(comp.season_id, userClubId, seasonMatchday) : new Map<string, number>();
+  const fitness = new Map<string, number>();
+  for (const h of H.list) for (const [k, v] of await loadFitness(comp.season_id, h.clubId, seasonMatchday)) fitness.set(k, v);
+  // Капитаны клубов людей — одним запросом
+  const captainByClub = new Map<string, string | null>();
+  if (humanClubIds.length) {
+    const { data: capRows } = await supabase.from("standings").select("club_id, captain_id").eq("season_id", comp.season_id).in("club_id", humanClubIds);
+    for (const r of capRows ?? []) captainByClub.set(r.club_id, r.captain_id ?? null);
+  }
   const fitnessRows: any[] = [];
 
   for (const fix of safeFixtures) {
@@ -228,28 +226,22 @@ export async function POST(req: Request) {
     const homeAvailable = (playersByClub[fix.home_club] ?? []).filter((p: any) => !homeUnavailable.has(keyOf(p)));
     const awayAvailable = (playersByClub[fix.away_club] ?? []).filter((p: any) => !awayUnavailable.has(keyOf(p)));
 
-    const isUserMatch = fix.home_club === userClubId || fix.away_club === userClubId;
+    const hs = humanByClub.get(fix.home_club);
+    const as_ = humanByClub.get(fix.away_club);
+    const isUserMatch = !!hs || !!as_;
     let homeGoals: number, awayGoals: number;
 
-    const override = isUserMatch ? sanitizeOverride(body.userMatchOverride, fix.home_club, fix.away_club) : null;
+    const override = legacyClub && isUserMatch ? sanitizeOverride(body.userMatchOverride, fix.home_club, fix.away_club) : null;
     if (override) {
       homeGoals = override.homeGoals; awayGoals = override.awayGoals;      // матч по минутам
-    } else if (isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
+    } else if (legacyClub && isUserMatch && userHomeGoals !== undefined && userAwayGoals !== undefined) {
       homeGoals = userHomeGoals; awayGoals = userAwayGoals;
-    } else if (isUserMatch && userLineup?.length) {
-      const userIsHome = fix.home_club === userClubId;
-      const oppAvailable = userIsHome ? awayAvailable : homeAvailable;
-      const oppXI = getStartingXI(oppAvailable);
-      const userTac = userTactic || "Balanced";
-      const oppTac = getClubTactic(userIsHome ? fix.away_club : fix.home_club);
-      const userUnavail = userIsHome ? homeUnavailable : awayUnavailable;
-      const cleanUserLineup = userLineup.filter((p: any) => !userUnavail.has(keyOf(p)));
-      const { data: userStanding } = await supabase.from("standings").select("captain_id").eq("season_id", comp.season_id).eq("club_id", userClubId).maybeSingle();
-      const userCaptainId = userStanding?.captain_id ?? null;
-
-      const result = userIsHome
-        ? simulateMatch(applyFitness(cleanUserLineup, fitness), oppXI, userTac, oppTac, userCaptainId, null)
-        : simulateMatch(oppXI, applyFitness(cleanUserLineup, fitness), oppTac, userTac, null, userCaptainId);
+    } else if (isUserMatch && (hs?.lineup?.length || as_?.lineup?.length)) {
+      const homeXI = hs?.lineup?.length ? applyFitness(hs.lineup.filter((p: any) => !homeUnavailable.has(keyOf(p))), fitness) : getStartingXI(homeAvailable);
+      const awayXI = as_?.lineup?.length ? applyFitness(as_.lineup.filter((p: any) => !awayUnavailable.has(keyOf(p))), fitness) : getStartingXI(awayAvailable);
+      const homeTac = hs ? (hs.tactic || "Balanced") : getClubTactic(fix.home_club);
+      const awayTac = as_ ? (as_.tactic || "Balanced") : getClubTactic(fix.away_club);
+      const result = simulateMatch(homeXI, awayXI, homeTac, awayTac, hs ? (captainByClub.get(fix.home_club) ?? null) : null, as_ ? (captainByClub.get(fix.away_club) ?? null) : null);
       homeGoals = result.homeGoals; awayGoals = result.awayGoals;
     } else {
       const hr = getRating(fix.home_club);
@@ -260,11 +252,11 @@ export async function POST(req: Request) {
       homeGoals = r.homeGoals; awayGoals = r.awayGoals;
     }
 
-    const homeStarters = (fix.home_club === userClubId && userLineup?.length)
-      ? userLineup.filter((p: any) => !homeUnavailable.has(keyOf(p)))
+    const homeStarters = hs?.lineup?.length
+      ? hs.lineup.filter((p: any) => !homeUnavailable.has(keyOf(p)))
       : getStartingXI(homeAvailable);
-    const awayStarters = (fix.away_club === userClubId && userLineup?.length)
-      ? userLineup.filter((p: any) => !awayUnavailable.has(keyOf(p)))
+    const awayStarters = as_?.lineup?.length
+      ? as_.lineup.filter((p: any) => !awayUnavailable.has(keyOf(p)))
       : getStartingXI(awayAvailable);
 
     const homeStartIds = new Set(homeStarters.map((p: any) => keyOf(p)));
@@ -275,12 +267,12 @@ export async function POST(req: Request) {
     const riskById = isUserMatch ? injuryRiskById([...homeStarters, ...awayStarters].map((p: any) => String(p.id ?? p.name)), fitness) : undefined;
     const events = override ? override.events : generateMatchEvents(homeGoals, awayGoals, homeStarters, awayStarters, homeBench, awayBench, riskById ? { riskById } : {});
     const ratings = generateMatchRatings(homeStarters, awayStarters, homeGoals, awayGoals, events, homeBench, awayBench);
-    if (isUserMatch && userClubId) {
-      const mySide = fix.home_club === userClubId ? ratings.home : ratings.away;
-      fitnessRows.push(...fitnessRowsAfterMatch(comp.season_id, userClubId, seasonMatchday, mySide, playersByClub[userClubId] ?? [], fitness));
-    }
-    const userLayout = isUserMatch ? sanitizeLayout(body.userLayout) : null;
-    if (userLayout) (ratings as any).layout = { [fix.home_club === userClubId ? "home" : "away"]: userLayout };
+    if (hs) fitnessRows.push(...fitnessRowsAfterMatch(comp.season_id, hs.clubId, seasonMatchday, ratings.home, playersByClub[hs.clubId] ?? [], fitness));
+    if (as_) fitnessRows.push(...fitnessRowsAfterMatch(comp.season_id, as_.clubId, seasonMatchday, ratings.away, playersByClub[as_.clubId] ?? [], fitness));
+    const layouts: any = {};
+    if (hs?.layout) layouts.home = hs.layout;
+    if (as_?.layout) layouts.away = as_.layout;
+    if (Object.keys(layouts).length) (ratings as any).layout = layouts;
 
     // Победитель ЭТОГО матча. Для решающих матчей (см. isDecisiveSingleMatch
     // выше) ничья пробивается настоящей серией пенальти с реальными
@@ -346,7 +338,7 @@ export async function POST(req: Request) {
   // НОВЫЙ ФОРМАТ: лиг-фаза → плей-офф с двумя ногами
   // ════════════════════════════════════════════════════════════════════════
   if (isNewFormatEuro) {
-    return await advanceNewFormatEuro(comp, results, competitionId, userClubId);
+    return await advanceNewFormatEuro(comp, results, competitionId, humanClubIds);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -417,12 +409,12 @@ export async function POST(req: Request) {
     competitionId, competitionName: comp.name, stage: getRoundName(pairs.length + (byeTeam ? 1 : 0)),
     pairs: pairs.map(p => ({ home: p.home, away: p.away })), byes: byeTeam ? [byeTeam] : [],
   };
-  await announceDraw(comp, userClubId, oldDraw);
+  await announceDraw(comp, humanClubIds, oldDraw);
   return Response.json({ finished: false, nextRound, results, draw: oldDraw });
 }
 
 // ── Новый формат: продвижение после лиг-фазы и внутри двухногого плей-офф ──
-async function advanceNewFormatEuro(comp: any, results: any[], competitionId: string, userClubId?: string) {
+async function advanceNewFormatEuro(comp: any, results: any[], competitionId: string, userClubId?: string | string[]) {
   const calKey = CAL_KEY_BY_NAME[comp.name];
   const leaguePhaseRounds: number = comp.league_phase_rounds ?? 0;
 
@@ -564,7 +556,7 @@ async function advanceNewFormatEuro(comp: any, results: any[], competitionId: st
 
 // ── Переход из лиг-фазы в плей-офф: таблица очков → прямые квалификанты +
 // посев стыковых матчей (двухногих) для оставшегося пула. ──
-async function transitionToKnockout(comp: any, competitionId: string, calKey: "champions_league" | "europa_league" | "conference_league", userClubId?: string) {
+async function transitionToKnockout(comp: any, competitionId: string, calKey: "champions_league" | "europa_league" | "conference_league", userClubId?: string | string[]) {
   const phaseConfig = LEAGUE_PHASE_CONFIG[comp.name];
   if (!phaseConfig) return Response.json({ error: "No league-phase config for this competition" }, { status: 500 });
 

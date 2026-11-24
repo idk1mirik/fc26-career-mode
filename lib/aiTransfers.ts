@@ -17,7 +17,9 @@ const MAX_DEALS_PER_TICK = 6;
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-export async function runAiTransfers(seasonId: string, userClubId?: string): Promise<{ deals: number }> {
+export async function runAiTransfers(seasonId: string, userClubIds?: string | string[]): Promise<{ deals: number }> {
+  // клубы людей (в одиночной игре — один, в комнате — несколько): ИИ их не трогает
+  const humanClubs = new Set((Array.isArray(userClubIds) ? userClubIds : userClubIds ? [userClubIds] : []).map(c => c.toLowerCase()));
   const window = await checkTransferWindow(seasonId);
   if (!window.open) return { deals: 0 };
 
@@ -54,7 +56,7 @@ export async function runAiTransfers(seasonId: string, userClubId?: string): Pro
   const { data: openListings } = await supabase.from("transfer_listings").select("player_id").eq("season_id", seasonId).eq("status", "open");
   const listed = new Set((openListings ?? []).map((l: any) => l.player_id));
 
-  const aiClubs = standings.map(r => r.club_id).filter(c => c.toLowerCase() !== (userClubId ?? "").toLowerCase());
+  const aiClubs = standings.map(r => r.club_id).filter(c => !humanClubs.has(c.toLowerCase()));
   const buyers = [...aiClubs].sort(() => Math.random() - 0.5);
 
   const careerId = seasonRes.data?.career_id ?? await getCareerId(seasonId);
@@ -85,7 +87,7 @@ export async function runAiTransfers(seasonId: string, userClubId?: string): Pro
       const holder = currentClubOf(p).toLowerCase();
       if (!wantFreeAgent) {
         if (holder === key) return false;
-        if (userClubId && holder === userClubId.toLowerCase()) return false; // не раздеваем клуб пользователя
+        if (humanClubs.has(holder)) return false; // не раздеваем клубы людей
         if (!leagueClubs.has(holder)) return false;                          // торгуем внутри лиги — продавцам нужен бюджет
       }
       if (targetPos && p.position !== targetPos) return false;
